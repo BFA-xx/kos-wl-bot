@@ -1,0 +1,295 @@
+// KOS WL Bot — database schema
+// PostgreSQL + Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum RaffleStatus {
+  DRAFT
+  UPCOMING
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+/// How the eligible roles are combined.
+/// ANY  = user needs at least one of the selected roles.
+/// ALL  = user must hold every selected role.
+enum RoleMatchMode {
+  ANY
+  ALL
+}
+
+enum WalletChain {
+  ETHEREUM
+  BASE
+  SOLANA
+  BITCOIN
+}
+
+enum LogCategory {
+  RAFFLE
+  ENTRY
+  WINNER
+  REROLL
+  WALLET
+  BLACKLIST
+  ADMIN
+  SYSTEM
+}
+
+// ---------------------------------------------------------------------------
+// Core models
+// ---------------------------------------------------------------------------
+
+/// A Discord server (guild) using the bot, plus its configuration.
+model Guild {
+  id                       String   @id // Discord guild snowflake
+  name                     String?
+  iconUrl                  String?
+  /// Roles allowed to run /raffle and /blacklist admin commands.
+  managerRoleIds           String[] @default([])
+  /// Default channel for winner announcements (overridable per raffle).
+  defaultAnnounceChannelId String?
+  /// Default channel for proof delivery (overridable per raffle).
+  defaultProofChannelId    String?
+  logChannelId             String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  raffles    Raffle[]
+  blacklists Blacklist[]
+  logs       Log[]
+
+  @@map("guilds")
+}
+
+/// A Discord user seen by the bot (global identity).
+model User {
+  id        String   @id // Discord user snowflake
+  username  String
+  globalName String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants   Participant[]
+  winners        Winner[]
+  wallets        Wallet[]
+  walletProfiles WalletProfile[]
+  blacklists     Blacklist[]
+
+  @@map("users")
+}
+
+/// A user's self-registered wallet for a chain, reusable across raffles.
+/// One address per (user, chain); updatable any time by the user.
+model WalletProfile {
+  id        Int         @id @default(autoincrement())
+  userId    String
+  chain     WalletChain
+  address   String // encrypted at rest when WALLET_ENCRYPTION_KEY is set
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, chain])
+  @@index([userId])
+  @@map("wallet_profiles")
+}
+
+/// A whitelist raffle. `id` doubles as the human-facing Raffle ID (#2345).
+model Raffle {
+  id            Int           @id @default(autoincrement())
+  guildId       String
+  projectName   String
+  title         String
+  spots         Int
+  roleMatchMode RoleMatchMode @default(ANY)
+  status        RaffleStatus  @default(UPCOMING)
+
+  startAt DateTime
+  endAt   DateTime
+
+  /// Channel where the live raffle embed is posted.
+  channelId String?
+  /// Message id of the live raffle embed (for live updates).
+  messageId String?
+  /// Channel where the winner announcement is posted.
+  announceChannelId String?
+  /// Channel where the proof package is delivered.
+  proofChannelId String?
+
+  bannerUrl   String?
+  externalUrl String?
+
+  /// Anti-alt / entry requirements (see EntryRequirements type in the bot).
+  requirements Json?
+
+  /// Whether winners should be DMed a wallet collection form.
+  collectWallets Boolean     @default(true)
+  walletChains   WalletChain[] @default([ETHEREUM])
+
+  entryCount Int @default(0)
+
+  /// Hex commitment of the seed used for the verifiable draw.
+  drawSeed   String?
+  drawSeedHash String?
+
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  endedAt     DateTime?
+  drawnAt     DateTime?
+
+  guild        Guild         @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  eligibleRoles RaffleRole[]
+  participants Participant[]
+  winners      Winner[]
+  proof        Proof?
+  logs         Log[]
+
+  @@index([guildId, status])
+  @@index([status, endAt])
+  @@index([status, startAt])
+  @@map("raffles")
+}
+
+/// A role that is eligible to enter a given raffle.
+model RaffleRole {
+  id       Int    @id @default(autoincrement())
+  raffleId Int
+  roleId   String
+  roleName String
+
+  raffle Raffle @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+
+  @@unique([raffleId, roleId])
+  @@map("raffle_roles")
+}
+
+/// A single entry into a raffle.
+model Participant {
+  id        Int      @id @default(autoincrement())
+  raffleId  Int
+  userId    String
+  username  String // snapshot at entry time
+  enteredAt DateTime @default(now())
+
+  // Anti-alt snapshot data captured at entry time.
+  accountCreatedAt DateTime?
+  joinedGuildAt    DateTime?
+  flagged          Boolean   @default(false)
+  flagReason       String?
+
+  raffle Raffle @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  winner Winner?
+
+  @@unique([raffleId, userId])
+  @@index([raffleId])
+  @@map("participants")
+}
+
+/// A selected winner of a raffle.
+model Winner {
+  id            Int      @id @default(autoincrement())
+  raffleId      Int
+  userId        String
+  username      String
+  position      Int
+  selectedAt    DateTime @default(now())
+  /// True if this winner was added through a reroll.
+  fromReroll    Boolean  @default(false)
+  /// True if this winner was replaced by a reroll (kept for audit).
+  replaced      Boolean  @default(false)
+  participantId Int?     @unique
+
+  raffle      Raffle       @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  participant Participant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  wallet      Wallet?
+
+  @@index([raffleId])
+  @@index([raffleId, userId])
+  @@map("winners")
+}
+
+/// A wallet address submitted by a winner.
+model Wallet {
+  id          Int         @id @default(autoincrement())
+  userId      String
+  winnerId    Int?        @unique
+  chain       WalletChain
+  address     String
+  submittedAt DateTime    @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  winner Winner? @relation(fields: [winnerId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("wallets")
+}
+
+/// Per-guild blacklist; blacklisted users cannot enter raffles.
+model Blacklist {
+  id        Int      @id @default(autoincrement())
+  guildId   String
+  userId    String
+  reason    String?
+  addedById String
+  createdAt DateTime @default(now())
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId])
+  @@index([guildId])
+  @@map("blacklists")
+}
+
+/// Generated proof package for a completed raffle.
+model Proof {
+  id          Int      @id @default(autoincrement())
+  raffleId    Int      @unique
+  messageLink String?
+  pdfPath     String?
+  csvPath     String?
+  cardPath    String?
+  generatedAt DateTime @default(now())
+
+  raffle Raffle @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+
+  @@map("proofs")
+}
+
+/// Audit log entry.
+model Log {
+  id        Int         @id @default(autoincrement())
+  guildId   String
+  raffleId  Int?
+  actorId   String? // who performed the action (null = system)
+  category  LogCategory
+  action    String // e.g. RAFFLE_CREATE, ENTRY_ADD
+  message   String
+  metadata  Json?
+  createdAt DateTime    @default(now())
+
+  guild  Guild   @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  raffle Raffle? @relation(fields: [raffleId], references: [id], onDelete: SetNull)
+
+  @@index([guildId, createdAt])
+  @@index([raffleId])
+  @@map("logs")
+}

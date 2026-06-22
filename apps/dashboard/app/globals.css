@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+/* Subtle scrollbar to match the premium black theme. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #222;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+@layer components {
+  .kos-card {
+    @apply rounded-xl border border-kos-border bg-kos-card;
+  }
+  .kos-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-kos-border bg-kos-panel px-4 py-2 text-sm font-medium text-kos-white transition-colors hover:border-kos-silver hover:bg-kos-card disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .kos-input {
+    @apply w-full rounded-lg border border-kos-border bg-kos-panel px-3 py-2 text-sm text-kos-white placeholder:text-kos-grey focus:border-kos-silver focus:outline-none;
+  }
+  .kos-badge {
+    @apply inline-flex items-center gap-1 rounded-full border border-kos-border px-2.5 py-0.5 text-xs font-medium;
+  }
+}

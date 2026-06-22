@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kos}
+      POSTGRES_DB: ${POSTGRES_DB:-kos}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kos}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  bot:
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kos}:${POSTGRES_PASSWORD:-kos}@postgres:5432/${POSTGRES_DB:-kos}
+      NODE_ENV: production
+      INTERNAL_API_PORT: 4000
+      # Reachable by the dashboard container over the private compose network only.
+      INTERNAL_API_HOST: 0.0.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - proofs:/app/generated/proofs
+    # Internal API stays on the bot's loopback; expose to the dashboard via the
+    # shared docker network only (see BOT_INTERNAL_URL=http://bot:4000).
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kos}:${POSTGRES_PASSWORD:-kos}@postgres:5432/${POSTGRES_DB:-kos}
+      NODE_ENV: production
+      BOT_INTERNAL_URL: http://bot:4000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+
+volumes:
+  pgdata:
+  proofs:
