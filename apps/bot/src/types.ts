@@ -27,6 +27,20 @@ export const entryRequirementsSchema = z.object({
       emoji: z.string(),
     })
     .optional(),
+  /**
+   * Off-platform tasks shown to entrants (follow on X, like/RT a post, join a
+   * Discord, etc.). Displayed as links in the raffle embed. X/like/RT actions
+   * can't be auto-verified without the paid X API, so these are shown as
+   * required steps and entrants confirm by entering (honor system).
+   */
+  tasks: z
+    .array(
+      z.object({
+        label: z.string(),
+        url: z.string(),
+      }),
+    )
+    .optional(),
 });
 
 export type EntryRequirements = z.infer<typeof entryRequirementsSchema>;

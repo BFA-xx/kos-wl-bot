@@ -38,6 +38,8 @@ export const Actions = {
   RaffleSetProof: "rf_proof",
   RaffleSetRoles: "rf_roles",
   RaffleToggleMatch: "rf_match",
+  RaffleMoreOptions: "rf_more",
+  SubmitRaffleOptions: "rf_opts",
   RafflePublish: "rf_pub",
   RaffleCancel: "rf_cancel",
   // Per-raffle winner wallet (DM form)

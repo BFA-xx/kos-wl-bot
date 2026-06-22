@@ -100,6 +100,15 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
     })
     .setTimestamp(new Date());
 
+  const tasks = parseRequirements(raffle.requirements).tasks ?? [];
+  if (tasks.length > 0) {
+    embed.addFields({
+      name: `${KOS.emoji.check} Tasks to qualify`,
+      value: tasks.map((t) => `• [${t.label}](${t.url})`).join("\n").slice(0, 1024),
+      inline: false,
+    });
+  }
+
   const reqLines = describeRequirements(raffle.requirements);
   if (reqLines) {
     embed.addFields({ name: "Entry Requirements", value: reqLines, inline: false });

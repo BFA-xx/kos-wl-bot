@@ -49,6 +49,7 @@ export async function handleButton(interaction: ButtonInteraction): Promise<unkn
     case Actions.OpenWalletProfile:
       return handleOpenWalletProfile(interaction);
     case Actions.RaffleToggleMatch:
+    case Actions.RaffleMoreOptions:
     case Actions.RafflePublish:
     case Actions.RaffleCancel:
       return handleRaffleWizardButton(interaction);

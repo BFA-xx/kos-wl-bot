@@ -120,7 +120,10 @@ export async function publishRaffleMessage(
     return { ok: false, reason: "I can't see that channel (or it isn't a text channel)." };
   }
 
-  const missing = missingPostPermissions(client, channel);
+  // Make sure the bot's member object is cached so the permission check is real.
+  const me =
+    channel.guild.members.me ?? (await channel.guild.members.fetchMe().catch(() => null));
+  const missing = missingPostPermissions(channel, me);
   if (missing.length > 0) {
     return { ok: false, reason: `I'm missing **${missing.join(", ")}** in <#${channel.id}>.` };
   }
@@ -136,8 +139,13 @@ export async function publishRaffleMessage(
     });
     return { ok: true };
   } catch (err) {
+    const e = err as { code?: number; message?: string; rawError?: { message?: string } };
+    const detail = e.rawError?.message ?? e.message ?? "unknown error";
     logger.warn({ err, raffleId, channelId: raffle.channelId }, "failed to post raffle embed");
-    return { ok: false, reason: "Discord rejected the message — check my channel permissions." };
+    return {
+      ok: false,
+      reason: `Discord rejected the post in <#${channel.id}> — ${detail}${e.code ? ` (code ${e.code})` : ""}. Give me **View Channel**, **Send Messages** and **Embed Links** in that channel.`,
+    };
   }
 }
 
@@ -279,13 +287,12 @@ export async function fetchTextChannel(
 
 /**
  * Check whether the bot can actually post a raffle embed in a channel.
- * Returns the list of missing permission names (empty = all good).
+ * Returns the list of missing permission names (empty = all good, or unknown).
  */
 export function missingPostPermissions(
-  client: Client,
   channel: GuildTextBasedChannel,
+  me: import("discord.js").GuildMember | null,
 ): string[] {
-  const me = channel.guild.members.me;
   const perms = me ? channel.permissionsFor(me) : null;
   if (!perms) return [];
   const required: [bigint, string][] = [

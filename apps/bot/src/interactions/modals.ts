@@ -1,7 +1,7 @@
 import { MessageFlags, type ModalSubmitInteraction } from "discord.js";
 import { parseId, Actions } from "../utils/ids.js";
 import { recordWallet, upsertWalletProfile } from "../services/walletService.js";
-import { handleRaffleCreateModal } from "./raffleWizard.js";
+import { handleRaffleCreateModal, handleRaffleOptionsModal } from "./raffleWizard.js";
 import { chainLabel, ALL_CHAINS } from "../utils/wallets.js";
 import { KOS } from "../theme.js";
 
@@ -11,6 +11,9 @@ export async function handleModal(interaction: ModalSubmitInteraction): Promise<
 
   if (parsed.action === Actions.SubmitRaffleCreate) {
     return handleRaffleCreateModal(interaction);
+  }
+  if (parsed.action === Actions.SubmitRaffleOptions) {
+    return handleRaffleOptionsModal(interaction);
   }
   if (parsed.action === Actions.SubmitWallet) {
     return handleWalletSubmit(interaction, Number(parsed.args[0]));

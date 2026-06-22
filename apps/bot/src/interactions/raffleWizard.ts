@@ -5,6 +5,9 @@ import {
   ButtonStyle,
   ChannelSelectMenuBuilder,
   RoleSelectMenuBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   ChannelType,
   MessageFlags,
   type ModalSubmitInteraction,
@@ -17,6 +20,7 @@ import { buildId, parseId, Actions } from "../utils/ids.js";
 import { stashPending, getPending, takePending, type PendingRaffle } from "../services/pendingRaffles.js";
 import { createRaffle, publishRaffleMessage } from "../services/raffleService.js";
 import { resolveWhen, resolveTime, discordRelative } from "../utils/time.js";
+import type { EntryRequirements } from "../types.js";
 import { KOS } from "../theme.js";
 import { logger } from "../logger.js";
 
@@ -140,9 +144,149 @@ export async function handleRaffleWizardButton(interaction: ButtonInteraction) {
     return interaction.update(buildPanel(nonce, draft));
   }
 
+  if (parsed.action === Actions.RaffleMoreOptions) {
+    return showOptionsModal(interaction, nonce, draft);
+  }
+
   if (parsed.action === Actions.RafflePublish) {
     return publish(interaction, nonce, draft);
   }
+}
+
+/** Open the optional extras modal (banner, link, tasks, anti-alt). */
+async function showOptionsModal(interaction: ButtonInteraction, nonce: string, draft: PendingRaffle) {
+  const req = (draft.requirements ?? {}) as EntryRequirements;
+  const tasksText = (req.tasks ?? []).map((t) => `${t.label} | ${t.url}`).join("\n");
+
+  const modal = new ModalBuilder()
+    .setCustomId(buildId(Actions.SubmitRaffleOptions, nonce))
+    .setTitle("Raffle — extra options")
+    .addComponents(
+      row(
+        new TextInputBuilder()
+          .setCustomId("banner")
+          .setLabel("Banner image URL")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setValue(draft.bannerUrl ?? "")
+          .setPlaceholder("https://… (png/jpg/gif)"),
+      ),
+      row(
+        new TextInputBuilder()
+          .setCustomId("link")
+          .setLabel("External link (makes the title clickable)")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setValue(draft.externalUrl ?? "")
+          .setPlaceholder("https://projectx.xyz"),
+      ),
+      row(
+        new TextInputBuilder()
+          .setCustomId("tasks")
+          .setLabel("Tasks (one per line: Label | URL)")
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(false)
+          .setValue(tasksText)
+          .setPlaceholder("Follow @ProjectX | https://x.com/ProjectX\nLike & RT | https://x.com/ProjectX/status/123\nJoin Discord | https://discord.gg/abc"),
+      ),
+      row(
+        new TextInputBuilder()
+          .setCustomId("min_account")
+          .setLabel("Min account age (days, optional)")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setValue(req.minAccountAgeDays ? String(req.minAccountAgeDays) : ""),
+      ),
+      row(
+        new TextInputBuilder()
+          .setCustomId("min_server")
+          .setLabel("Min server membership (days, optional)")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setValue(req.minServerAgeDays ? String(req.minServerAgeDays) : ""),
+      ),
+    );
+
+  await interaction.showModal(modal);
+}
+
+/** Save the extras modal back into the draft. */
+export async function handleRaffleOptionsModal(interaction: ModalSubmitInteraction) {
+  const parsed = parseId(interaction.customId);
+  const nonce = parsed?.args[0] ?? "";
+  const draft = getPending(nonce);
+  if (!draft) {
+    return interaction.reply({ content: "This setup expired. Run `/raffle create` again.", flags: MessageFlags.Ephemeral });
+  }
+
+  const banner = interaction.fields.getTextInputValue("banner").trim();
+  const link = interaction.fields.getTextInputValue("link").trim();
+  const tasksRaw = interaction.fields.getTextInputValue("tasks");
+  const minAccount = Number.parseInt(interaction.fields.getTextInputValue("min_account").trim(), 10);
+  const minServer = Number.parseInt(interaction.fields.getTextInputValue("min_server").trim(), 10);
+
+  draft.bannerUrl = isHttpUrl(banner) ? banner : null;
+  draft.externalUrl = isHttpUrl(link) ? link : null;
+
+  const tasks = parseTasks(tasksRaw);
+  const req: EntryRequirements = { ...((draft.requirements ?? {}) as EntryRequirements) };
+  if (tasks.length) req.tasks = tasks;
+  else delete req.tasks;
+  if (Number.isFinite(minAccount) && minAccount > 0) req.minAccountAgeDays = minAccount;
+  else delete req.minAccountAgeDays;
+  if (Number.isFinite(minServer) && minServer > 0) req.minServerAgeDays = minServer;
+  else delete req.minServerAgeDays;
+  draft.requirements = Object.keys(req).length ? req : null;
+
+  const summary = [
+    `${KOS.emoji.check} Saved extras.`,
+    draft.bannerUrl ? "• Banner set" : null,
+    draft.externalUrl ? "• Link set" : null,
+    tasks.length ? `• ${tasks.length} task(s)` : null,
+    req.minAccountAgeDays ? `• Min account age ${req.minAccountAgeDays}d` : null,
+    req.minServerAgeDays ? `• Min server age ${req.minServerAgeDays}d` : null,
+    "",
+    "Return to the setup panel above and click **Publish Raffle**.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return interaction.reply({ content: summary, flags: MessageFlags.Ephemeral });
+}
+
+function extrasSummary(draft: PendingRaffle): string {
+  const req = (draft.requirements ?? {}) as EntryRequirements;
+  const bits: string[] = [];
+  if (draft.bannerUrl) bits.push("banner");
+  if (draft.externalUrl) bits.push("link");
+  if (req.tasks?.length) bits.push(`${req.tasks.length} task(s)`);
+  if (req.minAccountAgeDays) bits.push(`acct ${req.minAccountAgeDays}d`);
+  if (req.minServerAgeDays) bits.push(`server ${req.minServerAgeDays}d`);
+  return bits.length ? bits.join(", ") : "_none — use the button_";
+}
+
+function row(input: TextInputBuilder): ActionRowBuilder<TextInputBuilder> {
+  return new ActionRowBuilder<TextInputBuilder>().addComponents(input);
+}
+
+function isHttpUrl(s: string): boolean {
+  return /^https?:\/\//iu.test(s);
+}
+
+function parseTasks(raw: string): { label: string; url: string }[] {
+  const out: { label: string; url: string }[] = [];
+  for (const line of (raw ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const [labelPart, urlPart] = trimmed.includes("|")
+      ? trimmed.split("|").map((s) => s.trim())
+      : [trimmed, trimmed];
+    const url = urlPart ?? "";
+    if (!isHttpUrl(url)) continue;
+    out.push({ label: (labelPart || url).slice(0, 80), url });
+    if (out.length >= 6) break;
+  }
+  return out;
 }
 
 async function publish(interaction: ButtonInteraction, nonce: string, draft: PendingRaffle) {
@@ -221,6 +365,11 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
         value: draft.roleMatchMode === RoleMatchMode.ALL ? "Must hold **all** roles" : "**Any** role qualifies",
         inline: true,
       },
+      {
+        name: "Extras",
+        value: extrasSummary(draft),
+        inline: true,
+      },
     )
     .setFooter({ text: KOS.footer });
 
@@ -259,6 +408,10 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
     new ButtonBuilder()
       .setCustomId(buildId(Actions.RaffleToggleMatch, nonce))
       .setLabel(draft.roleMatchMode === RoleMatchMode.ALL ? "Match: ALL" : "Match: ANY")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(buildId(Actions.RaffleMoreOptions, nonce))
+      .setLabel("Banner / Link / Tasks")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(buildId(Actions.RafflePublish, nonce))
