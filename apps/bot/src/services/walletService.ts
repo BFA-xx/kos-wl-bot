@@ -1,11 +1,47 @@
-import { type Client, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import {
+  type Client,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+} from "discord.js";
 import { prisma, LogCategory, WalletChain } from "@kos/db";
 import { encryptSecret, decryptSecret } from "../utils/crypto.js";
-import { validateWallet, chainLabel } from "../utils/wallets.js";
+import { validateWallet, chainLabel, ALL_CHAINS } from "../utils/wallets.js";
 import { buildId, Actions } from "../utils/ids.js";
 import { KOS } from "../theme.js";
 import { audit } from "./auditService.js";
 import { logger } from "../logger.js";
+
+/**
+ * Build the wallet-registration popup, pre-filled with the user's saved
+ * addresses. Shared by the panel button, winner DMs, and /wallet register.
+ */
+export async function buildWalletProfileModal(userId: string): Promise<ModalBuilder> {
+  const existing = await getWalletProfiles(userId).catch(() => []);
+  const byChain = new Map(existing.map((p) => [p.chain, p.address]));
+
+  const modal = new ModalBuilder()
+    .setCustomId(buildId(Actions.SubmitWalletProfile))
+    .setTitle("Register / Update Wallets");
+
+  for (const chain of ALL_CHAINS.slice(0, 5)) {
+    const input = new TextInputBuilder()
+      .setCustomId(chain)
+      .setLabel(`${chainLabel(chain)} address`)
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setMaxLength(120)
+      .setPlaceholder(`Your ${chainLabel(chain)} address (optional)`);
+    const saved = byChain.get(chain);
+    if (saved) input.setValue(saved);
+    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+  }
+  return modal;
+}
 
 /** DM every winner a wallet-submission prompt. Returns count successfully DMed. */
 export async function dmWinnersForWallets(
@@ -57,8 +93,7 @@ export async function dmWinnersForWallets(
         new ButtonBuilder()
           .setCustomId(buildId(Actions.OpenWalletForm, raffle.id))
           .setLabel("Submit Wallet")
-          .setStyle(ButtonStyle.Secondary)
-          .setEmoji(KOS.emoji.spot),
+          .setStyle(ButtonStyle.Secondary),
       );
 
       await user.send({ embeds: [embed], components: [row] });

@@ -131,7 +131,6 @@ export function buildRaffleButtons(
       .setCustomId(buildId(Actions.EnterRaffle, raffleId))
       .setLabel("Enter Raffle")
       .setStyle(ButtonStyle.Secondary)
-      .setEmoji(KOS.emoji.spot)
       .setDisabled(!live),
     new ButtonBuilder()
       .setCustomId(buildId(Actions.LeaveRaffle, raffleId))

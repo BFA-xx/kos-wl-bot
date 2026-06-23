@@ -187,7 +187,7 @@ async function showOptionsModal(interaction: ButtonInteraction, nonce: string, d
           .setStyle(TextInputStyle.Paragraph)
           .setRequired(false)
           .setValue(tasksText)
-          .setPlaceholder("Follow @ProjectX | https://x.com/ProjectX\nLike & RT | https://x.com/ProjectX/status/123\nJoin Discord | https://discord.gg/abc"),
+          .setPlaceholder("One task per line:  Label | https://link"),
       ),
       row(
         new TextInputBuilder()

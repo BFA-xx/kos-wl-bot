@@ -12,9 +12,9 @@ import { parseId, Actions, buildId } from "../utils/ids.js";
 import { RateLimiter } from "../utils/rateLimit.js";
 import { enterRaffle, leaveRaffle } from "../services/entryService.js";
 import { refreshRaffleMessage } from "../services/raffleService.js";
-import { getWalletProfiles } from "../services/walletService.js";
+import { buildWalletProfileModal } from "../services/walletService.js";
 import { handleRaffleWizardButton } from "./raffleWizard.js";
-import { chainLabel, ALL_CHAINS } from "../utils/wallets.js";
+import { chainLabel } from "../utils/wallets.js";
 import { KOS } from "../theme.js";
 import { logger } from "../logger.js";
 
@@ -59,27 +59,7 @@ export async function handleButton(interaction: ButtonInteraction): Promise<unkn
 }
 
 async function handleOpenWalletProfile(interaction: ButtonInteraction) {
-  // Prefill with any wallets the member already saved, so they can edit.
-  const existing = await getWalletProfiles(interaction.user.id).catch(() => []);
-  const byChain = new Map(existing.map((p) => [p.chain, p.address]));
-
-  const modal = new ModalBuilder()
-    .setCustomId(buildId(Actions.SubmitWalletProfile))
-    .setTitle("Register / Update Wallets");
-
-  for (const chain of ALL_CHAINS.slice(0, 5)) {
-    const input = new TextInputBuilder()
-      .setCustomId(chain)
-      .setLabel(`${chainLabel(chain)} address`)
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false)
-      .setMaxLength(120)
-      .setPlaceholder(`Your ${chainLabel(chain)} address (leave blank to skip)`);
-    const saved = byChain.get(chain);
-    if (saved) input.setValue(saved);
-    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
-  }
-
+  const modal = await buildWalletProfileModal(interaction.user.id);
   await interaction.showModal(modal).catch((err) => logger.warn({ err }, "showModal (profile) failed"));
 }
 

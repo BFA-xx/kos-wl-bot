@@ -19,6 +19,7 @@ import {
   getWalletProfiles,
   removeWalletProfile,
   exportAllWalletProfiles,
+  buildWalletProfileModal,
 } from "../services/walletService.js";
 import { fetchTextChannel } from "../services/raffleService.js";
 import { toCsv } from "../proof/csv.js";
@@ -32,6 +33,11 @@ export const walletCommand: Command = {
     .setName("wallet")
     .setDescription("Register and manage your wallet addresses")
     .setDMPermission(false)
+    .addSubcommand((sub) =>
+      sub
+        .setName("register")
+        .setDescription("Open a form to add/update all your wallets"),
+    )
     .addSubcommand((sub) =>
       sub
         .setName("set")
@@ -68,6 +74,8 @@ export const walletCommand: Command = {
   async execute(interaction: ChatInputCommandInteraction) {
     const sub = interaction.options.getSubcommand();
     switch (sub) {
+      case "register":
+        return handleRegister(interaction);
       case "set":
         return handleSet(interaction);
       case "view":
@@ -83,6 +91,11 @@ export const walletCommand: Command = {
     }
   },
 };
+
+async function handleRegister(interaction: ChatInputCommandInteraction) {
+  const modal = await buildWalletProfileModal(interaction.user.id);
+  await interaction.showModal(modal);
+}
 
 async function handleSet(interaction: ChatInputCommandInteraction) {
   const chain = interaction.options.getString("chain", true) as WalletChain;
@@ -148,8 +161,7 @@ async function handlePanel(interaction: ChatInputCommandInteraction) {
     new ButtonBuilder()
       .setCustomId(buildId(Actions.OpenWalletProfile))
       .setLabel("Register / Update Wallet")
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji(KOS.emoji.spot),
+      .setStyle(ButtonStyle.Secondary),
   );
 
   const channel = await fetchTextChannel(interaction.client, interaction.channelId);
