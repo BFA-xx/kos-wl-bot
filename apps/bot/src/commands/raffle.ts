@@ -13,7 +13,7 @@ import {
 } from "discord.js";
 import { prisma, RaffleStatus, Prisma } from "@kos/db";
 import type { Command } from "../types.js";
-import { resolveTime } from "../utils/time.js";
+import { resolveWhen } from "../utils/time.js";
 import { KOS, statusBadge } from "../theme.js";
 import {
   refreshRaffleMessage,
@@ -61,10 +61,14 @@ export const raffleCommand: Command = {
         .setName("edit")
         .setDescription("Edit an existing raffle")
         .addIntegerOption((o) => o.setName("id").setDescription("Raffle ID").setRequired(true).setAutocomplete(true))
-        .addStringOption((o) => o.setName("title").setDescription("New title"))
+        .addStringOption((o) => o.setName("project").setDescription("New project name"))
+        .addStringOption((o) => o.setName("title").setDescription("New title (e.g. GTD / FCFS)"))
+        .addStringOption((o) => o.setName("description").setDescription("New description"))
         .addIntegerOption((o) => o.setName("spots").setDescription("New WL spot count").setMinValue(1))
-        .addStringOption((o) => o.setName("end").setDescription("New end time (24h, 2d, ISO)"))
-        .addStringOption((o) => o.setName("link").setDescription("New external link")),
+        .addStringOption((o) => o.setName("start").setDescription("New start (now, 2026-06-25 17:00, tomorrow 5pm)"))
+        .addStringOption((o) => o.setName("end").setDescription("New end (24h, 2d, or 2026-06-26 17:00)"))
+        .addStringOption((o) => o.setName("link").setDescription("New external link"))
+        .addAttachmentOption((o) => o.setName("banner").setDescription("New banner image")),
     )
     // ---- delete ----
     .addSubcommand((sub) =>
@@ -268,20 +272,54 @@ async function handleEdit(interaction: ChatInputCommandInteraction) {
     return interaction.editReply("Raffle not found.");
   }
 
+  const o = interaction.options;
   const data: Prisma.RaffleUpdateInput = {};
-  const title = interaction.options.getString("title");
-  const spots = interaction.options.getInteger("spots");
-  const end = interaction.options.getString("end");
-  const link = interaction.options.getString("link");
+  const project = o.getString("project");
+  const title = o.getString("title");
+  const description = o.getString("description");
+  const spots = o.getInteger("spots");
+  const startStr = o.getString("start");
+  const endStr = o.getString("end");
+  const link = o.getString("link");
+  const banner = o.getAttachment("banner");
+
+  if (project) data.projectName = project;
   if (title) data.title = title;
+  if (description !== null) data.description = description || null;
   if (spots) data.spots = spots;
-  if (link !== null) data.externalUrl = link;
-  if (end) {
-    const endAt = resolveTime(end, new Date());
-    if (!endAt) return interaction.editReply("Could not parse the new end time.");
-    data.endAt = endAt;
-    if (raffle.status === RaffleStatus.ENDED) data.status = RaffleStatus.LIVE; // reopen
+  if (link !== null) data.externalUrl = link || null;
+  if (banner?.url) data.bannerUrl = banner.url;
+
+  // Time edits: recompute start/end and the live status so the schedule stays
+  // correct (e.g. moving start to the future flips a LIVE raffle to UPCOMING).
+  if (startStr || endStr) {
+    const now = new Date();
+    let startAt = raffle.startAt;
+    if (startStr) {
+      const parsed = resolveWhen(startStr, now);
+      if (!parsed) return interaction.editReply("Could not read the new **start** time.");
+      startAt = parsed;
+      data.startAt = parsed;
+    }
+    let endAt = raffle.endAt;
+    if (endStr) {
+      const parsed = resolveWhen(endStr, startAt);
+      if (!parsed) return interaction.editReply("Could not read the new **end** time.");
+      endAt = parsed;
+      data.endAt = parsed;
+    }
+    if (endAt.getTime() <= startAt.getTime()) {
+      return interaction.editReply("End must be after the start.");
+    }
+    if (endAt.getTime() <= now.getTime()) {
+      return interaction.editReply("End must be in the future.");
+    }
+    // Recompute status from the new window (don't touch CANCELLED).
+    if (raffle.status !== RaffleStatus.CANCELLED) {
+      data.status = now < startAt ? RaffleStatus.UPCOMING : RaffleStatus.LIVE;
+    }
   }
+
   if (Object.keys(data).length === 0) {
     return interaction.editReply("Nothing to update — provide at least one field.");
   }

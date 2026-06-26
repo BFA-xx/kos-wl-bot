@@ -37,7 +37,9 @@ export const entryRequirementsSchema = z.object({
     .array(
       z.object({
         label: z.string(),
-        url: z.string(),
+        // URL = renders as a clickable button. No URL = a text instruction
+        // shown in the embed (e.g. "Comment KUON under this post").
+        url: z.string().optional(),
       }),
     )
     .optional(),

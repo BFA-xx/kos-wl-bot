@@ -214,11 +214,11 @@ async function showOptionsModal(interaction: ButtonInteraction, nonce: string, d
       row(
         new TextInputBuilder()
           .setCustomId("tasks")
-          .setLabel("Tasks — paste X / Discord links (1 per line)")
+          .setLabel("Tasks (1/line: link=button, text=step)")
           .setStyle(TextInputStyle.Paragraph)
           .setRequired(false)
           .setValue(tasksText)
-          .setPlaceholder("https://x.com/ProjectX/status/123\nhttps://discord.gg/abc"),
+          .setPlaceholder("https://x.com/ProjectX/status/123\nComment KUON under this post"),
       ),
       row(
         new TextInputBuilder()
@@ -315,12 +315,18 @@ function isHttpUrl(s: string): boolean {
  * invite → Join; anything else → a plain link button. `Label | URL` is honoured
  * for custom labels. Capped at 5 buttons (one row).
  */
-function parseTasks(raw: string): { label: string; url: string }[] {
-  const out: { label: string; url: string }[] = [];
-  const add = (label: string, url: string) => {
-    if (out.length < 5 && !out.some((t) => t.url === url)) {
+function parseTasks(raw: string): { label: string; url?: string }[] {
+  const out: { label: string; url?: string }[] = [];
+  // Link tasks become buttons (max 5). Text tasks become instructions (max 6).
+  const buttonCount = () => out.filter((t) => t.url).length;
+  const textCount = () => out.filter((t) => !t.url).length;
+  const addLink = (label: string, url: string) => {
+    if (buttonCount() < 5 && !out.some((t) => t.url === url)) {
       out.push({ label: label.slice(0, 40), url });
     }
+  };
+  const addText = (label: string) => {
+    if (textCount() < 6) out.push({ label: label.slice(0, 100) });
   };
 
   const tweet = /(?:x|twitter)\.com\/([A-Za-z0-9_]+)\/status\/(\d+)/iu;
@@ -329,36 +335,41 @@ function parseTasks(raw: string): { label: string; url: string }[] {
 
   for (const line of (raw ?? "").split("\n")) {
     const trimmed = line.trim();
-    if (!trimmed || out.length >= 5) continue;
+    if (!trimmed) continue;
 
     let label: string | null = null;
-    let url = trimmed;
+    let value = trimmed;
     if (trimmed.includes("|")) {
       const [l, u] = trimmed.split("|").map((s) => s.trim());
       label = l || null;
-      url = u ?? "";
+      value = u ?? "";
     }
-    if (!isHttpUrl(url)) continue;
 
-    const tw = tweet.exec(url);
+    // Non-URL line → a text instruction (e.g. "Comment KUON under this post").
+    if (!isHttpUrl(value)) {
+      addText(label ? `${label}: ${value}` : trimmed);
+      continue;
+    }
+
+    const tw = tweet.exec(value);
     if (tw) {
       const user = tw[1];
       const id = tw[2];
-      add("Like", `https://twitter.com/intent/like?tweet_id=${id}`);
-      add("Retweet", `https://twitter.com/intent/retweet?tweet_id=${id}`);
-      add(`Follow @${user}`, `https://twitter.com/intent/follow?screen_name=${user}`);
+      addLink("Like", `https://twitter.com/intent/like?tweet_id=${id}`);
+      addLink("Retweet", `https://twitter.com/intent/retweet?tweet_id=${id}`);
+      addLink(`Follow @${user}`, `https://twitter.com/intent/follow?screen_name=${user}`);
       continue;
     }
-    const pr = profile.exec(url);
-    if (pr && !/\/(home|search|explore|i)\b/iu.test(url)) {
-      add(label ?? `Follow @${pr[1]}`, `https://twitter.com/intent/follow?screen_name=${pr[1]}`);
+    const pr = profile.exec(value);
+    if (pr && !/\/(home|search|explore|i)\b/iu.test(value)) {
+      addLink(label ?? `Follow @${pr[1]}`, `https://twitter.com/intent/follow?screen_name=${pr[1]}`);
       continue;
     }
-    if (discord.test(url)) {
-      add(label ?? "Join Discord", url);
+    if (discord.test(value)) {
+      addLink(label ?? "Join Discord", value);
       continue;
     }
-    add(label ?? "Open link", url);
+    addLink(label ?? "Open link", value);
   }
   return out;
 }

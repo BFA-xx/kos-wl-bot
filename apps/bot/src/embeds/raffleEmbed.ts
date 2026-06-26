@@ -95,10 +95,16 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
   );
 
   const tasks = parseRequirements(raffle.requirements).tasks ?? [];
+  const textTasks = tasks.filter((t) => !t.url);
+  const hasLinkTasks = tasks.some((t) => t.url);
   if (tasks.length > 0) {
+    const lines: string[] = [];
+    for (const t of textTasks) lines.push(`• ${t.label}`);
+    if (hasLinkTasks) lines.push("• Use the buttons below");
+    lines.push("", "Then click **Enter Giveaway**.");
     embed.addFields({
       name: `${KOS.emoji.check} Tasks to qualify`,
-      value: "Complete the task buttons below, then click **Enter Giveaway**.",
+      value: lines.join("\n").slice(0, 1024),
       inline: false,
     });
   }
@@ -143,11 +149,14 @@ export function buildRaffleComponents(
     ),
   ];
 
-  // Task link-buttons (max 5 per row; we cap at 5 total to keep it tidy).
-  const tasks = (parseRequirements(raffle.requirements).tasks ?? []).slice(0, 5);
-  if (tasks.length > 0) {
+  // Link tasks become buttons (max 5 in one row). Text-only tasks are shown in
+  // the embed instead.
+  const linkTasks = (parseRequirements(raffle.requirements).tasks ?? [])
+    .filter((t): t is { label: string; url: string } => Boolean(t.url))
+    .slice(0, 5);
+  if (linkTasks.length > 0) {
     const taskRow = new ActionRowBuilder<ButtonBuilder>();
-    for (const t of tasks) {
+    for (const t of linkTasks) {
       taskRow.addComponents(
         new ButtonBuilder()
           .setStyle(ButtonStyle.Link)
