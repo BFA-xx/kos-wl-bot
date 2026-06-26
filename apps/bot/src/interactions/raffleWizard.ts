@@ -18,7 +18,12 @@ import {
 import { prisma, RoleMatchMode, WalletChain } from "@kos/db";
 import { buildId, parseId, Actions } from "../utils/ids.js";
 import { stashPending, getPending, takePending, takeBanner, type PendingRaffle } from "../services/pendingRaffles.js";
-import { createRaffle, publishRaffleMessage } from "../services/raffleService.js";
+import {
+  createRaffle,
+  publishRaffleMessage,
+  fetchTextChannel,
+  missingPostPermissions,
+} from "../services/raffleService.js";
 import { resolveWhen, resolveTime, discordRelative } from "../utils/time.js";
 import type { EntryRequirements } from "../types.js";
 import { KOS } from "../theme.js";
@@ -72,6 +77,7 @@ export async function handleRaffleCreateModal(interaction: ModalSubmitInteractio
     createdById: interaction.user.id,
     projectName,
     title,
+    description: null,
     spots,
     startAt,
     endAt,
@@ -166,12 +172,21 @@ async function showOptionsModal(interaction: ButtonInteraction, nonce: string, d
 
   const modal = new ModalBuilder()
     .setCustomId(buildId(Actions.SubmitRaffleOptions, nonce))
-    .setTitle("Raffle — extra options")
+    .setTitle("Description / Banner / Tasks")
     .addComponents(
       row(
         new TextInputBuilder()
+          .setCustomId("description")
+          .setLabel("Description (shown under the title)")
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(false)
+          .setValue(draft.description ?? "")
+          .setPlaceholder("Tell people about the project…"),
+      ),
+      row(
+        new TextInputBuilder()
           .setCustomId("banner")
-          .setLabel("Banner image URL")
+          .setLabel("Banner image URL (or attach on /raffle create)")
           .setStyle(TextInputStyle.Short)
           .setRequired(false)
           .setValue(draft.bannerUrl ?? "")
@@ -189,27 +204,24 @@ async function showOptionsModal(interaction: ButtonInteraction, nonce: string, d
       row(
         new TextInputBuilder()
           .setCustomId("tasks")
-          .setLabel("Tasks (one per line: Label | URL)")
+          .setLabel("Tasks — paste X / Discord links (1 per line)")
           .setStyle(TextInputStyle.Paragraph)
           .setRequired(false)
           .setValue(tasksText)
-          .setPlaceholder("One task per line:  Label | https://link"),
+          .setPlaceholder("https://x.com/ProjectX/status/123\nhttps://discord.gg/abc"),
       ),
       row(
         new TextInputBuilder()
-          .setCustomId("min_account")
-          .setLabel("Min account age (days, optional)")
+          .setCustomId("anti_alt")
+          .setLabel("Anti-alt: min account, server age (days)")
           .setStyle(TextInputStyle.Short)
           .setRequired(false)
-          .setValue(req.minAccountAgeDays ? String(req.minAccountAgeDays) : ""),
-      ),
-      row(
-        new TextInputBuilder()
-          .setCustomId("min_server")
-          .setLabel("Min server membership (days, optional)")
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-          .setValue(req.minServerAgeDays ? String(req.minServerAgeDays) : ""),
+          .setValue(
+            req.minAccountAgeDays || req.minServerAgeDays
+              ? `${req.minAccountAgeDays ?? 0},${req.minServerAgeDays ?? 0}`
+              : "",
+          )
+          .setPlaceholder("e.g. 7,3  (account 7d, in server 3d)"),
       ),
     );
 
@@ -225,12 +237,18 @@ export async function handleRaffleOptionsModal(interaction: ModalSubmitInteracti
     return interaction.reply({ content: "This setup expired. Run `/raffle create` again.", flags: MessageFlags.Ephemeral });
   }
 
+  const description = interaction.fields.getTextInputValue("description").trim();
   const banner = interaction.fields.getTextInputValue("banner").trim();
   const link = interaction.fields.getTextInputValue("link").trim();
   const tasksRaw = interaction.fields.getTextInputValue("tasks");
-  const minAccount = Number.parseInt(interaction.fields.getTextInputValue("min_account").trim(), 10);
-  const minServer = Number.parseInt(interaction.fields.getTextInputValue("min_server").trim(), 10);
+  const aa = interaction.fields
+    .getTextInputValue("anti_alt")
+    .split(",")
+    .map((s) => Number.parseInt(s.trim(), 10));
+  const minAccount = aa[0] ?? NaN;
+  const minServer = aa[1] ?? NaN;
 
+  draft.description = description || null;
   draft.bannerUrl = isHttpUrl(banner) ? banner : null;
   draft.externalUrl = isHttpUrl(link) ? link : null;
 
@@ -246,9 +264,10 @@ export async function handleRaffleOptionsModal(interaction: ModalSubmitInteracti
 
   const summary = [
     `${KOS.emoji.check} Saved extras.`,
+    draft.description ? "• Description set" : null,
     draft.bannerUrl ? "• Banner set" : null,
     draft.externalUrl ? "• Link set" : null,
-    tasks.length ? `• ${tasks.length} task(s)` : null,
+    tasks.length ? `• ${tasks.length} task button(s)` : null,
     req.minAccountAgeDays ? `• Min account age ${req.minAccountAgeDays}d` : null,
     req.minServerAgeDays ? `• Min server age ${req.minServerAgeDays}d` : null,
     "",
@@ -263,9 +282,10 @@ export async function handleRaffleOptionsModal(interaction: ModalSubmitInteracti
 function extrasSummary(draft: PendingRaffle): string {
   const req = (draft.requirements ?? {}) as EntryRequirements;
   const bits: string[] = [];
+  if (draft.description) bits.push("description");
   if (draft.bannerUrl) bits.push("banner");
   if (draft.externalUrl) bits.push("link");
-  if (req.tasks?.length) bits.push(`${req.tasks.length} task(s)`);
+  if (req.tasks?.length) bits.push(`${req.tasks.length} task button(s)`);
   if (req.minAccountAgeDays) bits.push(`acct ${req.minAccountAgeDays}d`);
   if (req.minServerAgeDays) bits.push(`server ${req.minServerAgeDays}d`);
   return bits.length ? bits.join(", ") : "_none — use the button_";
@@ -279,18 +299,56 @@ function isHttpUrl(s: string): boolean {
   return /^https?:\/\//iu.test(s);
 }
 
+/**
+ * Turn pasted social links into task buttons. An X/Twitter tweet link expands
+ * into Like + Retweet + Follow buttons; a profile link → Follow; a Discord
+ * invite → Join; anything else → a plain link button. `Label | URL` is honoured
+ * for custom labels. Capped at 5 buttons (one row).
+ */
 function parseTasks(raw: string): { label: string; url: string }[] {
   const out: { label: string; url: string }[] = [];
+  const add = (label: string, url: string) => {
+    if (out.length < 5 && !out.some((t) => t.url === url)) {
+      out.push({ label: label.slice(0, 40), url });
+    }
+  };
+
+  const tweet = /(?:x|twitter)\.com\/([A-Za-z0-9_]+)\/status\/(\d+)/iu;
+  const profile = /(?:x|twitter)\.com\/([A-Za-z0-9_]+)\/?(?:\?.*)?$/iu;
+  const discord = /(?:discord\.gg|discord(?:app)?\.com\/invite)\/[A-Za-z0-9-]+/iu;
+
   for (const line of (raw ?? "").split("\n")) {
     const trimmed = line.trim();
-    if (!trimmed) continue;
-    const [labelPart, urlPart] = trimmed.includes("|")
-      ? trimmed.split("|").map((s) => s.trim())
-      : [trimmed, trimmed];
-    const url = urlPart ?? "";
+    if (!trimmed || out.length >= 5) continue;
+
+    let label: string | null = null;
+    let url = trimmed;
+    if (trimmed.includes("|")) {
+      const [l, u] = trimmed.split("|").map((s) => s.trim());
+      label = l || null;
+      url = u ?? "";
+    }
     if (!isHttpUrl(url)) continue;
-    out.push({ label: (labelPart || url).slice(0, 80), url });
-    if (out.length >= 6) break;
+
+    const tw = tweet.exec(url);
+    if (tw) {
+      const user = tw[1];
+      const id = tw[2];
+      add("Like", `https://twitter.com/intent/like?tweet_id=${id}`);
+      add("Retweet", `https://twitter.com/intent/retweet?tweet_id=${id}`);
+      add(`Follow @${user}`, `https://twitter.com/intent/follow?screen_name=${user}`);
+      continue;
+    }
+    const pr = profile.exec(url);
+    if (pr && !/\/(home|search|explore|i)\b/iu.test(url)) {
+      add(label ?? `Follow @${pr[1]}`, `https://twitter.com/intent/follow?screen_name=${pr[1]}`);
+      continue;
+    }
+    if (discord.test(url)) {
+      add(label ?? "Join Discord", url);
+      continue;
+    }
+    add(label ?? "Open link", url);
   }
   return out;
 }
@@ -298,6 +356,26 @@ function parseTasks(raw: string): { label: string; url: string }[] {
 async function publish(interaction: ButtonInteraction, nonce: string, draft: PendingRaffle) {
   if (!draft.postChannelId) {
     return interaction.reply({ content: "Pick a channel to post the raffle in first.", flags: MessageFlags.Ephemeral });
+  }
+
+  // Pre-flight: make sure we can actually post before creating anything, so we
+  // never leave an orphaned raffle that failed to post.
+  const channel = await fetchTextChannel(interaction.client, draft.postChannelId);
+  if (!channel) {
+    return interaction.reply({
+      content: `I can't see <#${draft.postChannelId}>. Pick a text channel I have access to, then Publish again.`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+  const me = channel.guild.members.me ?? (await channel.guild.members.fetchMe().catch(() => null));
+  const missing = missingPostPermissions(channel, me);
+  if (missing.length > 0) {
+    return interaction.reply({
+      content:
+        `⚠️ I can't post in <#${draft.postChannelId}> — I'm missing **${missing.join(", ")}** there.\n` +
+        `Right-click the channel → Edit Channel → Permissions → allow my bot/role those, then click **Publish** again.`,
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   await interaction.update({ content: "Creating raffle…", embeds: [], components: [] });
@@ -309,6 +387,7 @@ async function publish(interaction: ButtonInteraction, nonce: string, draft: Pen
       createdById: draft.createdById,
       projectName: draft.projectName,
       title: draft.title,
+      description: draft.description,
       spots: draft.spots,
       roleMatchMode: draft.roleMatchMode,
       startAt: draft.startAt,

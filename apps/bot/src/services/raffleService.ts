@@ -11,7 +11,7 @@ import {
   WalletChain,
   Prisma,
 } from "@kos/db";
-import { buildRaffleEmbed, buildRaffleButtons } from "../embeds/raffleEmbed.js";
+import { buildRaffleEmbed, buildRaffleComponents } from "../embeds/raffleEmbed.js";
 import { audit } from "./auditService.js";
 import { ensureGuild } from "./userService.js";
 import { logger } from "../logger.js";
@@ -22,6 +22,7 @@ export interface CreateRaffleInput {
   createdById: string;
   projectName: string;
   title: string;
+  description: string | null;
   spots: number;
   roleMatchMode: RoleMatchMode;
   startAt: Date;
@@ -65,6 +66,7 @@ export async function createRaffle(
       createdById: input.createdById,
       projectName: input.projectName,
       title: input.title,
+      description: input.description,
       spots: input.spots,
       roleMatchMode: input.roleMatchMode,
       status,
@@ -133,7 +135,7 @@ export async function publishRaffleMessage(
   try {
     const message = await channel.send({
       embeds: [buildRaffleEmbed(raffle)],
-      components: [buildRaffleButtons(raffle.id, raffle.status)],
+      components: buildRaffleComponents(raffle),
     });
     await prisma.raffle.update({
       where: { id: raffleId },
@@ -170,7 +172,7 @@ export async function refreshRaffleMessage(
   await message
     .edit({
       embeds: [buildRaffleEmbed(raffle)],
-      components: [buildRaffleButtons(raffle.id, raffle.status)],
+      components: buildRaffleComponents(raffle),
     })
     .catch((err) => logger.warn({ err, raffleId }, "refresh edit failed"));
 }

@@ -115,6 +115,7 @@ model Raffle {
   guildId       String
   projectName   String
   title         String
+  description   String?
   spots         Int
   roleMatchMode RoleMatchMode @default(ANY)
   status        RaffleStatus  @default(UPCOMING)

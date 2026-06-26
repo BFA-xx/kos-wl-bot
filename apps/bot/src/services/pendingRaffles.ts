@@ -13,6 +13,7 @@ export interface PendingRaffle {
   // From the modal:
   projectName: string;
   title: string;
+  description: string | null;
   spots: number;
   startAt: Date;
   endAt: Date;

@@ -14,6 +14,7 @@ export interface RaffleEmbedData {
   id: number;
   projectName: string;
   title: string;
+  description: string | null;
   spots: number;
   status: RaffleStatus;
   roleMatchMode: RoleMatchMode;
@@ -58,6 +59,7 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
     .setDescription(
       [
         `## ${raffle.title}`,
+        ...(raffle.description ? ["", raffle.description.slice(0, 1500)] : []),
         "",
         `**Status** — ${statusBadge(raffle.status)}`,
         countdown,
@@ -99,7 +101,7 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
   if (tasks.length > 0) {
     embed.addFields({
       name: `${KOS.emoji.check} Tasks to qualify`,
-      value: tasks.map((t) => `• [${t.label}](${t.url})`).join("\n").slice(0, 1024),
+      value: "Complete the task buttons below, then click **Enter Giveaway**.",
       inline: false,
     });
   }
@@ -115,24 +117,46 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
   return embed;
 }
 
-/** Enter / Leave buttons; disabled when the raffle is not LIVE. */
-export function buildRaffleButtons(
-  raffleId: number,
-  status: RaffleStatus,
-): ActionRowBuilder<ButtonBuilder> {
-  const live = status === RaffleStatus.LIVE;
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(buildId(Actions.EnterRaffle, raffleId))
-      .setLabel("Enter Raffle")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!live),
-    new ButtonBuilder()
-      .setCustomId(buildId(Actions.LeaveRaffle, raffleId))
-      .setLabel("Leave")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!live),
-  );
+/**
+ * All components for a live raffle message:
+ *  - Row 1: Enter / Leave (interactive; disabled when not LIVE).
+ *  - Row 2: task link-buttons (Follow / Like / Retweet / Join …) if any.
+ */
+export function buildRaffleComponents(
+  raffle: RaffleEmbedData,
+): ActionRowBuilder<ButtonBuilder>[] {
+  const live = raffle.status === RaffleStatus.LIVE;
+  const rows: ActionRowBuilder<ButtonBuilder>[] = [
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(buildId(Actions.EnterRaffle, raffle.id))
+        .setLabel("Enter Giveaway")
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(!live),
+      new ButtonBuilder()
+        .setCustomId(buildId(Actions.LeaveRaffle, raffle.id))
+        .setLabel("Leave")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(!live),
+    ),
+  ];
+
+  // Task link-buttons (max 5 per row; we cap at 5 total to keep it tidy).
+  const tasks = (parseRequirements(raffle.requirements).tasks ?? []).slice(0, 5);
+  if (tasks.length > 0) {
+    const taskRow = new ActionRowBuilder<ButtonBuilder>();
+    for (const t of tasks) {
+      taskRow.addComponents(
+        new ButtonBuilder()
+          .setStyle(ButtonStyle.Link)
+          .setLabel(t.label.slice(0, 40))
+          .setURL(t.url),
+      );
+    }
+    rows.push(taskRow);
+  }
+
+  return rows;
 }
 
 function describeRequirements(raw: unknown): string | null {
