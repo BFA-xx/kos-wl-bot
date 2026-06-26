@@ -25,7 +25,11 @@ export async function handleInteraction(interaction: Interaction): Promise<void>
       await handleButton(interaction);
       return;
     }
-    if (interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu()) {
+    if (
+      interaction.isChannelSelectMenu() ||
+      interaction.isRoleSelectMenu() ||
+      interaction.isStringSelectMenu()
+    ) {
       await handleRaffleSelect(interaction);
       return;
     }

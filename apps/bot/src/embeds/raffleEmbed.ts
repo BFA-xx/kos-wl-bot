@@ -51,27 +51,24 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
         ? `${KOS.emoji.clock} Opens ${discordRelative(raffle.startAt)}`
         : `${KOS.emoji.clock} Closed ${discordRelative(raffle.endAt)}`;
 
+  // Project name is the big headline (H1 in the description renders larger than
+  // a normal embed title). The raffle title (e.g. GTD / FCFS) is small subtext.
+  const head: string[] = [
+    `# ${raffle.projectName.toUpperCase()}`,
+    `-# ${raffle.title}`,
+  ];
+  if (raffle.externalUrl) head.push(`-# [Visit project ↗](${raffle.externalUrl})`);
+  if (raffle.description) head.push("", raffle.description.slice(0, 1500));
+  head.push("", `**Status** — ${statusBadge(raffle.status)}`, countdown);
+
   const embed = new EmbedBuilder()
     .setColor(statusColor(raffle.status))
-    // Project name is the headline — uppercased so it stands out and reads
-    // consistently regardless of how it was typed.
-    .setTitle(raffle.projectName.toUpperCase())
-    .setDescription(
-      [
-        `## ${raffle.title}`,
-        ...(raffle.description ? ["", raffle.description.slice(0, 1500)] : []),
-        "",
-        `**Status** — ${statusBadge(raffle.status)}`,
-        countdown,
-      ].join("\n"),
-    )
+    .setDescription(head.join("\n"))
     .setFooter({
       text: `${KOS.footer} · Raffle #${raffle.id}`,
       ...(KOS.logoUrl ? { iconURL: KOS.logoUrl } : {}),
     })
     .setTimestamp(new Date());
-
-  if (raffle.externalUrl) embed.setURL(raffle.externalUrl);
 
   embed.addFields({
     name: `${KOS.emoji.spot} WL Spots`,
@@ -112,7 +109,6 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
   }
 
   if (raffle.bannerUrl) embed.setImage(raffle.bannerUrl);
-  if (raffle.externalUrl) embed.setURL(raffle.externalUrl);
 
   return embed;
 }
@@ -126,11 +122,17 @@ export function buildRaffleComponents(
   raffle: RaffleEmbedData,
 ): ActionRowBuilder<ButtonBuilder>[] {
   const live = raffle.status === RaffleStatus.LIVE;
+  const enterLabel =
+    raffle.status === RaffleStatus.LIVE
+      ? "Enter Giveaway"
+      : raffle.status === RaffleStatus.UPCOMING
+        ? "Not Started Yet"
+        : "Raffle Ended";
   const rows: ActionRowBuilder<ButtonBuilder>[] = [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(buildId(Actions.EnterRaffle, raffle.id))
-        .setLabel("Enter Giveaway")
+        .setLabel(enterLabel)
         .setStyle(ButtonStyle.Success)
         .setDisabled(!live),
       new ButtonBuilder()

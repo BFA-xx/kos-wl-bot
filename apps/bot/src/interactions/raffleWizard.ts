@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   ChannelSelectMenuBuilder,
   RoleSelectMenuBuilder,
+  StringSelectMenuBuilder,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -13,9 +14,11 @@ import {
   type ModalSubmitInteraction,
   type ChannelSelectMenuInteraction,
   type RoleSelectMenuInteraction,
+  type StringSelectMenuInteraction,
   type ButtonInteraction,
 } from "discord.js";
 import { prisma, RoleMatchMode, WalletChain } from "@kos/db";
+import { ALL_CHAINS, chainLabel } from "../utils/wallets.js";
 import { buildId, parseId, Actions } from "../utils/ids.js";
 import { stashPending, getPending, takePending, takeBanner, type PendingRaffle } from "../services/pendingRaffles.js";
 import {
@@ -98,9 +101,12 @@ export async function handleRaffleCreateModal(interaction: ModalSubmitInteractio
   return interaction.reply({ ...buildPanel(nonce, draft), flags: MessageFlags.Ephemeral });
 }
 
-/** Channel/role select changed. */
+/** A panel select (channel / role / chain) changed. */
 export async function handleRaffleSelect(
-  interaction: ChannelSelectMenuInteraction | RoleSelectMenuInteraction,
+  interaction:
+    | ChannelSelectMenuInteraction
+    | RoleSelectMenuInteraction
+    | StringSelectMenuInteraction,
 ) {
   const parsed = parseId(interaction.customId);
   if (!parsed) return;
@@ -115,9 +121,13 @@ export async function handleRaffleSelect(
     case Actions.RaffleSetAnnounce:
       draft.announceChannelId = interaction.values[0] ?? null;
       break;
-    case Actions.RaffleSetProof:
-      draft.proofChannelId = interaction.values[0] ?? null;
+    case Actions.RaffleSetChains: {
+      const chains = interaction.values.filter((v): v is WalletChain =>
+        (ALL_CHAINS as string[]).includes(v),
+      );
+      if (chains.length > 0) draft.walletChains = chains;
       break;
+    }
     case Actions.RaffleSetRoles: {
       const roleInteraction = interaction as RoleSelectMenuInteraction;
       draft.roles = [...roleInteraction.roles.values()]
@@ -186,7 +196,7 @@ async function showOptionsModal(interaction: ButtonInteraction, nonce: string, d
       row(
         new TextInputBuilder()
           .setCustomId("banner")
-          .setLabel("Banner image URL (or attach on /raffle create)")
+          .setLabel("Banner image URL")
           .setStyle(TextInputStyle.Short)
           .setRequired(false)
           .setValue(draft.bannerUrl ?? "")
@@ -434,13 +444,18 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
         `${KOS.emoji.spot} Spots: **${draft.spots}**`,
         `Starts ${discordRelative(draft.startAt)} · Ends ${discordRelative(draft.endAt)}`,
         "",
-        "Pick where to post it and who can enter, then **Publish**.",
+        "Pick where to post it, the network(s), and who can enter, then **Publish**.",
+        "_Proof is delivered to your configured proof channel (`/config channels`), or the post channel._",
       ].join("\n"),
     )
     .addFields(
       { name: "Post in", value: draft.postChannelId ? `<#${draft.postChannelId}>` : "_choose below_", inline: true },
       { name: "Announce", value: draft.announceChannelId ? `<#${draft.announceChannelId}>` : "_= post channel_", inline: true },
-      { name: "Proof", value: draft.proofChannelId ? `<#${draft.proofChannelId}>` : "_= post channel_", inline: true },
+      {
+        name: "Network(s)",
+        value: draft.walletChains.map(chainLabel).join(", ") || "Ethereum",
+        inline: true,
+      },
       {
         name: "Eligible roles",
         value: draft.roles.length ? draft.roles.map((r) => `<@&${r.roleId}>`).join(" ") : "Everyone",
@@ -475,13 +490,18 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
     .setMaxValues(1);
   if (draft.announceChannelId) announceSelect.setDefaultChannels(draft.announceChannelId);
 
-  const proofSelect = new ChannelSelectMenuBuilder()
-    .setCustomId(buildId(Actions.RaffleSetProof, nonce))
-    .setPlaceholder("Proof channel… (optional)")
-    .addChannelTypes(...TEXT_CHANNELS)
-    .setMinValues(0)
-    .setMaxValues(1);
-  if (draft.proofChannelId) proofSelect.setDefaultChannels(draft.proofChannelId);
+  const chainsSelect = new StringSelectMenuBuilder()
+    .setCustomId(buildId(Actions.RaffleSetChains, nonce))
+    .setPlaceholder("Network(s) to collect wallets for")
+    .setMinValues(1)
+    .setMaxValues(ALL_CHAINS.length)
+    .addOptions(
+      ALL_CHAINS.map((c) => ({
+        label: chainLabel(c),
+        value: c,
+        default: draft.walletChains.includes(c),
+      })),
+    );
 
   const roleSelect = new RoleSelectMenuBuilder()
     .setCustomId(buildId(Actions.RaffleSetRoles, nonce))
@@ -519,7 +539,7 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
     components: [
       new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(postSelect),
       new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(announceSelect),
-      new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(proofSelect),
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(chainsSelect),
       new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(roleSelect),
       buttons,
     ],
@@ -527,7 +547,11 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
 }
 
 function expired(
-  interaction: ChannelSelectMenuInteraction | RoleSelectMenuInteraction | ButtonInteraction,
+  interaction:
+    | ChannelSelectMenuInteraction
+    | RoleSelectMenuInteraction
+    | StringSelectMenuInteraction
+    | ButtonInteraction,
 ) {
   return interaction.update({
     content: "This setup expired. Run `/raffle create` again.",
