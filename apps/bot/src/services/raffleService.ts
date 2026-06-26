@@ -34,6 +34,7 @@ export interface CreateRaffleInput {
   requirements?: EntryRequirements | null;
   collectWallets: boolean;
   walletChains: WalletChain[];
+  hideEntries: boolean;
   roles: { roleId: string; roleName: string }[];
 }
 
@@ -79,6 +80,7 @@ export async function createRaffle(
         : Prisma.JsonNull,
       collectWallets: input.collectWallets,
       walletChains: input.walletChains,
+      hideEntries: input.hideEntries,
       eligibleRoles: { create: input.roles },
     },
     include: raffleInclude,

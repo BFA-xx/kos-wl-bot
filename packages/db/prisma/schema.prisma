@@ -143,6 +143,9 @@ model Raffle {
 
   entryCount Int @default(0)
 
+  /// When true, the live embed hides the entry count / entrant list.
+  hideEntries Boolean @default(false)
+
   /// Hex commitment of the seed used for the verifiable draw.
   drawSeed   String?
   drawSeedHash String?

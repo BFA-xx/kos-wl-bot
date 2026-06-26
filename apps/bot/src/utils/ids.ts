@@ -38,6 +38,7 @@ export const Actions = {
   RaffleSetProof: "rf_proof",
   RaffleSetRoles: "rf_roles",
   RaffleToggleMatch: "rf_match",
+  RaffleToggleHide: "rf_hide",
   RaffleMoreOptions: "rf_more",
   SubmitRaffleOptions: "rf_opts",
   RafflePublish: "rf_pub",

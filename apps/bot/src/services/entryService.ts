@@ -1,12 +1,12 @@
 import { type GuildMember } from "discord.js";
-import { prisma, LogCategory, Prisma, RaffleStatus } from "@kos/db";
+import { prisma, LogCategory, Prisma, RaffleStatus, type WalletChain } from "@kos/db";
 import { evaluateEligibility } from "./eligibilityService.js";
 import { upsertUser } from "./userService.js";
 import { audit } from "./auditService.js";
 import { logger } from "../logger.js";
 
 export type EnterOutcome =
-  | { status: "entered"; entryCount: number }
+  | { status: "entered"; entryCount: number; missingWalletChains: WalletChain[] }
   | { status: "duplicate" }
   | { status: "ineligible"; reasons: string[] }
   | { status: "closed" }
@@ -81,7 +81,18 @@ export async function enterRaffle(
       metadata: eligibility.flags.length ? { flags: eligibility.flags } : undefined,
     });
 
-    return { status: "entered", entryCount };
+    // Which of the raffle's wallet chains does this user still need to register?
+    let missingWalletChains: WalletChain[] = [];
+    if (raffle.collectWallets && raffle.walletChains.length > 0) {
+      const have = await prisma.walletProfile.findMany({
+        where: { userId: member.id, chain: { in: raffle.walletChains } },
+        select: { chain: true },
+      });
+      const haveSet = new Set(have.map((p) => p.chain));
+      missingWalletChains = raffle.walletChains.filter((c) => !haveSet.has(c));
+    }
+
+    return { status: "entered", entryCount, missingWalletChains };
   } catch (err) {
     // Unique violation = already entered (race-safe duplicate guard).
     if (

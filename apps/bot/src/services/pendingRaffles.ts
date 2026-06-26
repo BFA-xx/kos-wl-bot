@@ -25,6 +25,7 @@ export interface PendingRaffle {
   // Defaults applied at publish:
   walletChains: WalletChain[];
   collectWallets: boolean;
+  hideEntries: boolean;
   requirements: EntryRequirements | null;
   bannerUrl: string | null;
   externalUrl: string | null;
@@ -57,3 +58,21 @@ const sweep = setInterval(() => {
   for (const [k, v] of store) if (v.createdAt < cutoff) store.delete(k);
 }, 60_000);
 sweep.unref();
+
+/**
+ * Carry an uploaded banner image (from the /raffle create attachment option)
+ * across to the modal submit. Keyed by user id since the two steps happen
+ * back-to-back for the same person.
+ */
+const bannerStash = new Map<string, { url: string; ts: number }>();
+
+export function stashBanner(userId: string, url: string): void {
+  bannerStash.set(userId, { url, ts: Date.now() });
+}
+
+export function takeBanner(userId: string): string | null {
+  const entry = bannerStash.get(userId);
+  if (!entry) return null;
+  bannerStash.delete(userId);
+  return Date.now() - entry.ts > TTL_MS ? null : entry.url;
+}

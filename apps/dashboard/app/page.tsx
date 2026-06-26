@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import Link from "next/link";
+import { useState } from "react";
 import { Shell } from "@/components/Shell";
 import { StatCard, StatusBadge, PageTitle, Empty } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
@@ -9,7 +10,15 @@ import { fmtDate } from "@/lib/format";
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface Overview {
-  stats: { totalRaffles: number; liveRaffles: number; totalWinners: number; totalEntries: number };
+  range: string;
+  stats: {
+    totalRaffles: number;
+    liveRaffles: number;
+    rangeRaffles: number;
+    rangeEntries: number;
+    rangeWinners: number;
+    uniqueParticipants: number;
+  };
   live: {
     id: number;
     projectName: string;
@@ -21,24 +30,81 @@ interface Overview {
   }[];
 }
 
+const RANGES = [
+  { key: "7d", label: "7 days" },
+  { key: "1m", label: "1 month" },
+  { key: "3m", label: "3 months" },
+  { key: "all", label: "All time" },
+];
+
 export default function OverviewPage() {
-  // Live updates without refresh: poll every 5s.
-  const { data } = useSWR<Overview>("/api/overview", fetcher, { refreshInterval: 5000 });
+  const [range, setRange] = useState("7d");
+  const [copied, setCopied] = useState(false);
+  const { data } = useSWR<Overview>(`/api/overview?range=${range}`, fetcher, {
+    refreshInterval: 5000,
+  });
   const stats = data?.stats;
+  const label = RANGES.find((r) => r.key === range)?.label ?? range;
+
+  async function copyStats() {
+    if (!stats) return;
+    const text = [
+      `KOS Raffle Stats — last ${label}`,
+      `Raffles created: ${stats.rangeRaffles}`,
+      `Entries: ${stats.rangeEntries}`,
+      `Unique participants: ${stats.uniqueParticipants}`,
+      `Winners drawn: ${stats.rangeWinners}`,
+      `Live now: ${stats.liveRaffles}`,
+      `Total raffles all-time: ${stats.totalRaffles}`,
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  }
 
   return (
     <Shell>
-      <PageTitle title="Overview" subtitle="Live raffle activity across all communities." />
+      <PageTitle
+        title="Overview"
+        subtitle="Live raffle activity across all communities."
+        action={
+          <button className="kos-btn" onClick={copyStats}>
+            {copied ? "Copied ✓" : "Copy stats"}
+          </button>
+        }
+      />
+
+      <div className="mb-4 flex flex-wrap gap-1">
+        {RANGES.map((r) => (
+          <button
+            key={r.key}
+            onClick={() => setRange(r.key)}
+            className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+              range === r.key
+                ? "border-kos-silver text-kos-white"
+                : "border-kos-border text-kos-grey hover:text-kos-white"
+            }`}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
 
       <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard label="Total Raffles" value={stats?.totalRaffles ?? "—"} />
+        <StatCard label={`Raffles (${label})`} value={stats?.rangeRaffles ?? "—"} />
+        <StatCard label={`Entries (${label})`} value={stats?.rangeEntries ?? "—"} />
+        <StatCard label="Unique Participants" value={stats?.uniqueParticipants ?? "—"} />
+        <StatCard label={`Winners (${label})`} value={stats?.rangeWinners ?? "—"} />
         <StatCard label="Live Now" value={stats?.liveRaffles ?? "—"} />
-        <StatCard label="Total Entries" value={stats?.totalEntries ?? "—"} />
-        <StatCard label="Total Winners" value={stats?.totalWinners ?? "—"} />
+        <StatCard label="Total Raffles" value={stats?.totalRaffles ?? "—"} />
       </div>
 
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-kos-grey">
-        Live & Upcoming
+        Live &amp; Upcoming
       </h2>
       {!data ? (
         <Empty>Loading…</Empty>

@@ -49,6 +49,7 @@ export async function handleButton(interaction: ButtonInteraction): Promise<unkn
     case Actions.OpenWalletProfile:
       return handleOpenWalletProfile(interaction);
     case Actions.RaffleToggleMatch:
+    case Actions.RaffleToggleHide:
     case Actions.RaffleMoreOptions:
     case Actions.RafflePublish:
     case Actions.RaffleCancel:
@@ -77,9 +78,17 @@ async function handleEnter(interaction: ButtonInteraction, raffleId: number) {
 
   const result = await enterRaffle(raffleId, member);
   switch (result.status) {
-    case "entered":
+    case "entered": {
       scheduleRefresh(interaction, raffleId);
-      return interaction.editReply(`${KOS.emoji.check} Successfully entered the raffle.`);
+      let msg = `${KOS.emoji.check} Successfully entered the raffle.`;
+      if (result.missingWalletChains.length > 0) {
+        const chains = result.missingWalletChains.map(chainLabel).join(", ");
+        msg +=
+          `\n\n⚠️ You haven't added a **${chains}** wallet yet. If you win, we'll need it — ` +
+          `run **/wallet register** to add it now (you can still win without it, but add it to be safe).`;
+      }
+      return interaction.editReply(msg);
+    }
     case "duplicate":
       return interaction.editReply("You are already participating.");
     case "ineligible":

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { Shell } from "@/components/Shell";
 import { PageTitle, StatCard } from "@/components/ui";
+import { WalletsManager } from "@/components/WalletsManager";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,23 +32,7 @@ export default async function WalletsPage() {
         <StatCard label="Chains In Use" value={byChain.length} />
       </div>
 
-      <div className="kos-card p-4">
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-kos-grey">
-          By Chain
-        </h3>
-        {byChain.length === 0 ? (
-          <p className="text-sm text-kos-grey">No wallets registered yet.</p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {byChain.map((c) => (
-              <li key={c.chain} className="flex justify-between">
-                <span>{c.chain}</span>
-                <span className="text-kos-grey">{c._count._all}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      <WalletsManager />
     </Shell>
   );
 }

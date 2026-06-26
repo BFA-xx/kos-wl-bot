@@ -26,6 +26,7 @@ import {
 } from "../services/raffleService.js";
 import { closeAndDraw, rerollWinners } from "../services/winnerService.js";
 import { getWinnerWallets } from "../services/walletService.js";
+import { stashBanner } from "../services/pendingRaffles.js";
 import { buildId, Actions } from "../utils/ids.js";
 import { participantsCsv, winnersCsv } from "../proof/csv.js";
 
@@ -38,7 +39,12 @@ export const raffleCommand: Command = {
     .setDMPermission(false)
     // ---- create (opens a popup form, then a setup panel) ----
     .addSubcommand((sub) =>
-      sub.setName("create").setDescription("Create a whitelist raffle (opens a setup form)"),
+      sub
+        .setName("create")
+        .setDescription("Create a whitelist raffle (opens a setup form)")
+        .addAttachmentOption((o) =>
+          o.setName("banner").setDescription("Optional banner image (drag & drop)"),
+        ),
     )
     // ---- repost ----
     .addSubcommand((sub) =>
@@ -179,6 +185,11 @@ export const raffleCommand: Command = {
 };
 
 async function handleCreate(interaction: ChatInputCommandInteraction) {
+  // If a banner image was attached to the command, stash its URL so the modal
+  // submit can attach it to the draft (modals can't hold file uploads).
+  const banner = interaction.options.getAttachment("banner");
+  if (banner?.url) stashBanner(interaction.user.id, banner.url);
+
   // Step 1: open the popup form. Channels/roles are chosen on the panel that
   // follows the modal (see raffleWizard).
   const modal = new ModalBuilder()

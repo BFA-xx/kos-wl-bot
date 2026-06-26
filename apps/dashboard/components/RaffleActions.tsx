@@ -47,11 +47,17 @@ export function RaffleActions({
       </h3>
 
       <div className="flex flex-wrap items-center gap-2">
+        <a className="kos-btn" href={`/api/raffles/${raffleId}/export-xlsx?mode=addresses`}>
+          Addresses (Excel)
+        </a>
+        <a className="kos-btn" href={`/api/raffles/${raffleId}/export-xlsx?mode=full`}>
+          Winners + Wallets (Excel)
+        </a>
         <a className="kos-btn" href={`/api/raffles/${raffleId}/export?type=winners`}>
-          Export Winners CSV
+          Winners CSV
         </a>
         <a className="kos-btn" href={`/api/raffles/${raffleId}/export?type=participants`}>
-          Export Participants CSV
+          Participants CSV
         </a>
         {status !== "ENDED" && status !== "CANCELLED" ? (
           <button className="kos-btn" onClick={endNow} disabled={busy !== null}>

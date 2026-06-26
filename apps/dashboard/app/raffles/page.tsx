@@ -19,8 +19,8 @@ export default async function RafflesPage() {
       {raffles.length === 0 ? (
         <Empty>No raffles yet. Create one with /raffle create in Discord.</Empty>
       ) : (
-        <div className="kos-card overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="kos-card overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
             <thead className="border-b border-kos-line text-left text-xs uppercase tracking-wide text-kos-grey">
               <tr>
                 <th className="px-4 py-3">ID</th>

@@ -17,7 +17,7 @@ import {
 } from "discord.js";
 import { prisma, RoleMatchMode, WalletChain } from "@kos/db";
 import { buildId, parseId, Actions } from "../utils/ids.js";
-import { stashPending, getPending, takePending, type PendingRaffle } from "../services/pendingRaffles.js";
+import { stashPending, getPending, takePending, takeBanner, type PendingRaffle } from "../services/pendingRaffles.js";
 import { createRaffle, publishRaffleMessage } from "../services/raffleService.js";
 import { resolveWhen, resolveTime, discordRelative } from "../utils/time.js";
 import type { EntryRequirements } from "../types.js";
@@ -82,8 +82,9 @@ export async function handleRaffleCreateModal(interaction: ModalSubmitInteractio
     roleMatchMode: RoleMatchMode.ANY,
     walletChains: [WalletChain.ETHEREUM],
     collectWallets: true,
+    hideEntries: false,
     requirements: null,
-    bannerUrl: null,
+    bannerUrl: takeBanner(interaction.user.id),
     externalUrl: null,
   });
 
@@ -141,6 +142,11 @@ export async function handleRaffleWizardButton(interaction: ButtonInteraction) {
   if (parsed.action === Actions.RaffleToggleMatch) {
     draft.roleMatchMode =
       draft.roleMatchMode === RoleMatchMode.ALL ? RoleMatchMode.ANY : RoleMatchMode.ALL;
+    return interaction.update(buildPanel(nonce, draft));
+  }
+
+  if (parsed.action === Actions.RaffleToggleHide) {
+    draft.hideEntries = !draft.hideEntries;
     return interaction.update(buildPanel(nonce, draft));
   }
 
@@ -315,6 +321,7 @@ async function publish(interaction: ButtonInteraction, nonce: string, draft: Pen
       requirements: draft.requirements,
       collectWallets: draft.collectWallets,
       walletChains: draft.walletChains,
+      hideEntries: draft.hideEntries,
       roles: draft.roles,
     });
 
@@ -410,8 +417,12 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
       .setLabel(draft.roleMatchMode === RoleMatchMode.ALL ? "Match: ALL" : "Match: ANY")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
+      .setCustomId(buildId(Actions.RaffleToggleHide, nonce))
+      .setLabel(draft.hideEntries ? "Entries: Hidden" : "Entries: Shown")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
       .setCustomId(buildId(Actions.RaffleMoreOptions, nonce))
-      .setLabel("Banner / Link / Tasks")
+      .setLabel("More options")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(buildId(Actions.RafflePublish, nonce))

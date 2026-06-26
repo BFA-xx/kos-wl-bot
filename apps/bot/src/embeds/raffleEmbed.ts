@@ -20,6 +20,7 @@ export interface RaffleEmbedData {
   startAt: Date;
   endAt: Date;
   entryCount: number;
+  hideEntries: boolean;
   bannerUrl: string | null;
   externalUrl: string | null;
   requirements: unknown;
@@ -51,25 +52,33 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
 
   const embed = new EmbedBuilder()
     .setColor(statusColor(raffle.status))
-    .setAuthor({ name: raffle.projectName })
-    .setTitle(`${KOS.emoji.diamond} ${raffle.title}`)
+    // Project name is the headline — uppercased so it stands out and reads
+    // consistently regardless of how it was typed.
+    .setTitle(raffle.projectName.toUpperCase())
     .setDescription(
       [
+        `## ${raffle.title}`,
+        "",
         `**Status** — ${statusBadge(raffle.status)}`,
         countdown,
       ].join("\n"),
     )
-    .addFields(
-      {
-        name: `${KOS.emoji.spot} WL Spots`,
-        value: `**${raffle.spots}**`,
-        inline: true,
-      },
-      {
-        name: "Entries",
-        value: `**${raffle.entryCount}**`,
-        inline: true,
-      },
+    .setFooter({
+      text: `${KOS.footer} · Raffle #${raffle.id}`,
+      ...(KOS.logoUrl ? { iconURL: KOS.logoUrl } : {}),
+    })
+    .setTimestamp(new Date());
+
+  if (raffle.externalUrl) embed.setURL(raffle.externalUrl);
+
+  embed.addFields({
+    name: `${KOS.emoji.spot} WL Spots`,
+    value: `**${raffle.spots}**`,
+    inline: true,
+  });
+  if (!raffle.hideEntries) {
+    embed.addFields(
+      { name: "Entries", value: `**${raffle.entryCount}**`, inline: true },
       {
         name: "Odds",
         value:
@@ -78,27 +87,13 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
             : "—",
         inline: true,
       },
-      {
-        name: `Eligible Roles${matchHint}`,
-        value: rolesText,
-        inline: false,
-      },
-      {
-        name: "Start",
-        value: discordFull(raffle.startAt),
-        inline: true,
-      },
-      {
-        name: "End",
-        value: discordFull(raffle.endAt),
-        inline: true,
-      },
-    )
-    .setFooter({
-      text: `${KOS.footer} · Raffle #${raffle.id}`,
-      ...(KOS.logoUrl ? { iconURL: KOS.logoUrl } : {}),
-    })
-    .setTimestamp(new Date());
+    );
+  }
+  embed.addFields(
+    { name: `Eligible Roles${matchHint}`, value: rolesText, inline: false },
+    { name: "Start", value: discordFull(raffle.startAt), inline: true },
+    { name: "End", value: discordFull(raffle.endAt), inline: true },
+  );
 
   const tasks = parseRequirements(raffle.requirements).tasks ?? [];
   if (tasks.length > 0) {
