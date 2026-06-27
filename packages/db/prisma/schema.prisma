@@ -147,6 +147,11 @@ model Raffle {
   /// When true, the live embed hides the entry count / entrant list.
   hideEntries Boolean @default(false)
 
+  /// Who to ping when the raffle goes live: "none" | "here" | "everyone".
+  startPing   String  @default("everyone")
+  /// Guards against double-pinging.
+  startPinged Boolean @default(false)
+
   /// Hex commitment of the seed used for the verifiable draw.
   drawSeed   String?
   drawSeedHash String?

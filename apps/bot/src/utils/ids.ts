@@ -40,6 +40,7 @@ export const Actions = {
   RaffleSetChains: "rf_chains",
   RaffleToggleMatch: "rf_match",
   RaffleToggleHide: "rf_hide",
+  RaffleCyclePing: "rf_ping",
   RaffleMoreOptions: "rf_more",
   SubmitRaffleOptions: "rf_opts",
   RafflePublish: "rf_pub",

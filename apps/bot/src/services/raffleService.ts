@@ -36,6 +36,7 @@ export interface CreateRaffleInput {
   collectWallets: boolean;
   walletChains: WalletChain[];
   hideEntries: boolean;
+  startPing: string;
   roles: { roleId: string; roleName: string }[];
 }
 
@@ -83,6 +84,7 @@ export async function createRaffle(
       collectWallets: input.collectWallets,
       walletChains: input.walletChains,
       hideEntries: input.hideEntries,
+      startPing: input.startPing,
       eligibleRoles: { create: input.roles },
     },
     include: raffleInclude,
@@ -175,6 +177,34 @@ export async function refreshRaffleMessage(
       components: buildRaffleComponents(raffle),
     })
     .catch((err) => logger.warn({ err, raffleId }, "refresh edit failed"));
+}
+
+/**
+ * Ping the channel when a raffle goes live (@everyone / @here), once.
+ * `startPing` is "none" | "here" | "everyone". Requires the bot to have the
+ * "Mention Everyone" permission for @everyone/@here to actually notify.
+ */
+export async function pingRaffleStart(client: Client, raffleId: number): Promise<void> {
+  const raffle = await getRaffle(raffleId);
+  if (!raffle || raffle.startPinged) return;
+
+  // Mark pinged first so a retry/race never double-pings.
+  await prisma.raffle.update({ where: { id: raffleId }, data: { startPinged: true } });
+
+  if (raffle.startPing === "none" || !raffle.channelId) return;
+  const channel = await fetchTextChannel(client, raffle.channelId);
+  if (!channel) return;
+
+  const mention = raffle.startPing === "here" ? "@here" : "@everyone";
+  const link = raffle.messageId
+    ? `\nhttps://discord.com/channels/${raffle.guildId}/${channel.id}/${raffle.messageId}`
+    : "";
+  await channel
+    .send({
+      content: `${mention} 🎉 **${raffle.projectName}** raffle is now **LIVE** — enter now!${link}`,
+      allowedMentions: { parse: ["everyone"] },
+    })
+    .catch((err) => logger.warn({ err, raffleId }, "start ping failed"));
 }
 
 export async function editRaffle(

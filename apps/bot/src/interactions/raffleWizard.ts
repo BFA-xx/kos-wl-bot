@@ -24,6 +24,7 @@ import { stashPending, getPending, takePending, takeBanner, type PendingRaffle }
 import {
   createRaffle,
   publishRaffleMessage,
+  pingRaffleStart,
   fetchTextChannel,
   missingPostPermissions,
 } from "../services/raffleService.js";
@@ -92,6 +93,7 @@ export async function handleRaffleCreateModal(interaction: ModalSubmitInteractio
     walletChains: [WalletChain.ETHEREUM],
     collectWallets: true,
     hideEntries: false,
+    startPing: "everyone",
     requirements: null,
     bannerUrl: takeBanner(interaction.user.id),
     externalUrl: null,
@@ -163,6 +165,12 @@ export async function handleRaffleWizardButton(interaction: ButtonInteraction) {
 
   if (parsed.action === Actions.RaffleToggleHide) {
     draft.hideEntries = !draft.hideEntries;
+    return interaction.update(buildPanel(nonce, draft));
+  }
+
+  if (parsed.action === Actions.RaffleCyclePing) {
+    draft.startPing =
+      draft.startPing === "everyone" ? "here" : draft.startPing === "here" ? "none" : "everyone";
     return interaction.update(buildPanel(nonce, draft));
   }
 
@@ -305,6 +313,12 @@ function row(input: TextInputBuilder): ActionRowBuilder<TextInputBuilder> {
   return new ActionRowBuilder<TextInputBuilder>().addComponents(input);
 }
 
+function pingLabel(startPing: string): string {
+  if (startPing === "here") return "Ping: @here";
+  if (startPing === "none") return "Ping: off";
+  return "Ping: @everyone";
+}
+
 function isHttpUrl(s: string): boolean {
   return /^https?:\/\//iu.test(s);
 }
@@ -422,10 +436,15 @@ async function publish(interaction: ButtonInteraction, nonce: string, draft: Pen
       collectWallets: draft.collectWallets,
       walletChains: draft.walletChains,
       hideEntries: draft.hideEntries,
+      startPing: draft.startPing,
       roles: draft.roles,
     });
 
     const result = await publishRaffleMessage(interaction.client, raffle.id);
+    // If it started immediately (created LIVE), fire the @everyone/@here ping.
+    if (result.ok && raffle.status === "LIVE") {
+      await pingRaffleStart(interaction.client, raffle.id).catch(() => undefined);
+    }
 
     const header = result.ok
       ? `${KOS.emoji.check} **Raffle #${raffle.id}** is live in <#${draft.postChannelId}>.`
@@ -527,8 +546,8 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
       .setLabel(draft.roleMatchMode === RoleMatchMode.ALL ? "Match: ALL" : "Match: ANY")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(buildId(Actions.RaffleToggleHide, nonce))
-      .setLabel(draft.hideEntries ? "Entries: Hidden" : "Entries: Shown")
+      .setCustomId(buildId(Actions.RaffleCyclePing, nonce))
+      .setLabel(pingLabel(draft.startPing))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(buildId(Actions.RaffleMoreOptions, nonce))

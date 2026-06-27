@@ -13,15 +13,15 @@ export function fmtDate(d: Date | string | null): string {
 export function statusClasses(status: string): string {
   switch (status) {
     case "LIVE":
-      return "border-kos-silver/60 text-kos-white";
+      return "border-emerald-400/30 text-emerald-300/90";
     case "UPCOMING":
-      return "border-kos-grey/50 text-kos-silver";
+      return "border-white/20 text-white/80";
     case "ENDED":
-      return "border-kos-line text-kos-grey";
+      return "border-white/10 text-white/40";
     case "CANCELLED":
-      return "border-kos-line text-kos-grey line-through";
+      return "border-white/10 text-white/30 line-through";
     default:
-      return "border-kos-line text-kos-grey";
+      return "border-white/10 text-white/40";
   }
 }
 

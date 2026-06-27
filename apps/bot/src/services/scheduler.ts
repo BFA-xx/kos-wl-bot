@@ -2,7 +2,7 @@ import { type Client } from "discord.js";
 import { prisma, LogCategory, RaffleStatus } from "@kos/db";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
-import { refreshRaffleMessage } from "./raffleService.js";
+import { refreshRaffleMessage, pingRaffleStart } from "./raffleService.js";
 import { closeAndDraw } from "./winnerService.js";
 import { audit } from "./auditService.js";
 
@@ -63,6 +63,7 @@ export class Scheduler {
           message: `Raffle #${r.id} is now LIVE`,
         });
         await refreshRaffleMessage(this.client, r.id).catch(() => undefined);
+        await pingRaffleStart(this.client, r.id).catch(() => undefined);
         logger.info({ raffleId: r.id }, "raffle opened");
       }
 

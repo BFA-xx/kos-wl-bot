@@ -4,55 +4,110 @@ import { prisma } from "@/lib/db";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function sinceFor(range: string): Date | null {
-  const now = Date.now();
+const DAY = 86_400_000;
+
+function rangeMsFor(range: string): number | null {
   switch (range) {
     case "7d":
-      return new Date(now - 7 * 86400000);
+      return 7 * DAY;
     case "1m":
-      return new Date(now - 30 * 86400000);
+      return 30 * DAY;
     case "3m":
-      return new Date(now - 90 * 86400000);
-    case "all":
+      return 90 * DAY;
     default:
-      return null;
+      return null; // all-time
   }
 }
 
+// Chart buckets per range: [span(ms), bucketCount]
+function chartConfig(range: string): { span: number; buckets: number } {
+  switch (range) {
+    case "7d":
+      return { span: 7 * DAY, buckets: 7 };
+    case "1m":
+      return { span: 30 * DAY, buckets: 6 };
+    case "3m":
+      return { span: 90 * DAY, buckets: 6 };
+    default:
+      return { span: 56 * DAY, buckets: 8 };
+  }
+}
+
+function pct(cur: number, prev: number): number {
+  if (prev <= 0) return cur > 0 ? 100 : 0;
+  return Math.round(((cur - prev) / prev) * 100);
+}
+
+function label(date: Date, range: string): string {
+  if (range === "7d") return date.toLocaleDateString(undefined, { weekday: "short" });
+  return date.toLocaleDateString(undefined, { month: "numeric", day: "numeric" });
+}
+
 export async function GET(req: NextRequest) {
-  const range = req.nextUrl.searchParams.get("range") ?? "all";
-  const since = sinceFor(range);
-  const dateFilter = since ? { gte: since } : undefined;
+  const range = req.nextUrl.searchParams.get("range") ?? "7d";
+  const now = Date.now();
+  const rangeMs = rangeMsFor(range);
+  const since = rangeMs ? new Date(now - rangeMs) : null;
+  const prevSince = rangeMs ? new Date(now - 2 * rangeMs) : null;
+
+  const dateGte = (d: Date | null) => (d ? { gte: d } : undefined);
+  const between = (a: Date, b: Date) => ({ gte: a, lt: b });
 
   const [
     totalRaffles,
     liveRaffles,
     rangeRaffles,
+    prevRaffles,
     rangeEntries,
+    prevEntries,
     rangeWinners,
-    uniqueParticipants,
+    prevWinners,
+    uniqueRows,
     live,
+    chartRows,
   ] = await Promise.all([
     prisma.raffle.count(),
     prisma.raffle.count({ where: { status: "LIVE" } }),
-    prisma.raffle.count({ where: dateFilter ? { createdAt: dateFilter } : {} }),
-    prisma.participant.count({ where: dateFilter ? { enteredAt: dateFilter } : {} }),
-    prisma.winner.count({
-      where: { replaced: false, ...(dateFilter ? { selectedAt: dateFilter } : {}) },
+    prisma.raffle.count({ where: since ? { createdAt: { gte: since } } : {} }),
+    prisma.raffle.count({ where: since && prevSince ? { createdAt: between(prevSince, since) } : { id: -1 } }),
+    prisma.participant.count({ where: since ? { enteredAt: { gte: since } } : {} }),
+    prisma.participant.count({ where: since && prevSince ? { enteredAt: between(prevSince, since) } : { id: -1 } }),
+    prisma.winner.count({ where: { replaced: false, ...(since ? { selectedAt: { gte: since } } : {}) } }),
+    prisma.winner.count({ where: since && prevSince ? { replaced: false, selectedAt: between(prevSince, since) } : { id: -1 } }),
+    prisma.participant.findMany({
+      where: dateGte(since) ? { enteredAt: dateGte(since) } : {},
+      select: { userId: true },
+      distinct: ["userId"],
     }),
-    prisma.participant
-      .findMany({
-        where: dateFilter ? { enteredAt: dateFilter } : {},
-        select: { userId: true },
-        distinct: ["userId"],
-      })
-      .then((r) => r.length),
     prisma.raffle.findMany({
       where: { status: { in: ["LIVE", "UPCOMING"] } },
       orderBy: { endAt: "asc" },
-      take: 10,
+      take: 8,
     }),
+    // timestamps for the chart series
+    (() => {
+      const { span } = chartConfig(range);
+      return prisma.participant.findMany({
+        where: { enteredAt: { gte: new Date(now - span) } },
+        select: { enteredAt: true },
+        take: 50000,
+      });
+    })(),
   ]);
+
+  // Build the chart series.
+  const { span, buckets } = chartConfig(range);
+  const start = now - span;
+  const size = span / buckets;
+  const series = Array.from({ length: buckets }, (_, i) => {
+    const from = start + i * size;
+    return { from, to: from + size, value: 0, label: label(new Date(from + size / 2), range) };
+  });
+  for (const row of chartRows) {
+    const t = row.enteredAt.getTime();
+    const idx = Math.min(buckets - 1, Math.max(0, Math.floor((t - start) / size)));
+    if (series[idx]) series[idx]!.value++;
+  }
 
   return NextResponse.json({
     range,
@@ -62,8 +117,16 @@ export async function GET(req: NextRequest) {
       rangeRaffles,
       rangeEntries,
       rangeWinners,
-      uniqueParticipants,
+      uniqueParticipants: uniqueRows.length,
+      trends: rangeMs
+        ? {
+            raffles: pct(rangeRaffles, prevRaffles),
+            entries: pct(rangeEntries, prevEntries),
+            winners: pct(rangeWinners, prevWinners),
+          }
+        : null,
     },
+    series: series.map((s) => ({ label: s.label, value: s.value })),
     live: live.map((r) => ({
       id: r.id,
       projectName: r.projectName,
@@ -71,7 +134,6 @@ export async function GET(req: NextRequest) {
       status: r.status,
       spots: r.spots,
       entryCount: r.entryCount,
-      startAt: r.startAt,
       endAt: r.endAt,
     })),
   });

@@ -1,11 +1,45 @@
 import type { ReactNode } from "react";
 import { statusClasses } from "@/lib/format";
+import { IconArrowUp, IconArrowDown } from "./icons";
 
-export function StatCard({ label, value }: { label: string; value: ReactNode }) {
+export function StatCard({
+  label,
+  value,
+  trend,
+  hint,
+  accent,
+}: {
+  label: string;
+  value: ReactNode;
+  trend?: number | null;
+  hint?: string;
+  accent?: boolean;
+}) {
   return (
-    <div className="kos-card p-4">
-      <div className="text-xs uppercase tracking-wide text-kos-grey">{label}</div>
-      <div className="mt-2 text-2xl font-semibold">{value}</div>
+    <div
+      className={`kos-card kos-card-hover p-4 sm:p-5 ${
+        accent ? "bg-white text-black shadow-[0_10px_40px_-12px_rgba(255,255,255,0.25)]" : ""
+      }`}
+    >
+      <div className={`text-xs font-medium uppercase tracking-wide ${accent ? "text-black/55" : "text-white/45"}`}>
+        {label}
+      </div>
+      <div className="mt-2 flex items-end justify-between gap-2">
+        <div className="text-2xl font-semibold tracking-tight sm:text-3xl">{value}</div>
+        {typeof trend === "number" ? (
+          <span
+            className={`mb-1 inline-flex items-center gap-0.5 text-xs font-medium ${
+              accent ? "text-black/60" : trend >= 0 ? "text-white/80" : "text-white/40"
+            }`}
+          >
+            {trend >= 0 ? <IconArrowUp width={12} height={12} /> : <IconArrowDown width={12} height={12} />}
+            {Math.abs(trend)}%
+          </span>
+        ) : null}
+      </div>
+      {hint ? (
+        <div className={`mt-1 text-[11px] ${accent ? "text-black/45" : "text-white/35"}`}>{hint}</div>
+      ) : null}
     </div>
   );
 }
@@ -24,18 +58,55 @@ export function PageTitle({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex items-end justify-between gap-4">
+    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-        {subtitle ? <p className="mt-1 text-sm text-kos-grey">{subtitle}</p> : null}
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        {subtitle ? <p className="mt-1 text-sm text-white/45">{subtitle}</p> : null}
       </div>
-      {action}
+      {action ? <div className="flex shrink-0 flex-wrap gap-2">{action}</div> : null}
+    </div>
+  );
+}
+
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: T; label: string }[];
+  value: T;
+  onChange: (key: T) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-full border border-white/10 bg-white/[0.03] p-1">
+      {options.map((o) => (
+        <button
+          key={o.key}
+          onClick={() => onChange(o.key)}
+          className={`kos-seg ${value === o.key ? "kos-seg-active" : ""}`}
+        >
+          {o.label}
+        </button>
+      ))}
     </div>
   );
 }
 
 export function Empty({ children }: { children: ReactNode }) {
   return (
-    <div className="kos-card p-10 text-center text-sm text-kos-grey">{children}</div>
+    <div className="kos-card p-10 text-center text-sm text-white/40">{children}</div>
+  );
+}
+
+export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`kos-card p-4 sm:p-5 ${className}`}>{children}</div>;
+}
+
+export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="mb-3 flex items-center justify-between">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-white/45">{children}</h2>
+      {action}
+    </div>
   );
 }
