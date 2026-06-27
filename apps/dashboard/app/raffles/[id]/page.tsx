@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { Shell } from "@/components/Shell";
 import { PageTitle, StatusBadge, StatCard } from "@/components/ui";
 import { RaffleActions } from "@/components/RaffleActions";
+import { ParticipantsLive } from "@/components/ParticipantsLive";
 import { fmtDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -111,6 +112,10 @@ export default async function RaffleDetailPage({
             </ol>
           )}
         </div>
+      </div>
+
+      <div className="mt-4">
+        <ParticipantsLive raffleId={raffle.id} />
       </div>
 
       <div className="mt-4">

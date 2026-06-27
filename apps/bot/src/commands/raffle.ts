@@ -68,7 +68,10 @@ export const raffleCommand: Command = {
         .addStringOption((o) => o.setName("start").setDescription("New start (now, 2026-06-25 17:00, tomorrow 5pm)"))
         .addStringOption((o) => o.setName("end").setDescription("New end (24h, 2d, or 2026-06-26 17:00)"))
         .addStringOption((o) => o.setName("link").setDescription("New external link"))
-        .addAttachmentOption((o) => o.setName("banner").setDescription("New banner image")),
+        .addAttachmentOption((o) => o.setName("banner").setDescription("New banner image"))
+        .addBooleanOption((o) =>
+          o.setName("hide_entries").setDescription("Hide (true) or show (false) the entry count on the post"),
+        ),
     )
     // ---- delete ----
     .addSubcommand((sub) =>
@@ -283,12 +286,14 @@ async function handleEdit(interaction: ChatInputCommandInteraction) {
   const link = o.getString("link");
   const banner = o.getAttachment("banner");
 
+  const hideEntries = o.getBoolean("hide_entries");
   if (project) data.projectName = project;
   if (title) data.title = title;
   if (description !== null) data.description = description || null;
   if (spots) data.spots = spots;
   if (link !== null) data.externalUrl = link || null;
   if (banner?.url) data.bannerUrl = banner.url;
+  if (hideEntries !== null) data.hideEntries = hideEntries;
 
   // Time edits: recompute start/end and the live status so the schedule stays
   // correct (e.g. moving start to the future flips a LIVE raffle to UPCOMING).
