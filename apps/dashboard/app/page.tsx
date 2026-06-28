@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Shell } from "@/components/Shell";
 import { StatCard, StatusBadge, PageTitle, Segmented, Card, SectionTitle, Empty } from "@/components/ui";
-import { BarChart } from "@/components/BarChart";
+import { AreaChart } from "@/components/AreaChart";
 import { fmtDate } from "@/lib/format";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -94,7 +94,7 @@ export default function OverviewPage() {
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <SectionTitle>Entry Activity</SectionTitle>
-          <BarChart data={data?.series ?? []} />
+          <AreaChart data={data?.series ?? []} />
         </Card>
 
         <Card>
