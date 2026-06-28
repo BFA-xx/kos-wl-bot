@@ -6,16 +6,20 @@ export const metadata: Metadata = {
   description: "Premium NFT whitelist raffle management.",
 };
 
+// Set the theme class before paint to avoid a flash. Defaults to dark (KOS).
+const themeInit = `(function(){try{var t=localStorage.getItem('kos-theme');if(t==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}}catch(e){document.documentElement.classList.add('dark')}})();`;
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-kos-black text-kos-white antialiased">
-        {children}
-      </body>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+      </head>
+      <body className="min-h-screen antialiased">{children}</body>
     </html>
   );
 }

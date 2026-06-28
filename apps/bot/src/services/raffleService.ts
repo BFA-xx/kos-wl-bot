@@ -20,6 +20,8 @@ import type { EntryRequirements } from "../types.js";
 export interface CreateRaffleInput {
   guildId: string;
   createdById: string;
+  createdByName: string;
+  createdByAvatar: string | null;
   projectName: string;
   title: string;
   description: string | null;
@@ -65,6 +67,8 @@ export async function createRaffle(
     data: {
       guildId: input.guildId,
       createdById: input.createdById,
+      createdByName: input.createdByName,
+      createdByAvatar: input.createdByAvatar,
       projectName: input.projectName,
       title: input.title,
       description: input.description,
@@ -135,13 +139,16 @@ export async function publishRaffleMessage(
   }
 
   try {
+    const content = startMentionContent(raffle);
     const message = await channel.send({
+      content: content || undefined,
       embeds: [buildRaffleEmbed(raffle)],
       components: buildRaffleComponents(raffle),
+      allowedMentions: { parse: content ? ["everyone"] : [] },
     });
     await prisma.raffle.update({
       where: { id: raffleId },
-      data: { messageId: message.id },
+      data: { messageId: message.id, startPinged: Boolean(content) },
     });
     return { ok: true };
   } catch (err) {
@@ -171,40 +178,27 @@ export async function refreshRaffleMessage(
     .catch(() => null);
   if (!message) return;
 
+  const content = startMentionContent(raffle);
   await message
     .edit({
+      content: content || null,
       embeds: [buildRaffleEmbed(raffle)],
       components: buildRaffleComponents(raffle),
+      allowedMentions: { parse: content ? ["everyone"] : [] },
     })
     .catch((err) => logger.warn({ err, raffleId }, "refresh edit failed"));
 }
 
 /**
- * Ping the channel when a raffle goes live (@everyone / @here), once.
- * `startPing` is "none" | "here" | "everyone". Requires the bot to have the
- * "Mention Everyone" permission for @everyone/@here to actually notify.
+ * The mention text shown ABOVE the raffle embed (in the message content) while
+ * it's live — so the @everyone/@here ping is part of the raffle post itself,
+ * not a separate message. Empty unless the raffle is live and pings are on.
+ * Note: Discord only push-notifies on message *create*, so an instant ("now")
+ * raffle pings on post; a scheduled one shows the mention when it flips live.
  */
-export async function pingRaffleStart(client: Client, raffleId: number): Promise<void> {
-  const raffle = await getRaffle(raffleId);
-  if (!raffle || raffle.startPinged) return;
-
-  // Mark pinged first so a retry/race never double-pings.
-  await prisma.raffle.update({ where: { id: raffleId }, data: { startPinged: true } });
-
-  if (raffle.startPing === "none" || !raffle.channelId) return;
-  const channel = await fetchTextChannel(client, raffle.channelId);
-  if (!channel) return;
-
-  const mention = raffle.startPing === "here" ? "@here" : "@everyone";
-  const link = raffle.messageId
-    ? `\nhttps://discord.com/channels/${raffle.guildId}/${channel.id}/${raffle.messageId}`
-    : "";
-  await channel
-    .send({
-      content: `${mention} 🎉 **${raffle.projectName}** raffle is now **LIVE** — enter now!${link}`,
-      allowedMentions: { parse: ["everyone"] },
-    })
-    .catch((err) => logger.warn({ err, raffleId }, "start ping failed"));
+function startMentionContent(raffle: { status: RaffleStatus; startPing: string }): string {
+  if (raffle.status !== RaffleStatus.LIVE || raffle.startPing === "none") return "";
+  return raffle.startPing === "here" ? "@here" : "@everyone";
 }
 
 export async function editRaffle(

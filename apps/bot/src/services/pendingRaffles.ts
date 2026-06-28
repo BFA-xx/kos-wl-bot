@@ -10,6 +10,8 @@ import type { EntryRequirements } from "../types.js";
 export interface PendingRaffle {
   guildId: string;
   createdById: string;
+  createdByName: string;
+  createdByAvatar: string | null;
   // From the modal:
   projectName: string;
   title: string;

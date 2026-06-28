@@ -1,6 +1,9 @@
 import type { Config } from "tailwindcss";
 
+const v = (name: string) => `rgb(var(${name}) / <alpha-value>)`;
+
 const config: Config = {
+  darkMode: "class",
   content: [
     "./app/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
@@ -9,16 +12,21 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Theme-aware KOS palette driven by CSS variables (see globals.css).
+        // Works in both light and dark via the `.dark` class on <html>.
         kos: {
-          black: "#000000",
-          panel: "#0c0c0c",
-          card: "#121212",
-          border: "#222222",
-          line: "#1b1b1b",
-          white: "#ffffff",
-          silver: "#c0c0c0",
-          grey: "#7d7d7d",
-          muted: "#8a8a8a",
+          bg: v("--kos-bg"),
+          panel: v("--kos-panel"),
+          card: v("--kos-card"),
+          line: v("--kos-line"),
+          border: v("--kos-border"),
+          white: v("--kos-fg"), // primary text/foreground
+          fg: v("--kos-fg"),
+          silver: v("--kos-silver"),
+          grey: v("--kos-muted"),
+          muted: v("--kos-muted"),
+          black: v("--kos-bg"),
+          accent: v("--kos-fg"),
         },
       },
       fontFamily: {

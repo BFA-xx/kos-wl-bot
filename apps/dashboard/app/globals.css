@@ -2,19 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light theme (default) */
 :root {
+  --kos-bg: 250 250 250; /* page background */
+  --kos-panel: 255 255 255; /* inputs / soft surfaces */
+  --kos-card: 255 255 255; /* cards */
+  --kos-line: 229 229 229; /* hairlines */
+  --kos-border: 224 224 224;
+  --kos-fg: 12 12 12; /* primary text */
+  --kos-muted: 113 113 122; /* secondary text */
+  --kos-silver: 82 82 91;
+}
+
+/* Dark theme (KOS) */
+.dark {
+  --kos-bg: 0 0 0;
+  --kos-panel: 20 20 20;
+  --kos-card: 18 18 18;
+  --kos-line: 38 38 38;
+  --kos-border: 42 42 42;
+  --kos-fg: 255 255 255;
+  --kos-muted: 138 138 138;
+  --kos-silver: 192 192 192;
+}
+
+html {
+  color-scheme: light;
+}
+html.dark {
   color-scheme: dark;
 }
 
 html,
 body {
-  background-color: #000000;
-  color: #ffffff;
+  background-color: rgb(var(--kos-bg));
+  color: rgb(var(--kos-fg));
   -webkit-font-smoothing: antialiased;
 }
 
-/* Premium dark backdrop: subtle radial glow at the top. */
-body {
+/* Subtle depth — only in dark mode for the premium KOS glow. */
+.dark body {
   background-image:
     radial-gradient(1200px 600px at 70% -10%, rgba(255, 255, 255, 0.05), transparent 60%),
     radial-gradient(900px 500px at 0% 0%, rgba(255, 255, 255, 0.03), transparent 55%);
@@ -26,42 +53,40 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #242424;
+  background: rgb(var(--kos-border));
   border-radius: 8px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #333;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 
 @layer components {
-  /* Card: glassy dark panel with hairline border + soft depth. */
   .kos-card {
-    @apply rounded-2xl border border-white/10 bg-white/[0.03] shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_10px_30px_-15px_rgba(0,0,0,0.7)] backdrop-blur-sm;
+    @apply rounded-2xl border border-kos-border bg-kos-card shadow-sm;
+  }
+  .dark .kos-card {
+    @apply shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_10px_30px_-15px_rgba(0,0,0,0.7)];
   }
   .kos-card-hover {
-    @apply transition-all duration-200 hover:border-white/20 hover:bg-white/[0.05];
+    @apply transition-all duration-200 hover:border-kos-fg/25 hover:shadow-md;
   }
   .kos-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white transition-all hover:border-white/25 hover:bg-white/[0.08] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-kos-border bg-kos-panel px-4 py-2 text-sm font-medium text-kos-fg transition-all hover:border-kos-fg/30 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
   }
   .kos-btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black transition-all hover:bg-white/90 active:scale-[0.98] disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-kos-fg px-4 py-2 text-sm font-semibold text-kos-bg transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50;
   }
   .kos-input {
-    @apply w-full rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2 text-sm text-white placeholder:text-white/35 transition-colors focus:border-white/30 focus:bg-white/[0.06] focus:outline-none;
+    @apply w-full rounded-xl border border-kos-border bg-kos-panel px-3.5 py-2 text-sm text-kos-fg placeholder:text-kos-muted/70 transition-colors focus:border-kos-fg/30 focus:outline-none;
   }
   .kos-badge {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-xs font-medium;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-kos-border px-2.5 py-0.5 text-xs font-medium;
   }
-  /* Segmented control (Day/Week/Month style) */
   .kos-seg {
-    @apply rounded-full px-3.5 py-1.5 text-sm font-medium text-white/50 transition-colors hover:text-white;
+    @apply rounded-full px-3.5 py-1.5 text-sm font-medium text-kos-muted transition-colors hover:text-kos-fg;
   }
   .kos-seg-active {
-    @apply bg-white text-black hover:text-black;
+    @apply bg-kos-fg text-kos-bg hover:text-kos-bg;
   }
 }
 

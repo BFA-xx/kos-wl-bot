@@ -24,7 +24,6 @@ import { stashPending, getPending, takePending, takeBanner, type PendingRaffle }
 import {
   createRaffle,
   publishRaffleMessage,
-  pingRaffleStart,
   fetchTextChannel,
   missingPostPermissions,
 } from "../services/raffleService.js";
@@ -79,6 +78,8 @@ export async function handleRaffleCreateModal(interaction: ModalSubmitInteractio
   const nonce = stashPending({
     guildId: interaction.guildId!,
     createdById: interaction.user.id,
+    createdByName: interaction.user.username,
+    createdByAvatar: interaction.user.displayAvatarURL(),
     projectName,
     title,
     description: null,
@@ -420,6 +421,8 @@ async function publish(interaction: ButtonInteraction, nonce: string, draft: Pen
     const raffle = await createRaffle({
       guildId: draft.guildId,
       createdById: draft.createdById,
+      createdByName: draft.createdByName,
+      createdByAvatar: draft.createdByAvatar,
       projectName: draft.projectName,
       title: draft.title,
       description: draft.description,
@@ -440,11 +443,9 @@ async function publish(interaction: ButtonInteraction, nonce: string, draft: Pen
       roles: draft.roles,
     });
 
+    // publishRaffleMessage posts the embed with the @everyone/@here mention in
+    // the message content (part of the post itself) when it's live.
     const result = await publishRaffleMessage(interaction.client, raffle.id);
-    // If it started immediately (created LIVE), fire the @everyone/@here ping.
-    if (result.ok && raffle.status === "LIVE") {
-      await pingRaffleStart(interaction.client, raffle.id).catch(() => undefined);
-    }
 
     const header = result.ok
       ? `${KOS.emoji.check} **Raffle #${raffle.id}** is live in <#${draft.postChannelId}>.`
@@ -512,14 +513,6 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
     .setMaxValues(1);
   if (draft.postChannelId) postSelect.setDefaultChannels(draft.postChannelId);
 
-  const announceSelect = new ChannelSelectMenuBuilder()
-    .setCustomId(buildId(Actions.RaffleSetAnnounce, nonce))
-    .setPlaceholder("Announce winners in… (optional)")
-    .addChannelTypes(...TEXT_CHANNELS)
-    .setMinValues(0)
-    .setMaxValues(1);
-  if (draft.announceChannelId) announceSelect.setDefaultChannels(draft.announceChannelId);
-
   const chainsSelect = new StringSelectMenuBuilder()
     .setCustomId(buildId(Actions.RaffleSetChains, nonce))
     .setPlaceholder("Network(s) to collect wallets for")
@@ -540,15 +533,22 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
     .setMaxValues(5);
   if (draft.roles.length) roleSelect.setDefaultRoles(draft.roles.map((r) => r.roleId));
 
-  const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+  const toggleRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(buildId(Actions.RaffleToggleMatch, nonce))
       .setLabel(draft.roleMatchMode === RoleMatchMode.ALL ? "Match: ALL" : "Match: ANY")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
+      .setCustomId(buildId(Actions.RaffleToggleHide, nonce))
+      .setLabel(draft.hideEntries ? "Entries: Hidden" : "Entries: Shown")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
       .setCustomId(buildId(Actions.RaffleCyclePing, nonce))
       .setLabel(pingLabel(draft.startPing))
       .setStyle(ButtonStyle.Secondary),
+  );
+
+  const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(buildId(Actions.RaffleMoreOptions, nonce))
       .setLabel("More options")
@@ -568,10 +568,10 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
     embeds: [embed],
     components: [
       new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(postSelect),
-      new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(announceSelect),
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(chainsSelect),
       new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(roleSelect),
-      buttons,
+      toggleRow,
+      actionRow,
     ],
   };
 }

@@ -84,7 +84,6 @@ export default function OverviewPage() {
         }
       />
 
-      {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard accent label="Entries" value={s?.rangeEntries ?? "—"} trend={t?.entries} hint={`last ${label.toLowerCase()}`} />
         <StatCard label="Raffles" value={s?.rangeRaffles ?? "—"} trend={t?.raffles} hint={`last ${label.toLowerCase()}`} />
@@ -92,7 +91,6 @@ export default function OverviewPage() {
         <StatCard label="Winners" value={s?.rangeWinners ?? "—"} trend={t?.winners} hint={`last ${label.toLowerCase()}`} />
       </div>
 
-      {/* Chart + side panel */}
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <SectionTitle>Entry Activity</SectionTitle>
@@ -102,15 +100,15 @@ export default function OverviewPage() {
         <Card>
           <SectionTitle>At a glance</SectionTitle>
           <div className="space-y-3">
-            <div className="flex items-end justify-between rounded-xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="flex items-end justify-between rounded-xl border border-kos-border bg-kos-panel p-4">
               <div>
-                <div className="text-xs uppercase tracking-wide text-white/45">Live now</div>
+                <div className="text-xs uppercase tracking-wide text-kos-muted">Live now</div>
                 <div className="mt-1 text-3xl font-semibold">{s?.liveRaffles ?? "—"}</div>
               </div>
-              <span className="kos-badge border-emerald-400/30 text-emerald-300/90">running</span>
+              <span className="kos-badge border-emerald-400/30 text-emerald-500 dark:text-emerald-300/90">running</span>
             </div>
-            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-              <span className="text-sm text-white/55">Total raffles</span>
+            <div className="flex items-center justify-between rounded-xl border border-kos-border bg-kos-panel px-4 py-3">
+              <span className="text-sm text-kos-muted">Total raffles</span>
               <span className="text-lg font-semibold">{s?.totalRaffles ?? "—"}</span>
             </div>
             <Link href="/raffles" className="kos-btn w-full">View all raffles</Link>
@@ -118,7 +116,6 @@ export default function OverviewPage() {
         </Card>
       </div>
 
-      {/* Live & upcoming */}
       <div className="mt-6">
         <SectionTitle>Live &amp; Upcoming</SectionTitle>
         {!data ? (
@@ -135,18 +132,18 @@ export default function OverviewPage() {
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-white/40">#{r.id}</span>
+                    <span className="text-xs text-kos-muted">#{r.id}</span>
                     <StatusBadge status={r.status} />
                   </div>
                   <div className="mt-1 truncate font-medium">{r.projectName}</div>
-                  <div className="truncate text-sm text-white/45">{r.title}</div>
+                  <div className="truncate text-sm text-kos-muted">{r.title}</div>
                 </div>
                 <div className="ml-3 shrink-0 text-right">
                   <div className="text-lg font-semibold">
                     {r.entryCount}
-                    <span className="text-white/40"> / {r.spots}</span>
+                    <span className="text-kos-muted"> / {r.spots}</span>
                   </div>
-                  <div className="text-xs text-white/40">ends {fmtDate(r.endAt)}</div>
+                  <div className="text-xs text-kos-muted">ends {fmtDate(r.endAt)}</div>
                 </div>
               </Link>
             ))}

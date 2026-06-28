@@ -156,7 +156,9 @@ model Raffle {
   drawSeed   String?
   drawSeedHash String?
 
-  createdById String
+  createdById     String
+  createdByName   String?
+  createdByAvatar String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   endedAt     DateTime?

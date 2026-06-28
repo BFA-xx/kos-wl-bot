@@ -25,6 +25,8 @@ export interface RaffleEmbedData {
   bannerUrl: string | null;
   externalUrl: string | null;
   requirements: unknown;
+  createdByName: string | null;
+  createdByAvatar: string | null;
   eligibleRoles: { roleId: string; roleName: string }[];
 }
 
@@ -115,6 +117,14 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
   }
 
   if (raffle.bannerUrl) embed.setImage(raffle.bannerUrl);
+
+  // Show who hosted the raffle (avatar + name), like a post author.
+  if (raffle.createdByName) {
+    embed.setAuthor({
+      name: `Hosted by ${raffle.createdByName}`,
+      ...(raffle.createdByAvatar ? { iconURL: raffle.createdByAvatar } : {}),
+    });
+  }
 
   return embed;
 }
