@@ -2,7 +2,7 @@ import { type Client } from "discord.js";
 import { prisma, LogCategory, RaffleStatus } from "@kos/db";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
-import { refreshRaffleMessage } from "./raffleService.js";
+import { repostRaffleMessage } from "./raffleService.js";
 import { closeAndDraw } from "./winnerService.js";
 import { audit } from "./auditService.js";
 
@@ -10,25 +10,21 @@ import { audit } from "./auditService.js";
  * Sweep-based scheduler. A single interval drives all raffle state machines,
  * which makes it crash-safe (state is recomputed from the DB every tick rather
  * than relying on in-memory timers that vanish on restart).
+ *
+ * The live raffle post is intentionally NOT edited on a timer — the countdown
+ * uses Discord's native relative timestamp (client-side, no edit), so the post
+ * keeps its clean @everyone ping with no "(edited)" tag.
  */
 export class Scheduler {
   private transitionTimer?: NodeJS.Timeout;
-  private refreshTimer?: NodeJS.Timeout;
   private running = false;
 
   constructor(private readonly client: Client) {}
 
   start(): void {
     const transitionMs = config.SCHEDULER_TICK_SECONDS * 1000;
-    const refreshMs = config.EMBED_REFRESH_SECONDS * 1000;
-
     this.transitionTimer = setInterval(() => void this.tick(), transitionMs);
-    this.refreshTimer = setInterval(() => void this.refreshLive(), refreshMs);
-
-    logger.info(
-      { transitionMs, refreshMs },
-      "scheduler started (transition + refresh loops)",
-    );
+    logger.info({ transitionMs }, "scheduler started (transition loop)");
 
     // Kick an immediate tick so restarts catch up instantly.
     void this.tick();
@@ -36,7 +32,6 @@ export class Scheduler {
 
   stop(): void {
     if (this.transitionTimer) clearInterval(this.transitionTimer);
-    if (this.refreshTimer) clearInterval(this.refreshTimer);
   }
 
   /** Open due UPCOMING raffles and close+draw due LIVE raffles. */
@@ -62,7 +57,8 @@ export class Scheduler {
           action: "RAFFLE_OPEN",
           message: `Raffle #${r.id} is now LIVE`,
         });
-        await refreshRaffleMessage(this.client, r.id).catch(() => undefined);
+        // Re-post so the ping fires and the LIVE post is clean (see class doc).
+        await repostRaffleMessage(this.client, r.id).catch(() => undefined);
         logger.info({ raffleId: r.id }, "raffle opened");
       }
 
@@ -81,21 +77,6 @@ export class Scheduler {
       logger.error({ err }, "scheduler tick failed");
     } finally {
       this.running = false;
-    }
-  }
-
-  /** Refresh live raffle embeds so countdowns and counts stay current. */
-  private async refreshLive(): Promise<void> {
-    try {
-      const live = await prisma.raffle.findMany({
-        where: { status: RaffleStatus.LIVE, messageId: { not: null } },
-        select: { id: true },
-      });
-      for (const r of live) {
-        await refreshRaffleMessage(this.client, r.id).catch(() => undefined);
-      }
-    } catch (err) {
-      logger.error({ err }, "scheduler refresh failed");
     }
   }
 }

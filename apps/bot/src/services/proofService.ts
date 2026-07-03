@@ -33,7 +33,11 @@ export async function generateAndDeliverProof(
   });
 
   const walletRows = await getWinnerWallets(raffleId);
-  const logoBuffer = await fetchLogo();
+  // Prefer a configured brand logo; otherwise use the bot's own avatar (the KOS
+  // mark) so the proof is always branded without extra setup.
+  const logoUrl =
+    KOS.logoUrl ?? client.user?.displayAvatarURL({ extension: "png", size: 256 }) ?? null;
+  const logoBuffer = await fetchLogo(logoUrl);
 
   // 1. Render artifacts.
   const [pdf, card] = await Promise.all([
@@ -62,7 +66,7 @@ export async function generateAndDeliverProof(
       winners: winnerRows,
       timestamp: raffle.drawnAt ?? new Date(),
       brandName: KOS.name,
-      logoUrl: KOS.logoUrl,
+      logoUrl,
       raffleId: raffle.id,
       commitment: raffle.drawSeedHash,
     }),
@@ -135,20 +139,20 @@ export async function generateAndDeliverProof(
   });
 }
 
-let cachedLogo: Buffer | null | undefined;
-async function fetchLogo(): Promise<Buffer | null> {
-  if (cachedLogo !== undefined) return cachedLogo;
-  if (!KOS.logoUrl) {
-    cachedLogo = null;
-    return null;
-  }
+const logoCache = new Map<string, Buffer | null>();
+async function fetchLogo(url: string | null): Promise<Buffer | null> {
+  if (!url) return null;
+  const cached = logoCache.get(url);
+  if (cached !== undefined) return cached;
+  let buf: Buffer | null = null;
   try {
-    const res = await fetch(KOS.logoUrl);
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`status ${res.status}`);
-    cachedLogo = Buffer.from(await res.arrayBuffer());
+    buf = Buffer.from(await res.arrayBuffer());
   } catch (err) {
     logger.warn({ err }, "failed to fetch KOS logo for proof");
-    cachedLogo = null;
+    buf = null;
   }
-  return cachedLogo;
+  logoCache.set(url, buf);
+  return buf;
 }

@@ -190,11 +190,35 @@ export async function refreshRaffleMessage(
 }
 
 /**
+ * Delete the old raffle post and publish a fresh one. Used when a scheduled
+ * raffle flips from UPCOMING to LIVE: re-posting (a message *create*) is what
+ * fires the @everyone push notification and puts the ping in the original post,
+ * whereas an in-place edit would neither notify nor look un-edited.
+ */
+export async function repostRaffleMessage(
+  client: Client,
+  raffleId: number,
+): Promise<PublishResult> {
+  const raffle = await getRaffle(raffleId);
+  if (!raffle) return { ok: false, reason: "raffle not found" };
+
+  if (raffle.channelId && raffle.messageId) {
+    const channel = await fetchTextChannel(client, raffle.channelId);
+    const old = channel
+      ? await channel.messages.fetch(raffle.messageId).catch(() => null)
+      : null;
+    if (old) await old.delete().catch(() => undefined);
+  }
+
+  return publishRaffleMessage(client, raffleId);
+}
+
+/**
  * The mention text shown ABOVE the raffle embed (in the message content) while
  * it's live — so the @everyone/@here ping is part of the raffle post itself,
  * not a separate message. Empty unless the raffle is live and pings are on.
  * Note: Discord only push-notifies on message *create*, so an instant ("now")
- * raffle pings on post; a scheduled one shows the mention when it flips live.
+ * raffle pings on post; a scheduled one is re-posted when it flips live.
  */
 function startMentionContent(raffle: { status: RaffleStatus; startPing: string }): string {
   if (raffle.status !== RaffleStatus.LIVE || raffle.startPing === "none") return "";

@@ -7,7 +7,7 @@ import {
 import { RaffleStatus, RoleMatchMode } from "@kos/db";
 import { KOS, statusColor, statusBadge } from "../theme.js";
 import { buildId, Actions } from "../utils/ids.js";
-import { discordFull, discordRelative, formatCountdown } from "../utils/time.js";
+import { discordFull, discordRelative } from "../utils/time.js";
 import { parseRequirements } from "../services/eligibilityService.js";
 
 export interface RaffleEmbedData {
@@ -46,9 +46,11 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
         : " · **any** qualifies"
       : "";
 
+  // Use Discord's native relative timestamp only — it ticks live on the client
+  // with no message edits, so the raffle post never gets an "(edited)" tag.
   const countdown =
     raffle.status === RaffleStatus.LIVE
-      ? `${KOS.emoji.clock} Ends ${discordRelative(raffle.endAt)} · \`${formatCountdown(raffle.endAt)}\` left`
+      ? `${KOS.emoji.clock} Ends ${discordRelative(raffle.endAt)}`
       : raffle.status === RaffleStatus.UPCOMING
         ? `${KOS.emoji.clock} Opens ${discordRelative(raffle.startAt)}`
         : `${KOS.emoji.clock} Closed ${discordRelative(raffle.endAt)}`;
@@ -77,7 +79,10 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
     value: `**${raffle.spots}**`,
     inline: true,
   });
-  if (!raffle.hideEntries) {
+  // The live post is never edited (to keep the @everyone ping clean), so a
+  // running entry count can't tick here — show the final tally once it ends.
+  // Live entries are on the dashboard / `/raffle stats`.
+  if (!raffle.hideEntries && raffle.status === RaffleStatus.ENDED) {
     embed.addFields(
       { name: "Entries", value: `**${raffle.entryCount}**`, inline: true },
       {

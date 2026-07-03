@@ -11,7 +11,6 @@ import { config } from "../config.js";
 import { parseId, Actions, buildId } from "../utils/ids.js";
 import { RateLimiter } from "../utils/rateLimit.js";
 import { enterRaffle, leaveRaffle } from "../services/entryService.js";
-import { refreshRaffleMessage } from "../services/raffleService.js";
 import { buildWalletProfileModal } from "../services/walletService.js";
 import { handleRaffleWizardButton } from "./raffleWizard.js";
 import { chainLabel } from "../utils/wallets.js";
@@ -23,17 +22,6 @@ export const entryLimiter = new RateLimiter(
   config.ENTRY_RATE_LIMIT_PER_MINUTE,
   60_000,
 );
-
-// Debounced live-embed refresh: at most one refresh per raffle per 3s.
-const pendingRefresh = new Map<number, NodeJS.Timeout>();
-function scheduleRefresh(interaction: ButtonInteraction, raffleId: number): void {
-  if (pendingRefresh.has(raffleId)) return;
-  const t = setTimeout(() => {
-    pendingRefresh.delete(raffleId);
-    void refreshRaffleMessage(interaction.client, raffleId).catch(() => undefined);
-  }, 3000);
-  pendingRefresh.set(raffleId, t);
-}
 
 export async function handleButton(interaction: ButtonInteraction): Promise<unknown> {
   const parsed = parseId(interaction.customId);
@@ -80,7 +68,6 @@ async function handleEnter(interaction: ButtonInteraction, raffleId: number) {
   const result = await enterRaffle(raffleId, member);
   switch (result.status) {
     case "entered": {
-      scheduleRefresh(interaction, raffleId);
       let msg = `${KOS.emoji.check} Successfully entered the raffle.`;
       if (result.missingWalletChains.length > 0) {
         const chains = result.missingWalletChains.map(chainLabel).join(", ");
@@ -117,7 +104,6 @@ async function handleLeave(interaction: ButtonInteraction, raffleId: number) {
   const result = await leaveRaffle(raffleId, member);
   switch (result.status) {
     case "left":
-      scheduleRefresh(interaction, raffleId);
       return interaction.editReply("You have left the raffle.");
     case "not_entered":
       return interaction.editReply("You are not entered in this raffle.");
