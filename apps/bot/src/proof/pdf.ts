@@ -21,8 +21,8 @@ export interface ProofReportData {
 // KOS palette
 const BG = "#0a0a0a";
 const FG = "#ffffff";
-const MUTED = "#9a9a9a";
-const LINE = "#2b2b2b";
+const MUTED = "#8a8a8a";
+const LINE = "#242424";
 const SILVER = "#c0c0c0";
 
 /**

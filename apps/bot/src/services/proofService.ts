@@ -63,6 +63,8 @@ export async function generateAndDeliverProof(
       timestamp: raffle.drawnAt ?? new Date(),
       brandName: KOS.name,
       logoUrl: KOS.logoUrl,
+      raffleId: raffle.id,
+      commitment: raffle.drawSeedHash,
     }),
   ]);
   const csv = winnersCsv(walletRows);

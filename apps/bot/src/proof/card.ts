@@ -1,4 +1,18 @@
-import { createCanvas, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
+import { createCanvas, loadImage, GlobalFonts, type SKRSContext2D } from "@napi-rs/canvas";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+// Bundle a font so text renders on headless servers (napi-canvas has no
+// system fonts on a minimal EC2 box — without this the card comes out blank).
+const FONT = "KOS Sans";
+const FONT_BOLD = "KOS Sans Bold";
+try {
+  const dir = fileURLToPath(new URL("../../assets/fonts/", import.meta.url));
+  GlobalFonts.registerFromPath(path.join(dir, "Inter-Regular.ttf"), FONT);
+  GlobalFonts.registerFromPath(path.join(dir, "Inter-Bold.ttf"), FONT_BOLD);
+} catch {
+  /* fall back to whatever the system provides */
+}
 
 export interface WinnerCardData {
   projectName: string;
@@ -9,148 +23,178 @@ export interface WinnerCardData {
   timestamp: Date;
   brandName: string;
   logoUrl?: string | null;
+  raffleId?: number;
+  commitment?: string | null;
 }
 
 const W = 1200;
 const H = 675;
 
-// KOS palette
+// Palette matched to the redesigned dashboard (dark KOS).
 const BG = "#0a0a0a";
-const PANEL = "#141414";
+const CARD = "#121212";
 const FG = "#ffffff";
 const SILVER = "#c0c0c0";
-const MUTED = "#7d7d7d";
-const LINE = "#2b2b2b";
+const MUTED = "#8a8a8a";
+const LINE = "#242424";
+const BORDER = "#2a2a2a";
 
-/**
- * Render a premium black/white winner card PNG. Doubles as the proof
- * "screenshot" artifact. Returns a PNG Buffer.
- */
+const reg = (size: number) => `${size}px ${FONT}`;
+const bold = (size: number) => `${size}px ${FONT_BOLD}`;
+
+/** Render a premium dark KOS winner card PNG. Returns a PNG Buffer. */
 export async function renderWinnerCard(data: WinnerCardData): Promise<Buffer> {
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext("2d");
 
-  // Background + subtle border frame.
+  // Background + soft top glow (matches the dashboard's radial highlight).
   ctx.fillStyle = BG;
   ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = LINE;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(24, 24, W - 48, H - 48);
+  const glow = ctx.createRadialGradient(W * 0.78, -80, 40, W * 0.78, -80, 640);
+  glow.addColorStop(0, "rgba(255,255,255,0.06)");
+  glow.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
 
-  // Top hairline accent.
-  ctx.fillStyle = SILVER;
-  ctx.fillRect(48, 92, W - 96, 1);
+  // Outer rounded frame.
+  roundRect(ctx, 20, 20, W - 40, H - 40, 24);
+  ctx.strokeStyle = BORDER;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
 
-  // Header: brand + optional logo.
-  let headerX = 48;
+  const PAD = 56;
+
+  // ── Header ──
+  let brandX = PAD;
   if (data.logoUrl) {
     try {
       const img = await loadImage(data.logoUrl);
-      const size = 40;
-      ctx.drawImage(img, 48, 40, size, size);
-      headerX = 100;
+      ctx.save();
+      roundRect(ctx, PAD, 44, 40, 40, 10);
+      ctx.clip();
+      ctx.drawImage(img, PAD, 44, 40, 40);
+      ctx.restore();
+      brandX = PAD + 52;
     } catch {
-      /* ignore */
+      /* ignore bad logo */
     }
   }
   ctx.fillStyle = FG;
-  ctx.font = "bold 28px Arial";
-  ctx.fillText(data.brandName, headerX, 70);
+  ctx.font = bold(30);
+  ctx.fillText(data.brandName, brandX, 74);
 
   ctx.fillStyle = MUTED;
-  ctx.font = "16px Arial";
+  ctx.font = reg(15);
   ctx.textAlign = "right";
-  ctx.fillText("WHITELIST RAFFLE", W - 48, 66);
+  ctx.fillText(
+    `VERIFIABLE PROOF${data.raffleId ? `  ·  RAFFLE #${data.raffleId}` : ""}`,
+    W - PAD,
+    70,
+  );
   ctx.textAlign = "left";
 
-  // Project + title.
+  hairline(ctx, PAD, 104, W - PAD);
+
+  // ── Project + title ──
   ctx.fillStyle = SILVER;
-  ctx.font = "bold 22px Arial";
-  ctx.fillText(data.projectName.toUpperCase(), 48, 150);
+  ctx.font = reg(15);
+  ctx.fillText("WHITELIST RAFFLE", PAD, 150);
 
   ctx.fillStyle = FG;
-  ctx.font = "bold 40px Arial";
-  ctx.fillText(truncate(ctx, data.title, W - 96), 48, 196);
+  ctx.font = bold(46);
+  ctx.fillText(truncate(ctx, data.projectName.toUpperCase(), W - PAD * 2), PAD, 200);
 
-  // Stat panels.
-  drawStat(ctx, 48, 230, "WL SPOTS", String(data.spots));
-  drawStat(ctx, 248, 230, "ENTRIES", String(data.entryCount));
-  drawStat(ctx, 448, 230, "WINNERS", String(data.winners.length));
-
-  // Winners list.
   ctx.fillStyle = MUTED;
-  ctx.font = "bold 15px Arial";
-  ctx.fillText("WINNERS", 48, 360);
-  ctx.fillStyle = LINE;
-  ctx.fillRect(48, 372, W - 96, 1);
+  ctx.font = reg(22);
+  ctx.fillText(truncate(ctx, data.title, W - PAD * 2), PAD, 236);
+
+  // ── Stat chips (like the dashboard stat cards) ──
+  const chipY = 268;
+  chip(ctx, PAD, chipY, "WL SPOTS", String(data.spots));
+  chip(ctx, PAD + 216, chipY, "ENTRIES", String(data.entryCount));
+  chip(ctx, PAD + 432, chipY, "WINNERS", String(data.winners.length));
+
+  // ── Winners ──
+  const listTop = 386;
+  ctx.fillStyle = MUTED;
+  ctx.font = bold(14);
+  ctx.fillText("WINNERS", PAD, listTop);
+  hairline(ctx, PAD, listTop + 14, W - PAD);
 
   const maxShown = 12;
   const shown = data.winners.slice(0, maxShown);
-  const colX = [48, 416, 784];
-  const rowH = 36;
-  ctx.font = "20px Arial";
+  const colX = [PAD, PAD + 384, PAD + 768];
+  const rowH = 38;
+  ctx.font = reg(20);
+  if (shown.length === 0) {
+    ctx.fillStyle = MUTED;
+    ctx.fillText("No eligible entries — no winners drawn.", PAD, listTop + 54);
+  }
   shown.forEach((w, i) => {
     const col = Math.floor(i / 4);
     const row = i % 4;
-    const x = colX[col]!;
-    const y = 410 + row * rowH;
+    const x = colX[col] ?? PAD;
+    const y = listTop + 54 + row * rowH;
     ctx.fillStyle = SILVER;
-    ctx.fillText(`${i + 1}.`, x, y);
+    ctx.font = bold(18);
+    ctx.fillText(`${i + 1}`, x, y);
     ctx.fillStyle = FG;
-    ctx.fillText(truncate(ctx, w.username, 300), x + 34, y);
+    ctx.font = reg(20);
+    ctx.fillText(truncate(ctx, w.username, 300), x + 30, y);
   });
-
   if (data.winners.length > maxShown) {
     ctx.fillStyle = MUTED;
-    ctx.font = "16px Arial";
-    ctx.fillText(`+ ${data.winners.length - maxShown} more`, 48, 410 + 4 * rowH);
+    ctx.font = reg(16);
+    ctx.fillText(`+ ${data.winners.length - maxShown} more`, PAD, listTop + 54 + 4 * rowH);
   }
 
-  // Footer.
-  ctx.fillStyle = LINE;
-  ctx.fillRect(48, H - 70, W - 96, 1);
+  // ── Commitment ──
+  if (data.commitment) {
+    ctx.fillStyle = MUTED;
+    ctx.font = reg(13);
+    ctx.fillText(`Draw commitment (SHA-256): ${data.commitment.slice(0, 40)}…`, PAD, H - 100);
+  }
+
+  // ── Footer ──
+  hairline(ctx, PAD, H - 72, W - PAD);
   ctx.fillStyle = MUTED;
-  ctx.font = "15px Arial";
-  ctx.fillText("Powered by KOS", 48, H - 44);
+  ctx.font = reg(15);
+  ctx.fillText("Powered by KOS", PAD, H - 44);
   ctx.textAlign = "right";
-  ctx.fillText(data.timestamp.toUTCString(), W - 48, H - 44);
+  ctx.fillText(data.timestamp.toUTCString(), W - PAD, H - 44);
   ctx.textAlign = "left";
 
   return canvas.toBuffer("image/png");
 }
 
-function drawStat(
-  ctx: SKRSContext2D,
-  x: number,
-  y: number,
-  label: string,
-  value: string,
-): void {
-  const w = 170;
-  const h = 86;
-  ctx.fillStyle = PANEL;
-  roundRect(ctx, x, y, w, h, 10);
+function chip(ctx: SKRSContext2D, x: number, y: number, label: string, value: string): void {
+  const w = 200;
+  const h = 96;
+  roundRect(ctx, x, y, w, h, 14);
+  ctx.fillStyle = CARD;
   ctx.fill();
-  ctx.strokeStyle = LINE;
+  ctx.strokeStyle = BORDER;
   ctx.lineWidth = 1;
   ctx.stroke();
 
   ctx.fillStyle = MUTED;
-  ctx.font = "14px Arial";
-  ctx.fillText(label, x + 16, y + 28);
+  ctx.font = `13px ${FONT}`;
+  ctx.fillText(label, x + 18, y + 30);
   ctx.fillStyle = FG;
-  ctx.font = "bold 36px Arial";
-  ctx.fillText(value, x + 16, y + 68);
+  ctx.font = `40px ${FONT_BOLD}`;
+  ctx.fillText(value, x + 18, y + 76);
 }
 
-function roundRect(
-  ctx: SKRSContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-): void {
+function hairline(ctx: SKRSContext2D, x1: number, y: number, x2: number): void {
+  ctx.strokeStyle = LINE;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x1, y + 0.5);
+  ctx.lineTo(x2, y + 0.5);
+  ctx.stroke();
+}
+
+function roundRect(ctx: SKRSContext2D, x: number, y: number, w: number, h: number, r: number): void {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
