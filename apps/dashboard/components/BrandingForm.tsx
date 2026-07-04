@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useOrg, useCan } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
+import { ImageDrop } from "./ImageDrop";
 
 export function BrandingForm({
   initial,
@@ -47,12 +48,21 @@ export function BrandingForm({
       <Field label="Handle">
         <input className="kos-input opacity-60" value={slug} disabled readOnly />
       </Field>
-      <Field label="Logo URL">
-        <input className="kos-input" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} disabled={!canEdit} placeholder="https://…" />
-      </Field>
-      <Field label="Banner URL">
-        <input className="kos-input" value={bannerUrl} onChange={(e) => setBannerUrl(e.target.value)} disabled={!canEdit} placeholder="https://…" />
-      </Field>
+      {canEdit ? (
+        <>
+          <ImageDrop label="Logo" value={logoUrl} onChange={setLogoUrl} />
+          <ImageDrop label="Banner" value={bannerUrl} onChange={setBannerUrl} />
+        </>
+      ) : (
+        <>
+          <Field label="Logo URL">
+            <input className="kos-input" value={logoUrl} disabled readOnly />
+          </Field>
+          <Field label="Banner URL">
+            <input className="kos-input" value={bannerUrl} disabled readOnly />
+          </Field>
+        </>
+      )}
       <Field label="Description">
         <textarea
           className="kos-input min-h-[80px]"

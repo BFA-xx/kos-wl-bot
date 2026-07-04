@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useOrg } from "@/lib/org-context";
+import { ImageDrop } from "./ImageDrop";
 import { IconClose } from "./icons";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -35,6 +36,7 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
   const [hideEntries, setHideEntries] = useState(false);
   const [collectWallets, setCollectWallets] = useState(true);
   const [chains, setChains] = useState<string[]>(["ETHEREUM"]);
+  const [bannerUrl, setBannerUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,6 +86,7 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
         hideEntries,
         collectWallets,
         walletChains: chains,
+        bannerUrl,
       }),
     });
     const body = await res.json().catch(() => ({}));
@@ -97,11 +100,12 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
-      <form
-        onSubmit={submit}
-        className="my-6 w-full max-w-lg rounded-2xl border border-kos-border bg-kos-bg p-6"
-      >
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm">
+      <div className="flex min-h-full items-start justify-center p-4">
+        <form
+          onSubmit={submit}
+          className="my-6 w-full max-w-lg rounded-2xl border border-kos-border bg-kos-bg p-6"
+        >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">New raffle</h2>
           <button type="button" onClick={onClose} className="text-kos-muted hover:text-kos-fg">
@@ -138,6 +142,8 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
           <Field label="Description (optional)">
             <textarea className="kos-input min-h-[60px]" value={description} onChange={(e) => setDescription(e.target.value)} />
           </Field>
+
+          <ImageDrop label="Banner image (optional)" value={bannerUrl} onChange={setBannerUrl} />
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="WL spots">
@@ -255,7 +261,8 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
         <p className="mt-2 text-right text-[11px] text-kos-muted/70">
           The bot posts it to Discord within a few seconds.
         </p>
-      </form>
+        </form>
+      </div>
     </div>
   );
 }

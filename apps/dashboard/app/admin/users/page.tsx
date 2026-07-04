@@ -1,13 +1,14 @@
 import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
 import { PageTitle, StatCard } from "@/components/ui";
+import { AddSuperAdmin, UserAdminToggle } from "@/components/admin/UserAdminControls";
 import { fmtDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export default async function AdminUsersPage() {
-  await guardAdmin();
+  const { user: me } = await guardAdmin();
 
   const [users, totalUsers, superAdmins] = await Promise.all([
     prisma.user.findMany({
@@ -30,6 +31,8 @@ export default async function AdminUsersPage() {
         <StatCard accent label="Super admins" value={superAdmins} />
       </div>
 
+      <AddSuperAdmin />
+
       <div className="overflow-hidden rounded-2xl border border-kos-border">
         <table className="w-full text-sm">
           <thead className="bg-kos-panel/60 text-left text-xs uppercase tracking-wide text-kos-muted">
@@ -38,6 +41,7 @@ export default async function AdminUsersPage() {
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3 text-right">Orgs</th>
               <th className="hidden px-4 py-3 md:table-cell">Last login</th>
+              <th className="px-4 py-3 text-right">Super admin</th>
             </tr>
           </thead>
           <tbody>
@@ -58,6 +62,9 @@ export default async function AdminUsersPage() {
                 <td className="px-4 py-3 text-right">{u._count.memberships}</td>
                 <td className="hidden px-4 py-3 text-kos-muted md:table-cell">
                   {u.lastLoginAt ? fmtDate(u.lastLoginAt) : "—"}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <UserAdminToggle id={u.id} isSuperAdmin={u.isSuperAdmin} isSelf={u.id === me.id} />
                 </td>
               </tr>
             ))}
