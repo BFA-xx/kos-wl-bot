@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, isSuperAdminId } from "@/lib/auth";
+import { SESSION_COOKIE, superAdminPatch } from "@/lib/auth";
 import { signSession } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { encryptSecret } from "@/lib/crypto";
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     accessToken: encryptSecret(token.access_token),
     refreshToken: encryptSecret(token.refresh_token),
     tokenExpiresAt: new Date(Date.now() + token.expires_in * 1000),
-    isSuperAdmin: isSuperAdminId(user.id),
+    ...superAdminPatch(user.id),
     lastLoginAt: new Date(),
   };
   await prisma.user.upsert({

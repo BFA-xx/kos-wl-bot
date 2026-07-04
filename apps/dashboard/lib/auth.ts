@@ -24,6 +24,18 @@ export function isSuperAdminId(id: string): boolean {
   return superAdminIds().includes(id);
 }
 
+/**
+ * The `isSuperAdmin` value to write on login. When the allowlist is configured
+ * it's the source of truth (grants/revokes). When it's UNSET we return `{}` so
+ * a login never wipes a flag set another way (e.g. the migration) — this avoids
+ * locking the owner out of /admin if the env var isn't deployed yet.
+ */
+export function superAdminPatch(id: string): { isSuperAdmin?: boolean } {
+  const ids = superAdminIds();
+  if (ids.length === 0) return {};
+  return { isSuperAdmin: ids.includes(id) };
+}
+
 /** Read + verify the signed session cookie (server-side). */
 export async function getSession(): Promise<SessionPayload | null> {
   const secret = sessionSecret();
