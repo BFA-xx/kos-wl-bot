@@ -2,7 +2,7 @@ import { type Client } from "discord.js";
 import { prisma, Prisma, LogCategory, RaffleStatus } from "@kos/db";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
-import { publishRaffleMessage, repostRaffleMessage } from "./raffleService.js";
+import { publishRaffleMessage, repostRaffleMessage, refreshRaffleMessage } from "./raffleService.js";
 import { closeAndDraw, rerollWinners, type RerollMode } from "./winnerService.js";
 import { audit } from "./auditService.js";
 
@@ -45,6 +45,7 @@ export class Scheduler {
       // only the DB — the dashboard can't reach the bot's local API).
       await this.publishDashboardRaffles();
       await this.processRerollRequests();
+      await this.processEditRequests();
 
       // Open upcoming raffles whose start time has arrived.
       const toOpen = await prisma.raffle.findMany({
@@ -144,6 +145,22 @@ export class Scheduler {
         count: req.count,
         userIds: req.userIds,
       }).catch((err) => logger.error({ err, raffleId: r.id }, "dashboard reroll failed"));
+    }
+  }
+
+  /** Re-render the Discord post for raffles the dashboard edited. */
+  private async processEditRequests(): Promise<void> {
+    const edits = await prisma.raffle.findMany({
+      where: { editRequestedAt: { not: null }, messageId: { not: null } },
+      select: { id: true },
+    });
+    for (const r of edits) {
+      await prisma.raffle
+        .update({ where: { id: r.id }, data: { editRequestedAt: null } })
+        .catch(() => undefined);
+      await refreshRaffleMessage(this.client, r.id).catch((err) =>
+        logger.error({ err, raffleId: r.id }, "dashboard edit refresh failed"),
+      );
     }
   }
 }

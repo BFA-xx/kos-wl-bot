@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { AccessError, requireOrgAccess } from "@/lib/access";
 import { PageTitle, StatusBadge, StatCard } from "@/components/ui";
 import { RaffleActions } from "@/components/RaffleActions";
+import { RaffleEditButton } from "@/components/RaffleEditButton";
 import { ParticipantsLive } from "@/components/ParticipantsLive";
 import { fmtDate } from "@/lib/format";
 
@@ -52,7 +53,36 @@ export default async function RaffleDetailPage({
       <PageTitle
         title={raffle.title}
         subtitle={`${raffle.projectName} · Raffle #${raffle.id}`}
-        action={<StatusBadge status={raffle.status} />}
+        action={
+          <div className="flex items-center gap-2">
+            <RaffleEditButton
+              raffle={{
+                id: raffle.id,
+                guildId: raffle.guildId,
+                status: raffle.status,
+                projectName: raffle.projectName,
+                title: raffle.title,
+                description: raffle.description,
+                spots: raffle.spots,
+                startAt: raffle.startAt.toISOString(),
+                endAt: raffle.endAt.toISOString(),
+                bannerUrl: raffle.bannerUrl,
+                hideEntries: raffle.hideEntries,
+                requireWallet: raffle.requireWallet,
+                startPing: raffle.startPing,
+                roleMatchMode: raffle.roleMatchMode,
+                walletChains: raffle.walletChains,
+                collectWallets: raffle.collectWallets,
+                announceChannelId: raffle.announceChannelId,
+                proofChannelId: raffle.proofChannelId,
+                tasks:
+                  ((raffle.requirements as { tasks?: { label: string; url?: string }[] } | null)?.tasks) ?? [],
+                roles: raffle.eligibleRoles.map((r) => ({ roleId: r.roleId, roleName: r.roleName })),
+              }}
+            />
+            <StatusBadge status={raffle.status} />
+          </div>
+        }
       />
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">

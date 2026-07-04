@@ -180,6 +180,9 @@ model Raffle {
   rerollRequest    Json?
   rerollRequestedAt DateTime?
 
+  /// Set by the dashboard after an edit; the bot re-renders the live post.
+  editRequestedAt DateTime?
+
   createdById     String
   createdByName   String?
   createdByAvatar String?
