@@ -14,8 +14,10 @@ out/
 .env.*
 !.env.example
 
-# Logs
+# Logs (runtime) — but NOT the /admin/logs dashboard route
 logs/
+!apps/dashboard/app/admin/logs/
+!apps/dashboard/app/admin/logs/**
 *.log
 npm-debug.log*
 pnpm-debug.log*
