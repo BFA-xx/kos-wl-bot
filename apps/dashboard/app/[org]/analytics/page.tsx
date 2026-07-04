@@ -13,7 +13,16 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 interface Analytics {
   entriesSeries: { label: string; value: number }[];
   rafflesSeries: { label: string; value: number }[];
-  topRaffles: { id: number; projectName: string; title: string; entryCount: number; spots: number; status: string }[];
+  topRaffles: {
+    id: number;
+    projectName: string;
+    title: string;
+    entryCount: number;
+    spots: number;
+    status: string;
+    createdByName: string | null;
+  }[];
+  hosts: { name: string; raffles: number; entries: number }[];
   totalEntries: number;
   totalRaffles: number;
   error?: string;
@@ -84,6 +93,9 @@ export default function AnalyticsPage() {
                   </div>
                   <div className="mt-1 truncate font-medium">{r.projectName}</div>
                   <div className="truncate text-sm text-kos-muted">{r.title}</div>
+                  {r.createdByName ? (
+                    <div className="truncate text-xs text-kos-muted/80">Hosted by {r.createdByName}</div>
+                  ) : null}
                 </div>
                 <div className="ml-3 shrink-0 text-right">
                   <div className="text-lg font-semibold">{r.entryCount}</div>
@@ -91,6 +103,36 @@ export default function AnalyticsPage() {
                 </div>
               </Link>
             ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-6">
+        <SectionTitle>Top hosts</SectionTitle>
+        {!data ? (
+          <Empty>Loading…</Empty>
+        ) : data.hosts.length === 0 ? (
+          <Empty>No hosts yet.</Empty>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-kos-border">
+            <table className="w-full text-sm">
+              <thead className="bg-kos-panel/60 text-left text-xs uppercase tracking-wide text-kos-muted">
+                <tr>
+                  <th className="px-4 py-3">Host</th>
+                  <th className="px-4 py-3 text-right">Raffles</th>
+                  <th className="px-4 py-3 text-right">Entries drawn</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.hosts.map((h) => (
+                  <tr key={h.name} className="border-t border-kos-border/60">
+                    <td className="px-4 py-3 font-medium">{h.name}</td>
+                    <td className="px-4 py-3 text-right">{h.raffles}</td>
+                    <td className="px-4 py-3 text-right text-kos-muted">{h.entries}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

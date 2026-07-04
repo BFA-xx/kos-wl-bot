@@ -36,10 +36,33 @@ export async function GET(req: NextRequest, { params }: { params: { org: string 
         where: rScope,
         orderBy: { entryCount: "desc" },
         take: 8,
-        select: { id: true, projectName: true, title: true, entryCount: true, spots: true, status: true },
+        select: {
+          id: true,
+          projectName: true,
+          title: true,
+          entryCount: true,
+          spots: true,
+          status: true,
+          createdByName: true,
+        },
       }),
       prisma.raffle.aggregate({ where: rScope, _sum: { entryCount: true }, _count: true }),
     ]);
+
+    // Top hosts: who ran the most raffles (and drew the most entries).
+    const hostRows = await prisma.raffle.groupBy({
+      by: ["createdById", "createdByName"],
+      where: rScope,
+      _count: true,
+      _sum: { entryCount: true },
+      orderBy: { _count: { createdById: "desc" } },
+      take: 8,
+    });
+    const hosts = hostRows.map((h) => ({
+      name: h.createdByName ?? h.createdById,
+      raffles: h._count,
+      entries: h._sum.entryCount ?? 0,
+    }));
 
     const mkSeries = (rows: { getTime: () => number }[]) => {
       const s = Array.from({ length: buckets }, (_, i) => {
@@ -60,6 +83,7 @@ export async function GET(req: NextRequest, { params }: { params: { org: string 
       entriesSeries: mkSeries(entryRows.map((r) => r.enteredAt)),
       rafflesSeries: mkSeries(raffleRows.map((r) => r.createdAt)),
       topRaffles,
+      hosts,
       totalEntries: totals._sum.entryCount ?? 0,
       totalRaffles: totals._count,
     });

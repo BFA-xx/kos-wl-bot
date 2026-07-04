@@ -84,6 +84,12 @@ export async function requireOrgAccess(
     throw new AccessError(403, "You don't have access to this organization.");
   }
 
+  // Suspended orgs are frozen: block every permission-gated action. The base
+  // call (no permission) still resolves so the layout can render a notice.
+  if (org.suspendedAt && permission) {
+    throw new AccessError(403, "This organization is suspended. Contact KOS support.");
+  }
+
   const permissions = member?.role.permissions ?? [];
   if (permission && !hasPermission({ isOwner, permissions }, permission)) {
     throw new AccessError(403, `Missing permission: ${permission}`);

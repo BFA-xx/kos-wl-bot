@@ -23,12 +23,22 @@ export default function SupportPage() {
         <Card>
           <div className="font-medium">Contact us</div>
           <p className="mt-1 text-sm text-kos-muted">
-            Need a hand? Reach the KOS team in your Discord or by email. We
-            typically respond within a day.
+            Need a hand? Reach the KOS team by email, or DM the developer on X.
+            We typically respond within a day.
           </p>
-          <a href="mailto:support@kos.app" className="kos-btn-primary mt-4 inline-block">
-            Email support
-          </a>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <a href="mailto:Theonlyrealoutis@gmail.com" className="kos-btn-primary inline-block">
+              Email support
+            </a>
+            <a
+              href="https://x.com/Tosincrypt"
+              target="_blank"
+              rel="noreferrer"
+              className="kos-btn inline-block"
+            >
+              DM @Tosincrypt on X ↗
+            </a>
+          </div>
         </Card>
       </div>
     </>

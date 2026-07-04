@@ -1,4 +1,5 @@
 import { redirect, notFound } from "next/navigation";
+import { prisma } from "@/lib/db";
 import { AccessError, requireOrgAccess, getUserOrgs } from "@/lib/access";
 import { OrgShell } from "@/components/OrgShell";
 
@@ -25,13 +26,45 @@ export default async function OrgLayout({
     throw err;
   }
 
-  const { user, org, isOwner, permissions } = access;
+  const { user, org, isOwner, permissions, guildIds } = access;
+
+  // Suspended by a KOS super-admin — show a notice instead of the dashboard.
+  if (org.suspendedAt) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-5 text-center">
+        <div className="max-w-sm rounded-2xl border border-kos-border bg-kos-panel/60 p-8 backdrop-blur-xl">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-400/30 bg-amber-400/10 text-amber-400">
+            !
+          </div>
+          <h1 className="mt-4 text-lg font-semibold">{org.name} is paused</h1>
+          <p className="mt-2 text-sm text-kos-muted">
+            This organization has been suspended by KOS. Reach out to support if
+            you think this is a mistake.
+          </p>
+          <a href="mailto:Theonlyrealoutis@gmail.com" className="kos-btn mt-5 inline-block">
+            Contact support
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   const orgs = await getUserOrgs(user.id);
+
+  // Fall back to the connected Discord server's icon when no logo is set.
+  let logoUrl = org.logoUrl;
+  if (!logoUrl && guildIds.length) {
+    const g = await prisma.guild.findFirst({
+      where: { id: { in: guildIds }, iconUrl: { not: null } },
+      select: { iconUrl: true },
+    });
+    logoUrl = g?.iconUrl ?? null;
+  }
 
   const ctx = {
     slug: org.slug,
     name: org.name,
-    logoUrl: org.logoUrl,
+    logoUrl,
     isOwner,
     isSuperAdmin: user.isSuperAdmin,
     permissions,

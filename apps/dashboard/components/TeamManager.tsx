@@ -97,6 +97,12 @@ export function TeamManager() {
     mutate();
   }
 
+  async function revokeInvite(id: string) {
+    if (!confirm("Revoke this invite link? It will stop working.")) return;
+    await fetch(`/api/${slug}/invites/${id}`, { method: "DELETE" });
+    mutate();
+  }
+
   async function transfer(userId: string, name: string) {
     if (!confirm(`Transfer ownership to ${name}? You'll become an Admin.`)) return;
     const res = await fetch(`/api/${slug}/transfer-owner`, {
@@ -212,9 +218,19 @@ export function TeamManager() {
           <SectionTitle>Pending invites</SectionTitle>
           <div className="space-y-2">
             {data.invites.map((i) => (
-              <div key={i.id} className="flex items-center justify-between rounded-xl border border-kos-border bg-kos-panel/50 p-3 text-sm">
+              <div key={i.id} className="flex items-center justify-between gap-3 rounded-xl border border-kos-border bg-kos-panel/50 p-3 text-sm">
                 <span className="text-kos-muted">Link · {i.roleName}</span>
-                <span className="text-[11px] text-kos-muted">expires {new Date(i.expiresAt).toLocaleDateString()}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-kos-muted">expires {new Date(i.expiresAt).toLocaleDateString()}</span>
+                  {canManage ? (
+                    <button
+                      className="text-xs text-kos-muted hover:text-red-400"
+                      onClick={() => revokeInvite(i.id)}
+                    >
+                      Revoke
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>

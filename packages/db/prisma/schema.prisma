@@ -361,6 +361,8 @@ model Organization {
   bannerUrl   String?
   description String?
   ownerId     String
+  /// When set, the org is suspended by a KOS super-admin (access blocked).
+  suspendedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

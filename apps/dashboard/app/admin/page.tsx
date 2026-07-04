@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
 import { PageTitle, StatCard } from "@/components/ui";
+import { OrgAdminActions } from "@/components/admin/OrgAdminActions";
 import { fmtDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -48,13 +49,19 @@ export default async function AdminOrgsPage() {
               <th className="px-4 py-3 text-right">Members</th>
               <th className="px-4 py-3 text-right">Servers</th>
               <th className="hidden px-4 py-3 md:table-cell">Created</th>
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {orgs.map((o) => (
               <tr key={o.id} className="border-t border-kos-border/60">
                 <td className="px-4 py-3">
-                  <div className="font-medium">{o.name}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{o.name}</span>
+                    {o.suspendedAt ? (
+                      <span className="kos-badge border-amber-400/30 text-amber-400">paused</span>
+                    ) : null}
+                  </div>
                   <Link href={`/${o.slug}/dashboard`} className="text-xs text-kos-muted hover:text-kos-fg">
                     /{o.slug}
                   </Link>
@@ -68,11 +75,14 @@ export default async function AdminOrgsPage() {
                 <td className="px-4 py-3 text-right">{o._count.members}</td>
                 <td className="px-4 py-3 text-right">{o._count.guildConnections}</td>
                 <td className="hidden px-4 py-3 text-kos-muted md:table-cell">{fmtDate(o.createdAt)}</td>
+                <td className="px-4 py-3">
+                  <OrgAdminActions id={o.id} name={o.name} suspended={Boolean(o.suspendedAt)} />
+                </td>
               </tr>
             ))}
             {orgs.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-kos-muted">
+                <td colSpan={7} className="px-4 py-8 text-center text-kos-muted">
                   No organizations yet.
                 </td>
               </tr>
