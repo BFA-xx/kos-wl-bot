@@ -5,13 +5,16 @@ import { useRouter } from "next/navigation";
 import { OrgProvider, type OrgClientContext } from "@/lib/org-context";
 import { OrgSidebarContent } from "./OrgSidebar";
 import { ThemeToggle } from "./ThemeToggle";
+import { AnnouncementBanner, type BannerItem } from "./AnnouncementBanner";
 import { IconMenu, IconClose, IconSearch } from "./icons";
 
 export function OrgShell({
   ctx,
+  announcements = [],
   children,
 }: {
   ctx: OrgClientContext;
+  announcements?: BannerItem[];
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -82,6 +85,7 @@ export function OrgShell({
           </header>
 
           <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+            <AnnouncementBanner items={announcements} />
             <div className="kos-fade">{children}</div>
           </main>
 

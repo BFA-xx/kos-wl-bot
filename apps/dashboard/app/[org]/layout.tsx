@@ -51,6 +51,14 @@ export default async function OrgLayout({
 
   const orgs = await getUserOrgs(user.id);
 
+  // Active announcements: platform-wide (null) or targeted at this org.
+  const announcements = await prisma.announcement.findMany({
+    where: { active: true, OR: [{ organizationId: null }, { organizationId: org.id }] },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+    select: { id: true, title: true, body: true, level: true },
+  });
+
   // Fall back to the connected Discord server's icon when no logo is set.
   let logoUrl = org.logoUrl;
   if (!logoUrl && guildIds.length) {
@@ -76,5 +84,9 @@ export default async function OrgLayout({
     orgs: orgs.map((o) => ({ slug: o.slug, name: o.name, logoUrl: o.logoUrl })),
   };
 
-  return <OrgShell ctx={ctx}>{children}</OrgShell>;
+  return (
+    <OrgShell ctx={ctx} announcements={announcements}>
+      {children}
+    </OrgShell>
+  );
 }

@@ -16,8 +16,11 @@ export async function POST(req: Request) {
     const text = String(body.body ?? "").trim();
     if (!title || !text) return NextResponse.json({ error: "Title and body required." }, { status: 400 });
     const level = (LEVELS.includes(body.level) ? body.level : "INFO") as AnnouncementLevel;
+    const organizationId = body.organizationId ? String(body.organizationId) : null;
 
-    const a = await prisma.announcement.create({ data: { title, body: text, level, active: true } });
+    const a = await prisma.announcement.create({
+      data: { title, body: text, level, active: true, organizationId },
+    });
     return NextResponse.json({ ok: true, announcement: a });
   } catch (err) {
     if (err instanceof AccessError) return NextResponse.json({ error: err.message }, { status: err.status });

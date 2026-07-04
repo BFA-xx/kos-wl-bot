@@ -500,14 +500,17 @@ model FeatureFlag {
   @@map("feature_flags")
 }
 
-/// Platform-wide announcement banner (Super Admin).
+/// Announcement banner (Super Admin). Null organizationId = all orgs.
 model Announcement {
-  id        String            @id @default(cuid())
-  title     String
-  body      String
-  level     AnnouncementLevel @default(INFO)
-  active    Boolean           @default(true)
-  createdAt DateTime          @default(now())
+  id             String            @id @default(cuid())
+  title          String
+  body           String
+  level          AnnouncementLevel @default(INFO)
+  active         Boolean           @default(true)
+  /// Target a single org, or null to broadcast to every org.
+  organizationId String?
+  createdAt      DateTime          @default(now())
 
+  @@index([organizationId])
   @@map("announcements")
 }
