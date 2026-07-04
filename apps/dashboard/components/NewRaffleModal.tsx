@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useOrg } from "@/lib/org-context";
 import { ImageDrop } from "./ImageDrop";
@@ -56,6 +57,15 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
     fetcher(`/api/${slug}/guilds/${guildId}/meta`).then(setMeta);
   }, [slug, guildId]);
 
+  // Lock the page behind the modal so only the dialog scrolls.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   function toggle(list: string[], v: string, set: (x: string[]) => void) {
     set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
   }
@@ -99,8 +109,10 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm">
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/70 backdrop-blur-sm">
       <div className="flex min-h-full items-start justify-center p-4">
         <form
           onSubmit={submit}
@@ -263,7 +275,8 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
         </p>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
