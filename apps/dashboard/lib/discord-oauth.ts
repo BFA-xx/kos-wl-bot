@@ -1,19 +1,18 @@
-import { prisma } from "@/lib/db";
-
 /**
- * Discord OAuth2 helpers. Authorizes a user if they are a member of the
- * configured guild AND (are in the allowlist, or hold a manager role). If
- * neither an allowlist nor manager roles are configured yet, any guild member
- * is allowed (so the owner can get in during setup — lock down afterwards).
+ * Discord OAuth2 helpers (Phase 2).
+ *
+ * Login authenticates ANY Discord user — access to a specific organization is
+ * enforced separately by membership + permissions (see lib/access.ts). We
+ * request `guilds` so the linking flow can list servers the user manages, and
+ * store refresh tokens so we can call Discord on their behalf later.
  */
-export const OAUTH_SCOPES = ["identify", "guilds.members.read"];
+export const OAUTH_SCOPES = ["identify", "email", "guilds", "guilds.members.read"];
+
+/** Discord permission bit for MANAGE_GUILD. */
+const MANAGE_GUILD = 1n << 5n; // 0x20
 
 export function oauthConfigured(): boolean {
   return Boolean(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET);
-}
-
-function guildId(): string | undefined {
-  return process.env.DISCORD_GUILD_ID || process.env.DASHBOARD_GUILD_ID || undefined;
 }
 
 export function buildAuthUrl(redirectUri: string, state: string): string {
@@ -28,14 +27,36 @@ export function buildAuthUrl(redirectUri: string, state: string): string {
   return `https://discord.com/oauth2/authorize?${params.toString()}`;
 }
 
-interface TokenResponse {
+export interface TokenResponse {
   access_token: string;
+  refresh_token: string;
+  expires_in: number; // seconds
   token_type: string;
+  scope: string;
 }
 
 export async function exchangeCode(
   code: string,
   redirectUri: string,
+): Promise<TokenResponse | null> {
+  return tokenRequest({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+  });
+}
+
+export async function refreshAccessToken(
+  refreshToken: string,
+): Promise<TokenResponse | null> {
+  return tokenRequest({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+  });
+}
+
+async function tokenRequest(
+  fields: Record<string, string>,
 ): Promise<TokenResponse | null> {
   const res = await fetch("https://discord.com/api/oauth2/token", {
     method: "POST",
@@ -43,9 +64,7 @@ export async function exchangeCode(
     body: new URLSearchParams({
       client_id: process.env.DISCORD_CLIENT_ID!,
       client_secret: process.env.DISCORD_CLIENT_SECRET!,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: redirectUri,
+      ...fields,
     }),
   });
   if (!res.ok) return null;
@@ -56,6 +75,8 @@ export interface DiscordUser {
   id: string;
   username: string;
   global_name?: string | null;
+  avatar?: string | null;
+  email?: string | null;
 }
 
 export async function fetchUser(token: string): Promise<DiscordUser | null> {
@@ -66,44 +87,80 @@ export async function fetchUser(token: string): Promise<DiscordUser | null> {
   return (await res.json()) as DiscordUser;
 }
 
-interface GuildMember {
-  roles: string[];
+export interface DiscordGuildSummary {
+  id: string;
+  name: string;
+  icon: string | null;
+  owner: boolean;
+  permissions: string; // stringified bitfield
 }
 
-/** Authorize the user; returns { ok, reason }. */
-export async function authorizeUser(
-  token: string,
-  userId: string,
-): Promise<{ ok: boolean; reason?: string }> {
-  const gid = guildId();
-  if (!gid) {
-    // No guild configured — allow any successful Discord login.
-    return { ok: true };
-  }
-
-  const res = await fetch(`https://discord.com/api/users/@me/guilds/${gid}/member`, {
+/** Guilds the user is in (from their token). */
+export async function fetchUserGuilds(token: string): Promise<DiscordGuildSummary[]> {
+  const res = await fetch("https://discord.com/api/users/@me/guilds", {
     headers: { authorization: `Bearer ${token}` },
   });
-  if (!res.ok) {
-    return { ok: false, reason: "You're not a member of this server." };
+  if (!res.ok) return [];
+  return (await res.json()) as DiscordGuildSummary[];
+}
+
+/** True if the user owns the guild or holds MANAGE_GUILD. */
+export function canManageGuild(g: DiscordGuildSummary): boolean {
+  if (g.owner) return true;
+  try {
+    return (BigInt(g.permissions) & MANAGE_GUILD) === MANAGE_GUILD;
+  } catch {
+    return false;
   }
-  const member = (await res.json()) as GuildMember;
+}
 
-  const allowlist = (process.env.DASHBOARD_ALLOWED_USER_IDS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (allowlist.includes(userId)) return { ok: true };
+/** The user's manageable guilds only, for the "connect a server" picker. */
+export async function fetchManageableGuilds(
+  token: string,
+): Promise<DiscordGuildSummary[]> {
+  return (await fetchUserGuilds(token)).filter(canManageGuild);
+}
 
-  const guild = await prisma.guild
-    .findUnique({ where: { id: gid }, select: { managerRoleIds: true } })
-    .catch(() => null);
-  const managerRoleIds = guild?.managerRoleIds ?? [];
+export function avatarUrl(user: DiscordUser): string | null {
+  if (!user.avatar) return null;
+  const ext = user.avatar.startsWith("a_") ? "gif" : "png";
+  return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${ext}?size=128`;
+}
 
-  if (managerRoleIds.some((r) => member.roles.includes(r))) return { ok: true };
+export function guildIconUrl(g: { id: string; icon: string | null }): string | null {
+  if (!g.icon) return null;
+  return `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=64`;
+}
 
-  // Unconfigured: allow any guild member during initial setup.
-  if (allowlist.length === 0 && managerRoleIds.length === 0) return { ok: true };
+/**
+ * Bot invite URL. If a guildId is given, Discord preselects that server and
+ * hides the picker so the owner just clicks "Authorize".
+ */
+export function botInviteUrl(guildId?: string): string {
+  const clientId = process.env.DISCORD_CLIENT_ID ?? "";
+  // View Channels, Send Messages, Embed Links, Attach Files, Read History,
+  // Mention Everyone, Add Reactions, Use External Emojis, Manage Messages.
+  const params = new URLSearchParams({
+    client_id: clientId,
+    scope: "bot applications.commands",
+    permissions: "519232",
+  });
+  if (guildId) {
+    params.set("guild_id", guildId);
+    params.set("disable_guild_select", "true");
+  }
+  return `https://discord.com/oauth2/authorize?${params.toString()}`;
+}
 
-  return { ok: false, reason: "You don't have a manager role for the dashboard." };
+/**
+ * Verify the KOS bot is present in a guild using the BOT token (server-side).
+ * 200 ⇒ the bot is a member.
+ */
+export async function botIsInGuild(guildId: string): Promise<boolean> {
+  const botToken = process.env.DISCORD_BOT_TOKEN || process.env.BOT_TOKEN;
+  if (!botToken) return false;
+  const res = await fetch(`https://discord.com/api/guilds/${guildId}`, {
+    headers: { authorization: `Bot ${botToken}` },
+  });
+  return res.ok;
 }

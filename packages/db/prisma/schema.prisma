@@ -74,20 +74,35 @@ model Guild {
   @@map("guilds")
 }
 
-/// A Discord user seen by the bot (global identity).
+/// A Discord user seen by the bot (global identity). Also the dashboard's
+/// authenticated identity once they sign in with Discord (Phase 2).
 model User {
-  id        String   @id // Discord user snowflake
-  username  String
+  id         String   @id // Discord user snowflake
+  username   String
   globalName String?
-  avatarUrl String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  avatarUrl  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // --- Dashboard auth (Phase 2, all optional so the bot is unaffected) ---
+  email          String?
+  /// OAuth2 tokens, encrypted at rest (AES-256-GCM, WALLET_ENCRYPTION_KEY).
+  accessToken    String?
+  refreshToken   String?
+  tokenExpiresAt DateTime?
+  /// KOS staff flag, seeded from SUPER_ADMIN_DISCORD_IDS on login.
+  isSuperAdmin   Boolean   @default(false)
+  lastLoginAt    DateTime?
 
   participants   Participant[]
   winners        Winner[]
   wallets        Wallet[]
   walletProfiles WalletProfile[]
   blacklists     Blacklist[]
+
+  // Phase 2 organization relations.
+  ownedOrgs   Organization[]       @relation("OrgOwner")
+  memberships OrganizationMember[]
 
   @@map("users")
 }
@@ -124,13 +139,13 @@ model Raffle {
   endAt   DateTime
 
   /// Channel where the live raffle embed is posted.
-  channelId String?
+  channelId         String?
   /// Message id of the live raffle embed (for live updates).
-  messageId String?
+  messageId         String?
   /// Channel where the winner announcement is posted.
   announceChannelId String?
   /// Channel where the proof package is delivered.
-  proofChannelId String?
+  proofChannelId    String?
 
   bannerUrl   String?
   externalUrl String?
@@ -139,7 +154,7 @@ model Raffle {
   requirements Json?
 
   /// Whether winners should be DMed a wallet collection form.
-  collectWallets Boolean     @default(true)
+  collectWallets Boolean       @default(true)
   walletChains   WalletChain[] @default([ETHEREUM])
 
   entryCount Int @default(0)
@@ -153,23 +168,23 @@ model Raffle {
   startPinged Boolean @default(false)
 
   /// Hex commitment of the seed used for the verifiable draw.
-  drawSeed   String?
+  drawSeed     String?
   drawSeedHash String?
 
   createdById     String
   createdByName   String?
   createdByAvatar String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  endedAt     DateTime?
-  drawnAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  endedAt         DateTime?
+  drawnAt         DateTime?
 
-  guild        Guild         @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  guild         Guild         @relation(fields: [guildId], references: [id], onDelete: Cascade)
   eligibleRoles RaffleRole[]
-  participants Participant[]
-  winners      Winner[]
-  proof        Proof?
-  logs         Log[]
+  participants  Participant[]
+  winners       Winner[]
+  proof         Proof?
+  logs          Log[]
 
   @@index([guildId, status])
   @@index([status, endAt])
@@ -204,8 +219,8 @@ model Participant {
   flagged          Boolean   @default(false)
   flagReason       String?
 
-  raffle Raffle @relation(fields: [raffleId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  raffle Raffle  @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   winner Winner?
 
   @@unique([raffleId, userId])
@@ -303,4 +318,194 @@ model Log {
   @@index([guildId, createdAt])
   @@index([raffleId])
   @@map("logs")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — Multi-tenant platform (Organizations)
+//
+// All models below are additive. The bot never reads or writes them, so the
+// existing single-tenant bot keeps working unchanged. Isolation is enforced in
+// the dashboard by resolving Guild -> GuildConnection -> Organization.
+// ---------------------------------------------------------------------------
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  SCALE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+enum OrgMemberStatus {
+  INVITED
+  ACTIVE
+}
+
+enum AnnouncementLevel {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+/// A community/tenant. Owns all of its resources (via connected guilds).
+model Organization {
+  id          String   @id @default(cuid())
+  /// Vanity handle used in the dashboard URL space (/[slug]/...).
+  slug        String   @unique
+  name        String
+  logoUrl     String?
+  bannerUrl   String?
+  description String?
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner            User                 @relation("OrgOwner", fields: [ownerId], references: [id])
+  members          OrganizationMember[]
+  roles            OrganizationRole[]
+  invites          OrganizationInvite[]
+  guildConnections GuildConnection[]
+  subscription     Subscription?
+  auditLogs        AuditLog[]
+
+  @@index([ownerId])
+  @@map("organizations")
+}
+
+/// A user's membership in an organization, with an assigned role.
+model OrganizationMember {
+  id             String          @id @default(cuid())
+  organizationId String
+  userId         String
+  roleId         String
+  status         OrgMemberStatus @default(ACTIVE)
+  invitedById    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         OrganizationRole @relation(fields: [roleId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("organization_members")
+}
+
+/// A role within an organization, carrying a set of permission strings.
+model OrganizationRole {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  /// Canonical permission strings (see @kos/db permissions.ts).
+  permissions    String[] @default([])
+  /// Built-in roles (Owner/Admin/Moderator/Collab Manager/Viewer).
+  isSystem       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      OrganizationMember[]
+  invites      OrganizationInvite[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("organization_roles")
+}
+
+/// A pending invite to join an organization (by Discord id or email).
+model OrganizationInvite {
+  id             String    @id @default(cuid())
+  organizationId String
+  discordUserId  String?
+  email          String?
+  roleId         String
+  token          String    @unique
+  invitedById    String
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role         OrganizationRole @relation(fields: [roleId], references: [id])
+
+  @@index([organizationId])
+  @@index([discordUserId])
+  @@map("organization_invites")
+}
+
+/// Links a Discord server (guild) to an organization. A guild belongs to at
+/// most one org (@unique guildId) — this is the isolation anchor.
+model GuildConnection {
+  id                String   @id @default(cuid())
+  organizationId    String
+  guildId           String   @unique
+  connectedById     String
+  ownershipVerified Boolean  @default(false)
+  isPrimary         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("guild_connections")
+}
+
+/// An organization's subscription (scaffold — every org starts FREE/ACTIVE).
+model Subscription {
+  id               String             @id @default(cuid())
+  organizationId   String             @unique
+  plan             SubscriptionPlan   @default(FREE)
+  status           SubscriptionStatus @default(ACTIVE)
+  currentPeriodEnd DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+/// Organization-scoped audit trail (distinct from the bot's per-guild Log).
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  actorId        String?
+  action         String
+  targetType     String?
+  targetId       String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@map("audit_logs")
+}
+
+/// Global feature flags (Super Admin).
+model FeatureFlag {
+  key         String   @id
+  enabled     Boolean  @default(false)
+  description String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@map("feature_flags")
+}
+
+/// Platform-wide announcement banner (Super Admin).
+model Announcement {
+  id        String            @id @default(cuid())
+  title     String
+  body      String
+  level     AnnouncementLevel @default(INFO)
+  active    Boolean           @default(true)
+  createdAt DateTime          @default(now())
+
+  @@map("announcements")
 }

@@ -11,14 +11,20 @@ export async function GET(req: NextRequest) {
   const base = process.env.DASHBOARD_URL || req.nextUrl.origin;
   const redirectUri = `${base}/api/auth/discord/callback`;
   const state = crypto.randomUUID();
+  const next = req.nextUrl.searchParams.get("next");
 
   const res = NextResponse.redirect(buildAuthUrl(redirectUri, state));
-  res.cookies.set("kos_oauth_state", state, {
+  const cookieOpts = {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 600,
-  });
+  };
+  res.cookies.set("kos_oauth_state", state, cookieOpts);
+  // Carry the post-login destination across the Discord round-trip.
+  if (next && next.startsWith("/") && !next.startsWith("//")) {
+    res.cookies.set("kos_oauth_next", next, cookieOpts);
+  }
   return res;
 }
