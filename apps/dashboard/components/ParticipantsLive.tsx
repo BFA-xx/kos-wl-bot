@@ -3,6 +3,7 @@
 import useSWR from "swr";
 import { useState } from "react";
 import { fmtDate } from "@/lib/format";
+import { useOrg } from "@/lib/org-context";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -22,9 +23,10 @@ interface Data {
 }
 
 export function ParticipantsLive({ raffleId }: { raffleId: number }) {
+  const { slug } = useOrg();
   // Poll every 4s while a raffle is live so entries stream in.
   const { data } = useSWR<Data>(
-    `/api/raffles/${raffleId}/participants`,
+    `/api/${slug}/raffles/${raffleId}/participants`,
     fetcher,
     { refreshInterval: 4000 },
   );

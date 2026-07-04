@@ -19,6 +19,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
+    "migrate:orgs": "tsx scripts/migrate-to-orgs.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "prisma": {

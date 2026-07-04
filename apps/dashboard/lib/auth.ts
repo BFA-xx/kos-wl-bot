@@ -1,27 +1,80 @@
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/db";
+import { verifySession, type SessionPayload } from "@/lib/session";
+import { encryptSecret, decryptSecret } from "@/lib/crypto";
+import { refreshAccessToken } from "@/lib/discord-oauth";
+import type { User } from "@prisma/client";
 
 export const SESSION_COOKIE = "kos_session";
 
-/**
- * The dashboard uses a simple shared-secret session model:
- *  - DASHBOARD_PASSWORD: what an operator types on the login page.
- *  - DASHBOARD_SESSION_TOKEN: an opaque long random value stored in the cookie
- *    and compared on every request.
- *
- * For multi-user / audited access, swap this for Discord OAuth (see docs).
- */
-export function expectedToken(): string | undefined {
+/** The HMAC secret used to sign/verify session cookies. */
+export function sessionSecret(): string | undefined {
   return process.env.DASHBOARD_SESSION_TOKEN;
 }
 
-export function isAuthed(): boolean {
-  const token = expectedToken();
-  if (!token) return true; // auth disabled (e.g. behind a VPN) — see docs
-  return cookies().get(SESSION_COOKIE)?.value === token;
+/** Discord IDs granted KOS super-admin (Super Admin console). */
+export function superAdminIds(): string[] {
+  return (process.env.SUPER_ADMIN_DISCORD_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
-export function checkPassword(password: string): boolean {
-  const expected = process.env.DASHBOARD_PASSWORD;
-  if (!expected) return false;
-  return password === expected;
+export function isSuperAdminId(id: string): boolean {
+  return superAdminIds().includes(id);
+}
+
+/**
+ * The `isSuperAdmin` value to write on login. When the allowlist is configured
+ * it's the source of truth (grants/revokes). When it's UNSET we return `{}` so
+ * a login never wipes a flag set another way (e.g. the migration) — this avoids
+ * locking the owner out of /admin if the env var isn't deployed yet.
+ */
+export function superAdminPatch(id: string): { isSuperAdmin?: boolean } {
+  const ids = superAdminIds();
+  if (ids.length === 0) return {};
+  return { isSuperAdmin: ids.includes(id) };
+}
+
+/** Read + verify the signed session cookie (server-side). */
+export async function getSession(): Promise<SessionPayload | null> {
+  const secret = sessionSecret();
+  if (!secret) return null;
+  const token = cookies().get(SESSION_COOKIE)?.value;
+  return verifySession(token, secret);
+}
+
+/** The logged-in User row, or null. */
+export async function getSessionUser(): Promise<User | null> {
+  const session = await getSession();
+  if (!session?.sub) return null;
+  return prisma.user.findUnique({ where: { id: session.sub } });
+}
+
+/**
+ * Return a currently-valid Discord access token for a user, refreshing it via
+ * the stored refresh token if it's expired (and persisting the rotated tokens).
+ * Returns null if the user never linked or the refresh fails.
+ */
+export async function getValidAccessToken(userId: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user?.accessToken) return null;
+
+  const notExpired =
+    user.tokenExpiresAt && user.tokenExpiresAt.getTime() - 60_000 > Date.now();
+  if (notExpired) return decryptSecret(user.accessToken);
+
+  if (!user.refreshToken) return null;
+  const refreshed = await refreshAccessToken(decryptSecret(user.refreshToken));
+  if (!refreshed) return null;
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      accessToken: encryptSecret(refreshed.access_token),
+      refreshToken: encryptSecret(refreshed.refresh_token),
+      tokenExpiresAt: new Date(Date.now() + refreshed.expires_in * 1000),
+    },
+  });
+  return refreshed.access_token;
 }
