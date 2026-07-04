@@ -28,6 +28,9 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
   const [description, setDescription] = useState("");
   const [spots, setSpots] = useState(5);
   const [channelId, setChannelId] = useState("");
+  const [announceChannelId, setAnnounceChannelId] = useState("");
+  const [proofChannelId, setProofChannelId] = useState("");
+  const [tasks, setTasks] = useState<{ label: string; url: string }[]>([]);
   const [roleIds, setRoleIds] = useState<string[]>([]);
   const [roleMatchMode, setRoleMatchMode] = useState("ANY");
   const [scheduled, setScheduled] = useState(false);
@@ -99,6 +102,9 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
         requireWallet,
         walletChains: chains,
         bannerUrl,
+        announceChannelId,
+        proofChannelId,
+        tasks: tasks.filter((t) => t.label.trim()),
       }),
     });
     const body = await res.json().catch(() => ({}));
@@ -212,6 +218,69 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
               </select>
             </Field>
           ) : null}
+
+          {meta?.hasBotToken ? (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Winners channel (optional)">
+                <select className="kos-input" value={announceChannelId} onChange={(e) => setAnnounceChannelId(e.target.value)}>
+                  <option value="">Same as raffle</option>
+                  {meta.channels.map((c) => (
+                    <option key={c.id} value={c.id}>#{c.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Proof channel (optional)">
+                <select className="kos-input" value={proofChannelId} onChange={(e) => setProofChannelId(e.target.value)}>
+                  <option value="">Same as winners</option>
+                  {meta.channels.map((c) => (
+                    <option key={c.id} value={c.id}>#{c.name}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          ) : null}
+
+          <Field label="Social tasks (optional)">
+            <div className="space-y-2">
+              {tasks.map((t, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    className="kos-input"
+                    placeholder="Label (e.g. Follow @KOS)"
+                    value={t.label}
+                    onChange={(e) => setTasks(tasks.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
+                  />
+                  <input
+                    className="kos-input"
+                    placeholder="https://… (optional)"
+                    value={t.url}
+                    onChange={(e) => setTasks(tasks.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setTasks(tasks.filter((_, j) => j !== i))}
+                    className="shrink-0 rounded-lg px-2 text-kos-muted hover:text-red-400"
+                    aria-label="Remove task"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              {tasks.length < 10 ? (
+                <button
+                  type="button"
+                  onClick={() => setTasks([...tasks, { label: "", url: "" }])}
+                  className="kos-btn text-xs"
+                >
+                  + Add task
+                </button>
+              ) : null}
+              <p className="text-[11px] text-kos-muted/70">
+                A task with a link shows as a button (Follow / Like / Join). Without a link it's a
+                text step (e.g. "Comment KUON"). Off-platform tasks are honor-system.
+              </p>
+            </div>
+          </Field>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Start">

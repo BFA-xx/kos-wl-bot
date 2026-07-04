@@ -75,10 +75,24 @@ export async function POST(req: Request, { params }: { params: { org: string } }
         roleName: String(r.roleName ?? r.roleId),
       }));
 
+    // Social / off-platform tasks (label + optional URL) → requirements.tasks.
+    const tasks = (Array.isArray(b.tasks) ? b.tasks : [])
+      .filter((t: { label?: string }) => t?.label && String(t.label).trim())
+      .slice(0, 10)
+      .map((t: { label: string; url?: string }) => ({
+        label: String(t.label).trim().slice(0, 80),
+        ...(t.url && /^https?:\/\//i.test(t.url) ? { url: String(t.url) } : {}),
+      }));
+
+    const inScope = (id: unknown) => (typeof id === "string" && /^\d{5,25}$/.test(id) ? id : null);
+
     const raffle = await prisma.raffle.create({
       data: {
         guildId,
         channelId,
+        announceChannelId: inScope(b.announceChannelId),
+        proofChannelId: inScope(b.proofChannelId),
+        requirements: tasks.length ? { tasks } : undefined,
         projectName,
         title,
         description: b.description ? String(b.description) : null,
