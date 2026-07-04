@@ -48,8 +48,11 @@ export async function POST(req: Request, { params }: { params: { org: string } }
     }
     if (existing) return NextResponse.json({ ok: true, alreadyConnected: true });
 
-    // (b) Bot presence check.
-    if (!(await botIsInGuild(guildId))) {
+    // (b) Bot presence check — only when a bot token is configured. Without it
+    // we can't verify, so we trust the user invited the bot (the UI shows the
+    // invite link) rather than block onboarding entirely.
+    const botToken = process.env.DISCORD_BOT_TOKEN || process.env.BOT_TOKEN;
+    if (botToken && !(await botIsInGuild(guildId))) {
       return NextResponse.json(
         { error: "bot_not_in_server", inviteUrl: botInviteUrl(guildId) },
         { status: 409 },

@@ -68,6 +68,9 @@ export function ServersManager() {
 
   const connected = data?.connected ?? [];
   const addable = (data?.guilds ?? []).filter((g) => !g.connectedHere);
+  // Bot invite link with the server preselected.
+  const inviteFor = (id: string) =>
+    data?.inviteBase ? `${data.inviteBase}&guild_id=${id}&disable_guild_select=true` : "#";
 
   return (
     <div className="space-y-5">
@@ -125,6 +128,7 @@ export function ServersManager() {
           ) : addable.length === 0 ? (
             <Empty>No more servers you manage. Only servers where you're owner/admin appear here.</Empty>
           ) : (
+            <>
             <div className="space-y-2">
               {addable.map((g) => (
                 <div key={g.id} className="flex items-center gap-3 rounded-xl border border-kos-border bg-kos-panel/50 p-3">
@@ -143,6 +147,17 @@ export function ServersManager() {
                       {g.connectedElsewhere ? " · connected to another org" : ""}
                     </div>
                   </div>
+                  {!g.connectedElsewhere ? (
+                    <a
+                      href={inviteFor(g.id)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="kos-btn whitespace-nowrap"
+                      title="Add the KOS bot to this server"
+                    >
+                      Invite bot ↗
+                    </a>
+                  ) : null}
                   <button
                     className="kos-btn-primary inline-flex items-center gap-1.5"
                     onClick={() => connect(g.id)}
@@ -153,6 +168,11 @@ export function ServersManager() {
                 </div>
               ))}
             </div>
+            <p className="mt-3 text-[11px] text-kos-muted/80">
+              Step 1: click <strong>Invite bot</strong> and authorize KOS in your
+              server. Step 2: click <strong>Connect</strong>.
+            </p>
+            </>
           )}
           {msg ? (
             <p className="mt-3 flex items-center gap-1.5 text-sm text-kos-muted">
