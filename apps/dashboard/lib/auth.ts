@@ -25,15 +25,13 @@ export function isSuperAdminId(id: string): boolean {
 }
 
 /**
- * The `isSuperAdmin` value to write on login. When the allowlist is configured
- * it's the source of truth (grants/revokes). When it's UNSET we return `{}` so
- * a login never wipes a flag set another way (e.g. the migration) — this avoids
- * locking the owner out of /admin if the env var isn't deployed yet.
+ * The `isSuperAdmin` value to write on login. The env allowlist is GRANT-ONLY:
+ * an id in SUPER_ADMIN_DISCORD_IDS becomes super-admin, but login never revokes
+ * (so a grant made via the /admin Users toggle isn't wiped, and the owner can't
+ * be locked out). Revoking is done in the UI.
  */
 export function superAdminPatch(id: string): { isSuperAdmin?: boolean } {
-  const ids = superAdminIds();
-  if (ids.length === 0) return {};
-  return { isSuperAdmin: ids.includes(id) };
+  return superAdminIds().includes(id) ? { isSuperAdmin: true } : {};
 }
 
 /** Read + verify the signed session cookie (server-side). */
