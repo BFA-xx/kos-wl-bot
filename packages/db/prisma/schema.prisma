@@ -171,6 +171,11 @@ model Raffle {
   drawSeed     String?
   drawSeedHash String?
 
+  /// Dashboard-requested reroll, picked up + cleared by the bot scheduler.
+  /// Shape: { mode, count?, userIds?, actorId }.
+  rerollRequest    Json?
+  rerollRequestedAt DateTime?
+
   createdById     String
   createdByName   String?
   createdByAvatar String?

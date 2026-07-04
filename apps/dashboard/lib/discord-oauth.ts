@@ -152,6 +152,48 @@ export function botInviteUrl(guildId?: string): string {
   return `https://discord.com/oauth2/authorize?${params.toString()}`;
 }
 
+function botToken(): string | undefined {
+  return process.env.DISCORD_BOT_TOKEN || process.env.BOT_TOKEN;
+}
+
+export function hasBotToken(): boolean {
+  return Boolean(botToken());
+}
+
+/** Text + announcement channels of a guild (needs the bot token). */
+export async function fetchGuildChannels(
+  guildId: string,
+): Promise<{ id: string; name: string }[]> {
+  const token = botToken();
+  if (!token) return [];
+  const res = await fetch(`https://discord.com/api/guilds/${guildId}/channels`, {
+    headers: { authorization: `Bot ${token}` },
+  });
+  if (!res.ok) return [];
+  const all = (await res.json()) as { id: string; name: string; type: number; position: number }[];
+  return all
+    .filter((c) => c.type === 0 || c.type === 5) // text + announcement
+    .sort((a, b) => a.position - b.position)
+    .map((c) => ({ id: c.id, name: c.name }));
+}
+
+/** Assignable roles of a guild, excluding @everyone and bot-managed roles. */
+export async function fetchGuildRoles(
+  guildId: string,
+): Promise<{ id: string; name: string }[]> {
+  const token = botToken();
+  if (!token) return [];
+  const res = await fetch(`https://discord.com/api/guilds/${guildId}/roles`, {
+    headers: { authorization: `Bot ${token}` },
+  });
+  if (!res.ok) return [];
+  const all = (await res.json()) as { id: string; name: string; managed: boolean; position: number }[];
+  return all
+    .filter((r) => r.id !== guildId && !r.managed)
+    .sort((a, b) => b.position - a.position)
+    .map((r) => ({ id: r.id, name: r.name }));
+}
+
 /**
  * Verify the KOS bot is present in a guild using the BOT token (server-side).
  * 200 ⇒ the bot is a member.

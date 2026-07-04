@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { PageTitle, StatusBadge, Segmented, Empty } from "@/components/ui";
+import { NewRaffleModal } from "@/components/NewRaffleModal";
+import { useCan } from "@/lib/org-context";
+import { PERMISSIONS } from "@/lib/permissions";
 import { fmtDate } from "@/lib/format";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -30,6 +33,8 @@ const FILTERS = [
 export default function RafflesPage() {
   const { org } = useParams<{ org: string }>();
   const [status, setStatus] = useState("");
+  const [showNew, setShowNew] = useState(false);
+  const canCreate = useCan(PERMISSIONS.RAFFLE_CREATE);
   const { data } = useSWR<{ raffles: Raffle[] }>(
     `/api/${org}/raffles${status ? `?status=${status}` : ""}`,
     fetcher,
@@ -39,10 +44,20 @@ export default function RafflesPage() {
 
   return (
     <>
+      {showNew ? <NewRaffleModal onClose={() => setShowNew(false)} /> : null}
       <PageTitle
         title="Raffles"
         subtitle="Every whitelist raffle across your connected servers."
-        action={<Segmented options={FILTERS as any} value={status} onChange={setStatus} />}
+        action={
+          <>
+            <Segmented options={FILTERS as any} value={status} onChange={setStatus} />
+            {canCreate ? (
+              <button className="kos-btn-primary" onClick={() => setShowNew(true)}>
+                + New raffle
+              </button>
+            ) : null}
+          </>
+        }
       />
 
       {!data ? (

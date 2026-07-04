@@ -1,9 +1,9 @@
 import { type Client } from "discord.js";
-import { prisma, LogCategory, RaffleStatus } from "@kos/db";
+import { prisma, Prisma, LogCategory, RaffleStatus } from "@kos/db";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
-import { repostRaffleMessage } from "./raffleService.js";
-import { closeAndDraw } from "./winnerService.js";
+import { publishRaffleMessage, repostRaffleMessage } from "./raffleService.js";
+import { closeAndDraw, rerollWinners, type RerollMode } from "./winnerService.js";
 import { audit } from "./auditService.js";
 
 /**
@@ -40,6 +40,12 @@ export class Scheduler {
     this.running = true;
     const now = new Date();
     try {
+      // Post raffles created from the dashboard, and run dashboard reroll
+      // requests. This is how the Vercel dashboard drives the bot (they share
+      // only the DB — the dashboard can't reach the bot's local API).
+      await this.publishDashboardRaffles();
+      await this.processRerollRequests();
+
       // Open upcoming raffles whose start time has arrived.
       const toOpen = await prisma.raffle.findMany({
         where: { status: RaffleStatus.UPCOMING, startAt: { lte: now } },
@@ -77,6 +83,67 @@ export class Scheduler {
       logger.error({ err }, "scheduler tick failed");
     } finally {
       this.running = false;
+    }
+  }
+
+  /**
+   * Publish raffles the dashboard created (status DRAFT + a channel set). The
+   * dashboard writes the row; we set the real status and post it to Discord.
+   */
+  private async publishDashboardRaffles(): Promise<void> {
+    const drafts = await prisma.raffle.findMany({
+      where: { status: RaffleStatus.DRAFT, channelId: { not: null } },
+      select: { id: true, guildId: true, startAt: true },
+    });
+    for (const r of drafts) {
+      const status =
+        r.startAt.getTime() <= Date.now() ? RaffleStatus.LIVE : RaffleStatus.UPCOMING;
+      await prisma.raffle.update({ where: { id: r.id }, data: { status } });
+      const res = await publishRaffleMessage(this.client, r.id).catch((err) => {
+        logger.error({ err, raffleId: r.id }, "dashboard raffle publish threw");
+        return { ok: false as const, reason: "internal error" };
+      });
+      if (res.ok) {
+        logger.info({ raffleId: r.id }, "published dashboard-created raffle");
+      } else {
+        // Don't loop forever on a bad channel — cancel and surface the reason.
+        await prisma.raffle
+          .update({ where: { id: r.id }, data: { status: RaffleStatus.CANCELLED } })
+          .catch(() => undefined);
+        await audit({
+          guildId: r.guildId,
+          raffleId: r.id,
+          category: LogCategory.SYSTEM,
+          action: "PUBLISH_FAILED",
+          message: `Dashboard raffle could not be posted: ${res.reason ?? "unknown"}`,
+        }).catch(() => undefined);
+        logger.warn({ raffleId: r.id, reason: res.reason }, "dashboard raffle publish failed → cancelled");
+      }
+    }
+  }
+
+  /** Run reroll requests the dashboard wrote to the DB, then clear them. */
+  private async processRerollRequests(): Promise<void> {
+    const pending = await prisma.raffle.findMany({
+      where: { rerollRequestedAt: { not: null } },
+      select: { id: true, rerollRequest: true },
+    });
+    for (const r of pending) {
+      // Clear FIRST so a failure can't loop.
+      await prisma.raffle
+        .update({ where: { id: r.id }, data: { rerollRequest: Prisma.DbNull, rerollRequestedAt: null } })
+        .catch(() => undefined);
+      const req = (r.rerollRequest ?? {}) as {
+        mode?: RerollMode;
+        count?: number;
+        userIds?: string[];
+        actorId?: string;
+      };
+      await rerollWinners(this.client, r.id, req.actorId ?? "dashboard", {
+        mode: req.mode ?? "all",
+        count: req.count,
+        userIds: req.userIds,
+      }).catch((err) => logger.error({ err, raffleId: r.id }, "dashboard reroll failed"));
     }
   }
 }

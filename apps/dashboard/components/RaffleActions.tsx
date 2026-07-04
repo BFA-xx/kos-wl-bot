@@ -32,7 +32,7 @@ export function RaffleActions({
     setMsg(null);
     const res = await fetch(api(`/end`), { method: "POST" });
     setBusy(null);
-    setMsg(res.ok ? "Raffle ended and winners drawn." : "Failed — is the bot running?");
+    setMsg(res.ok ? "Ending now — the bot will draw winners in a few seconds." : "Failed to queue the end.");
     router.refresh();
   }
 
@@ -46,7 +46,7 @@ export function RaffleActions({
       body: JSON.stringify({ mode, count: mode === "multiple" ? count : undefined }),
     });
     setBusy(null);
-    setMsg(res.ok ? "Reroll complete." : "Reroll failed — raffle must be ENDED with spare entrants.");
+    setMsg(res.ok ? "Reroll queued — the bot will process it shortly." : "Reroll failed — raffle must be ENDED with spare entrants.");
     router.refresh();
   }
 
