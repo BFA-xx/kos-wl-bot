@@ -29,6 +29,7 @@ export interface PendingRaffle {
   walletChains: WalletChain[];
   collectWallets: boolean;
   hideEntries: boolean;
+  requireWallet: boolean;
   startPing: string;
   requirements: EntryRequirements | null;
   bannerUrl: string | null;

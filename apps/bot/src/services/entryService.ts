@@ -9,6 +9,7 @@ export type EnterOutcome =
   | { status: "entered"; entryCount: number; missingWalletChains: WalletChain[] }
   | { status: "duplicate" }
   | { status: "ineligible"; reasons: string[] }
+  | { status: "no_wallet"; chains: WalletChain[] }
   | { status: "closed" }
   | { status: "error" };
 
@@ -37,6 +38,14 @@ export async function enterRaffle(
   const eligibility = await evaluateEligibility(member, raffle);
   if (!eligibility.eligible) {
     return { status: "ineligible", reasons: eligibility.reasons };
+  }
+
+  // Hard wallet gate: must have a registered wallet for one of the chains.
+  if (raffle.requireWallet && raffle.walletChains.length > 0) {
+    const have = await prisma.walletProfile.count({
+      where: { userId: member.id, chain: { in: raffle.walletChains } },
+    });
+    if (have === 0) return { status: "no_wallet", chains: raffle.walletChains };
   }
 
   await upsertUser({

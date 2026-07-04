@@ -157,6 +157,10 @@ model Raffle {
   collectWallets Boolean       @default(true)
   walletChains   WalletChain[] @default([ETHEREUM])
 
+  /// When true, a user must have a registered wallet (for one of walletChains)
+  /// before they can enter.
+  requireWallet Boolean @default(false)
+
   entryCount Int @default(0)
 
   /// When true, the live embed hides the entry count / entrant list.

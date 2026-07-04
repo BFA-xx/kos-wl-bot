@@ -94,6 +94,7 @@ export async function handleRaffleCreateModal(interaction: ModalSubmitInteractio
     walletChains: [WalletChain.ETHEREUM],
     collectWallets: true,
     hideEntries: false,
+    requireWallet: false,
     startPing: "everyone",
     requirements: null,
     bannerUrl: takeBanner(interaction.user.id),
@@ -166,6 +167,11 @@ export async function handleRaffleWizardButton(interaction: ButtonInteraction) {
 
   if (parsed.action === Actions.RaffleToggleHide) {
     draft.hideEntries = !draft.hideEntries;
+    return interaction.update(buildPanel(nonce, draft));
+  }
+
+  if (parsed.action === Actions.RaffleToggleWallet) {
+    draft.requireWallet = !draft.requireWallet;
     return interaction.update(buildPanel(nonce, draft));
   }
 
@@ -439,6 +445,7 @@ async function publish(interaction: ButtonInteraction, nonce: string, draft: Pen
       collectWallets: draft.collectWallets,
       walletChains: draft.walletChains,
       hideEntries: draft.hideEntries,
+      requireWallet: draft.requireWallet,
       startPing: draft.startPing,
       roles: draft.roles,
     });
@@ -542,6 +549,10 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
       .setCustomId(buildId(Actions.RaffleToggleHide, nonce))
       .setLabel(draft.hideEntries ? "Entries: Hidden" : "Entries: Shown")
       .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(buildId(Actions.RaffleToggleWallet, nonce))
+      .setLabel(draft.requireWallet ? "Wallet: Required" : "Wallet: Optional")
+      .setStyle(draft.requireWallet ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(buildId(Actions.RaffleCyclePing, nonce))
       .setLabel(pingLabel(draft.startPing))

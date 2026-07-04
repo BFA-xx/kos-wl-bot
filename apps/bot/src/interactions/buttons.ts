@@ -85,6 +85,13 @@ async function handleEnter(interaction: ButtonInteraction, raffleId: number) {
           .map((r) => `• ${r}`)
           .join("\n")}`,
       );
+    case "no_wallet": {
+      const chains = result.chains.map(chainLabel).join(" / ");
+      return interaction.editReply(
+        `${KOS.emoji.cross} This raffle requires a wallet to enter. Add your **${chains}** ` +
+          `wallet with **/wallet register**, then click **Enter Giveaway** again.`,
+      );
+    }
     case "closed":
       return interaction.editReply("This raffle is not currently open for entries.");
     default:

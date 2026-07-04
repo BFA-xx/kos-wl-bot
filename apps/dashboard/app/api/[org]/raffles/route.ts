@@ -89,6 +89,7 @@ export async function POST(req: Request, { params }: { params: { org: string } }
         endAt,
         startPing: ["everyone", "here", "none"].includes(b.startPing) ? b.startPing : "everyone",
         hideEntries: Boolean(b.hideEntries),
+        requireWallet: Boolean(b.requireWallet),
         collectWallets: b.collectWallets !== false,
         walletChains: walletChains.length ? walletChains : ["ETHEREUM"],
         bannerUrl: b.bannerUrl ? String(b.bannerUrl) : null,

@@ -38,6 +38,7 @@ export interface CreateRaffleInput {
   collectWallets: boolean;
   walletChains: WalletChain[];
   hideEntries: boolean;
+  requireWallet: boolean;
   startPing: string;
   roles: { roleId: string; roleName: string }[];
 }
@@ -88,6 +89,7 @@ export async function createRaffle(
       collectWallets: input.collectWallets,
       walletChains: input.walletChains,
       hideEntries: input.hideEntries,
+      requireWallet: input.requireWallet,
       startPing: input.startPing,
       eligibleRoles: { create: input.roles },
     },

@@ -36,6 +36,7 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
   const [startPing, setStartPing] = useState("everyone");
   const [hideEntries, setHideEntries] = useState(false);
   const [collectWallets, setCollectWallets] = useState(true);
+  const [requireWallet, setRequireWallet] = useState(false);
   const [chains, setChains] = useState<string[]>(["ETHEREUM"]);
   const [bannerUrl, setBannerUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -95,6 +96,7 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
         startPing,
         hideEntries,
         collectWallets,
+        requireWallet,
         walletChains: chains,
         bannerUrl,
       }),
@@ -258,6 +260,10 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={collectWallets} onChange={(e) => setCollectWallets(e.target.checked)} />
               Collect winner wallets
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={requireWallet} onChange={(e) => setRequireWallet(e.target.checked)} />
+              Require wallet to enter
             </label>
           </div>
         </div>
