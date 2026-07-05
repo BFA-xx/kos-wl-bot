@@ -82,18 +82,25 @@ export function OrgSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           </Link>
         ) : null}
         <div className="flex items-center gap-2.5 px-3 py-1">
-          <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-kos-panel text-[11px] font-bold">
-            {org.user.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={org.user.avatarUrl} alt="" className="h-full w-full object-cover" />
-            ) : (
-              org.user.name.slice(0, 2).toUpperCase()
-            )}
-          </div>
-          <div className="min-w-0 leading-tight">
-            <div className="truncate text-xs font-medium">{org.user.name}</div>
-            <div className="text-[11px] text-kos-muted">{org.isOwner ? "Owner" : "Member"}</div>
-          </div>
+          <Link
+            href="/me"
+            onClick={onNavigate}
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg transition-opacity hover:opacity-80"
+            title="My KOS profile"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-kos-panel text-[11px] font-bold">
+              {org.user.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={org.user.avatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                org.user.name.slice(0, 2).toUpperCase()
+              )}
+            </div>
+            <div className="min-w-0 leading-tight">
+              <div className="truncate text-xs font-medium">{org.user.name}</div>
+              <div className="text-[11px] text-kos-muted">{org.isOwner ? "Owner" : "Member"} · My profile</div>
+            </div>
+          </Link>
           <form action="/api/auth/logout" method="post" className="ml-auto">
             <button
               className="rounded-lg p-1.5 text-kos-muted transition-colors hover:text-kos-fg"

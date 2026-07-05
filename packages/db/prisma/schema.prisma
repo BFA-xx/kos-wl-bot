@@ -104,6 +104,9 @@ model User {
   ownedOrgs   Organization[]       @relation("OrgOwner")
   memberships OrganizationMember[]
 
+  // Phase 3: linked external accounts (X, etc).
+  connectedAccounts ConnectedAccount[]
+
   @@map("users")
 }
 
@@ -177,7 +180,7 @@ model Raffle {
 
   /// Dashboard-requested reroll, picked up + cleared by the bot scheduler.
   /// Shape: { mode, count?, userIds?, actorId }.
-  rerollRequest    Json?
+  rerollRequest     Json?
   rerollRequestedAt DateTime?
 
   /// Set by the dashboard after an edit; the bot re-renders the live post.
@@ -365,9 +368,9 @@ enum AnnouncementLevel {
 
 /// A community/tenant. Owns all of its resources (via connected guilds).
 model Organization {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   /// Vanity handle used in the dashboard URL space (/[slug]/...).
-  slug        String   @unique
+  slug        String    @unique
   name        String
   logoUrl     String?
   bannerUrl   String?
@@ -375,8 +378,8 @@ model Organization {
   ownerId     String
   /// When set, the org is suspended by a KOS super-admin (access blocked).
   suspendedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   owner            User                 @relation("OrgOwner", fields: [ownerId], references: [id])
   members          OrganizationMember[]
@@ -510,6 +513,43 @@ model FeatureFlag {
   createdAt   DateTime @default(now())
 
   @@map("feature_flags")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 — Universal account linking (Task Verification Engine foundation)
+// ---------------------------------------------------------------------------
+
+enum AccountProvider {
+  X
+  TELEGRAM
+  GITHUB
+}
+
+/// An external account linked to a KOS user (X now; Telegram/GitHub reserved).
+/// One external account can belong to only ONE KOS user (anti-alt), and a user
+/// holds at most one account per provider.
+model ConnectedAccount {
+  id             String          @id @default(cuid())
+  userId         String
+  provider       AccountProvider
+  /// Provider-side stable id (e.g. X numeric user id).
+  externalId     String
+  /// Display handle at link time (without the @).
+  handle         String
+  /// OAuth tokens, encrypted at rest (AES-256-GCM, WALLET_ENCRYPTION_KEY).
+  accessToken    String?
+  refreshToken   String?
+  tokenExpiresAt DateTime?
+  metadata       Json?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalId])
+  @@unique([userId, provider])
+  @@index([userId])
+  @@map("connected_accounts")
 }
 
 /// Announcement banner (Super Admin). Null organizationId = all orgs.
