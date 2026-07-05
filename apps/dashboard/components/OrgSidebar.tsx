@@ -26,6 +26,7 @@ const NAV = [
   { seg: "dashboard", label: "Dashboard", Icon: IconGrid },
   { seg: "campaigns", label: "Campaigns", Icon: IconMegaphone },
   { seg: "raffles", label: "Raffles", Icon: IconTicket },
+  { seg: "tasks", label: "Tasks", Icon: IconCheck },
   { seg: "participants", label: "Participants", Icon: IconUsers },
   { seg: "wallets", label: "Wallets", Icon: IconWallet },
   { seg: "analytics", label: "Analytics", Icon: IconChart },

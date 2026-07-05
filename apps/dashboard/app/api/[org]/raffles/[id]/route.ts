@@ -114,6 +114,23 @@ export async function PATCH(
       data.eligibleRoles = { create: roles };
     }
 
+    // Replace verification-task gate if provided.
+    if (Array.isArray(b.verificationTaskIds)) {
+      const ids = b.verificationTaskIds.filter((x: unknown) => typeof x === "string").slice(0, 20);
+      const valid = ids.length
+        ? await prisma.taskDefinition.findMany({
+            where: { id: { in: ids }, organizationId: org.id, active: true },
+            select: { id: true },
+          })
+        : [];
+      await prisma.raffleTask.deleteMany({ where: { raffleId: id } });
+      if (valid.length) {
+        await prisma.raffleTask.createMany({
+          data: valid.map((t) => ({ raffleId: id, taskId: t.id, required: true })),
+        });
+      }
+    }
+
     // If already posted, ask the bot to re-render the embed.
     if (existing.messageId) data.editRequestedAt = new Date();
 

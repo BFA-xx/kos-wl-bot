@@ -92,6 +92,16 @@ async function handleEnter(interaction: ButtonInteraction, raffleId: number) {
           `wallet with **/wallet register**, then click **Enter Giveaway** again.`,
       );
     }
+    case "tasks_incomplete": {
+      const list = result.missing.map((t) => `• ${t}`).join("\n");
+      const link = config.DASHBOARD_URL
+        ? `\n\nComplete them here: ${config.DASHBOARD_URL}/me/tasks?raffle=${raffleId}` +
+          `\nThen come back and click **Enter Giveaway** again.`
+        : "";
+      return interaction.editReply(
+        `${KOS.emoji.cross} You still need to complete these tasks:\n${list}${link}`,
+      );
+    }
     case "closed":
       return interaction.editReply("This raffle is not currently open for entries.");
     default:

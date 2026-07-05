@@ -106,6 +106,7 @@ model User {
 
   // Phase 3: linked external accounts (X, etc).
   connectedAccounts ConnectedAccount[]
+  TaskCompletion    TaskCompletion[]
 
   @@map("users")
 }
@@ -200,6 +201,7 @@ model Raffle {
   winners       Winner[]
   proof         Proof?
   logs          Log[]
+  RaffleTask    RaffleTask[]
 
   @@index([guildId, status])
   @@index([status, endAt])
@@ -388,6 +390,7 @@ model Organization {
   guildConnections GuildConnection[]
   subscription     Subscription?
   auditLogs        AuditLog[]
+  TaskDefinition   TaskDefinition[]
 
   @@index([ownerId])
   @@map("organizations")
@@ -550,6 +553,95 @@ model ConnectedAccount {
   @@unique([userId, provider])
   @@index([userId])
   @@map("connected_accounts")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 S2 — Task Verification Engine
+// ---------------------------------------------------------------------------
+
+/// What a task asks the member to do. X_* verify against the linked X account
+/// (link + attest on the free tier); DISCORD_* verify automatically via the
+/// bot; VISIT_LINK is click + attest; MANUAL goes to the org's review queue.
+enum TaskType {
+  X_FOLLOW
+  X_LIKE
+  X_REPOST
+  X_COMMENT
+  DISCORD_JOIN
+  DISCORD_ROLE
+  VISIT_LINK
+  MANUAL
+}
+
+enum CompletionStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  NEEDS_REVIEW
+}
+
+/// A reusable task built by an organization. Referenced by raffles now and
+/// campaigns in S3 — build once, attach anywhere.
+model TaskDefinition {
+  id             String    @id @default(cuid())
+  organizationId String
+  type           TaskType
+  title          String
+  description    String?
+  /// Per-type settings: { url?, xHandle?, tweetUrl?, guildId?, inviteUrl?,
+  /// roleId?, roleName?, instructions? }
+  config         Json?
+  /// Points awarded on verification (paid out from S3).
+  points         Int       @default(0)
+  active         Boolean   @default(true)
+  expiresAt      DateTime?
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  completions  TaskCompletion[]
+  raffleTasks  RaffleTask[]
+
+  @@index([organizationId, active])
+  @@map("task_definitions")
+}
+
+/// One user's completion state for one task. Evidence records how it was
+/// verified (attested handle, discord role snapshot, verifier version…).
+model TaskCompletion {
+  id           String           @id @default(cuid())
+  taskId       String
+  userId       String
+  status       CompletionStatus @default(PENDING)
+  evidence     Json?
+  verifiedAt   DateTime?
+  reviewedById String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  task TaskDefinition @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@index([userId])
+  @@index([taskId, status])
+  @@map("task_completions")
+}
+
+/// Attach a task to a raffle. Required tasks gate entry.
+model RaffleTask {
+  id       String  @id @default(cuid())
+  raffleId Int
+  taskId   String
+  required Boolean @default(true)
+
+  raffle Raffle         @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  task   TaskDefinition @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([raffleId, taskId])
+  @@index([raffleId])
+  @@map("raffle_tasks")
 }
 
 /// Announcement banner (Super Admin). Null organizationId = all orgs.

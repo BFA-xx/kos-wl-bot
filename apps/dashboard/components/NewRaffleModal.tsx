@@ -42,6 +42,8 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
   const [requireWallet, setRequireWallet] = useState(false);
   const [chains, setChains] = useState<string[]>(["ETHEREUM"]);
   const [bannerUrl, setBannerUrl] = useState("");
+  const [orgTasks, setOrgTasks] = useState<{ id: string; title: string; type: string }[]>([]);
+  const [verificationTaskIds, setVerificationTaskIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,6 +52,10 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
       const list = (d.connected ?? []) as { guildId: string; name: string }[];
       setGuilds(list);
       if (list[0]) setGuildId(list[0].guildId);
+    });
+    fetcher(`/api/${slug}/tasks`).then((d) => {
+      const list = (d.tasks ?? []) as { id: string; title: string; type: string; active: boolean }[];
+      setOrgTasks(list.filter((t) => t.active));
     });
   }, [slug]);
 
@@ -105,6 +111,7 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
         announceChannelId,
         proofChannelId,
         tasks: tasks.filter((t) => t.label.trim()),
+        verificationTaskIds,
       }),
     });
     const body = await res.json().catch(() => ({}));
@@ -238,6 +245,26 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
                 </select>
               </Field>
             </div>
+          ) : null}
+
+          {orgTasks.length > 0 ? (
+            <Field label="Verified tasks (gate entry — from your Tasks page)">
+              <div className="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-kos-border bg-kos-panel/50 p-2">
+                {orgTasks.map((t) => (
+                  <label key={t.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={verificationTaskIds.includes(t.id)}
+                      onChange={() => toggle(verificationTaskIds, t.id, setVerificationTaskIds)}
+                    />
+                    {t.title}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] text-kos-muted/70">
+                Members must verify these on their KOS profile before they can enter.
+              </p>
+            </Field>
           ) : null}
 
           <Field label="Social tasks (optional)">

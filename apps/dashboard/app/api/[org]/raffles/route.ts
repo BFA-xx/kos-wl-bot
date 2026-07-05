@@ -86,6 +86,17 @@ export async function POST(req: Request, { params }: { params: { org: string } }
 
     const inScope = (id: unknown) => (typeof id === "string" && /^\d{5,25}$/.test(id) ? id : null);
 
+    // Verification tasks (Task Engine) — must belong to this org.
+    const taskIds: string[] = Array.isArray(b.verificationTaskIds)
+      ? b.verificationTaskIds.filter((x: unknown) => typeof x === "string").slice(0, 20)
+      : [];
+    const validTasks = taskIds.length
+      ? await prisma.taskDefinition.findMany({
+          where: { id: { in: taskIds }, organizationId: org.id, active: true },
+          select: { id: true },
+        })
+      : [];
+
     const raffle = await prisma.raffle.create({
       data: {
         guildId,
@@ -114,6 +125,11 @@ export async function POST(req: Request, { params }: { params: { org: string } }
         eligibleRoles: roles.length ? { create: roles } : undefined,
       },
     });
+    if (validTasks.length) {
+      await prisma.raffleTask.createMany({
+        data: validTasks.map((t) => ({ raffleId: raffle.id, taskId: t.id, required: true })),
+      });
+    }
     await logAudit(org.id, user.id, "RAFFLE_CREATE", { targetType: "raffle", targetId: String(raffle.id) });
 
     return NextResponse.json({ id: raffle.id });

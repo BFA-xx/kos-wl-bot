@@ -10,6 +10,7 @@ export type EnterOutcome =
   | { status: "duplicate" }
   | { status: "ineligible"; reasons: string[] }
   | { status: "no_wallet"; chains: WalletChain[] }
+  | { status: "tasks_incomplete"; missing: string[] }
   | { status: "closed" }
   | { status: "error" };
 
@@ -46,6 +47,12 @@ export async function enterRaffle(
       where: { userId: member.id, chain: { in: raffle.walletChains } },
     });
     if (have === 0) return { status: "no_wallet", chains: raffle.walletChains };
+  }
+
+  // Task Engine gate: all required verification tasks must be VERIFIED.
+  const missingTasks = await checkRequiredTasks(raffle.id, member);
+  if (missingTasks.length > 0) {
+    return { status: "tasks_incomplete", missing: missingTasks };
   }
 
   await upsertUser({
@@ -160,4 +167,64 @@ export async function leaveRaffle(
     logger.error({ err, raffleId, userId: member.id }, "leaveRaffle failed");
     return { status: "error" };
   }
+}
+
+/**
+ * Task Engine gate (Phase 3). Returns the titles of REQUIRED verification
+ * tasks the user hasn't completed. Discord tasks are auto-verified inline —
+ * the bot is holding the member object, so join/role checks are free — which
+ * means a raffle gated only on Discord tasks needs zero dashboard round-trip.
+ */
+async function checkRequiredTasks(
+  raffleId: number,
+  member: GuildMember,
+): Promise<string[]> {
+  const links = await prisma.raffleTask.findMany({
+    where: { raffleId, required: true, task: { active: true } },
+    include: { task: true },
+  });
+  if (links.length === 0) return [];
+
+  const completions = await prisma.taskCompletion.findMany({
+    where: { userId: member.id, taskId: { in: links.map((l) => l.taskId) } },
+    select: { taskId: true, status: true },
+  });
+  const statusByTask = new Map(completions.map((c) => [c.taskId, c.status]));
+
+  const missing: string[] = [];
+  for (const { task } of links) {
+    if (statusByTask.get(task.id) === "VERIFIED") continue;
+
+    // Inline auto-verify for Discord tasks in THIS guild.
+    const cfg = (task.config ?? {}) as { guildId?: string; roleId?: string };
+    const inThisGuild = cfg.guildId === member.guild.id;
+    const passes =
+      inThisGuild &&
+      (task.type === "DISCORD_JOIN" ||
+        (task.type === "DISCORD_ROLE" && cfg.roleId && member.roles.cache.has(cfg.roleId)));
+
+    if (passes) {
+      await prisma.taskCompletion
+        .upsert({
+          where: { taskId_userId: { taskId: task.id, userId: member.id } },
+          create: {
+            taskId: task.id,
+            userId: member.id,
+            status: "VERIFIED",
+            verifiedAt: new Date(),
+            evidence: { method: "bot_inline_check", guildId: cfg.guildId, at: new Date().toISOString() },
+          },
+          update: {
+            status: "VERIFIED",
+            verifiedAt: new Date(),
+            evidence: { method: "bot_inline_check", guildId: cfg.guildId, at: new Date().toISOString() },
+          },
+        })
+        .catch(() => undefined);
+      continue;
+    }
+
+    missing.push(task.title);
+  }
+  return missing;
 }
