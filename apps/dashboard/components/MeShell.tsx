@@ -4,15 +4,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { ThemeToggle } from "./ThemeToggle";
-import { IconGrid, IconLogout, IconUsers, IconWallet, IconTicket } from "./icons";
+import { NotificationsBell } from "./NotificationsBell";
+import { IconLogout } from "./icons";
 
 const NAV = [
   { href: "/me", label: "Profile", exact: true },
+  { href: "/me/tasks", label: "Tasks" },
   { href: "/me/wallets", label: "Wallets" },
   { href: "/me/history", label: "History" },
+  { href: "/me/communities", label: "Communities" },
 ];
 
-const SOON = ["Tasks", "Campaigns", "Points"];
+const SOON = ["Points"];
 
 export function MeShell({
   user,
@@ -62,6 +65,7 @@ export function MeShell({
           </nav>
 
           <div className="ml-auto flex items-center gap-2">
+            <NotificationsBell />
             <ThemeToggle />
             <Link href="/" className="kos-btn hidden text-xs sm:block" title="Organization dashboards">
               Dashboard

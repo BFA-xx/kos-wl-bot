@@ -84,6 +84,11 @@ export async function closeAndDraw(
     metadata: { drawSeedHash: hash, spots: raffle.spots },
   });
 
+  // Web-parity notifications: winners get a WIN, other entrants a RESULT.
+  await notifyRaffleResults(raffleId, raffle.guildId, raffle.projectName, drawn, participants).catch(
+    (err) => logger.warn({ err, raffleId }, "result notifications failed"),
+  );
+
   // Lock the live embed (buttons disabled, status ENDED).
   await refreshRaffleMessage(client, raffleId).catch(() => undefined);
 
@@ -101,6 +106,47 @@ export async function closeAndDraw(
   await generateAndDeliverProof(client, raffleId, messageLink).catch((err) =>
     logger.error({ err, raffleId }, "proof generation failed"),
   );
+}
+
+/**
+ * Create in-app notifications for a completed draw (shown in the website's
+ * bell). Winners get a WIN; everyone else who entered gets a RESULT. Links go
+ * to the community's public raffle page when the guild is connected to an org.
+ */
+async function notifyRaffleResults(
+  raffleId: number,
+  guildId: string,
+  projectName: string,
+  winners: { userId: string }[],
+  participants: { userId: string }[],
+): Promise<void> {
+  const conn = await prisma.guildConnection.findUnique({
+    where: { guildId },
+    include: { organization: { select: { slug: true } } },
+  });
+  const link = conn ? `/c/${conn.organization.slug}/raffles/${raffleId}` : "/me/history";
+
+  const winnerIds = new Set(winners.map((w) => w.userId));
+  const losers = participants.filter((p) => !winnerIds.has(p.userId));
+
+  await prisma.notification.createMany({
+    data: [
+      ...winners.map((w) => ({
+        userId: w.userId,
+        type: "WIN",
+        title: `You won ${projectName}! 🎉`,
+        body: "Congratulations — check the raffle for details and make sure your wallet is registered.",
+        link,
+      })),
+      ...losers.map((p) => ({
+        userId: p.userId,
+        type: "RESULT",
+        title: `Results are in for ${projectName}`,
+        body: "Winners have been drawn — better luck next time.",
+        link,
+      })),
+    ],
+  });
 }
 
 async function announceWinners(
@@ -238,6 +284,13 @@ export async function rerollWinners(
       added: added.map((w) => w.userId),
     },
   });
+
+  // Notify freshly drawn replacement winners on the web too.
+  if (added.length > 0) {
+    await notifyRaffleResults(raffleId, raffle.guildId, raffle.projectName, added, []).catch(
+      (err) => logger.warn({ err, raffleId }, "reroll notifications failed"),
+    );
+  }
 
   // Announce reroll + wallet DM new winners + refresh proof.
   if (added.length > 0) {

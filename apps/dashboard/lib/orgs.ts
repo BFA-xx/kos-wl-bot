@@ -19,6 +19,9 @@ export const RESERVED_SLUGS = new Set([
   "public",
   "static",
   "new",
+  "me",
+  "c",
+  "hub",
 ]);
 
 export function slugify(input: string): string {

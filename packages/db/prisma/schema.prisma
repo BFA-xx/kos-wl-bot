@@ -107,6 +107,11 @@ model User {
   // Phase 3: linked external accounts (X, etc).
   connectedAccounts ConnectedAccount[]
   TaskCompletion    TaskCompletion[]
+  notifications     Notification[]
+
+  /// Last time the user opened their notification feed (announcement unread
+  /// counts are computed against this instead of materializing rows).
+  notificationsSeenAt DateTime?
 
   @@map("users")
 }
@@ -642,6 +647,27 @@ model RaffleTask {
   @@unique([raffleId, taskId])
   @@index([raffleId])
   @@map("raffle_tasks")
+}
+
+/// A personal notification (win, raffle result, system). Announcements are
+/// merged into the feed at read time — they are NOT fanned out into rows.
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  /// WIN | RESULT | SYSTEM
+  type      String
+  title     String
+  body      String?
+  /// Relative dashboard link (e.g. /me/history or /c/kos/raffles/12).
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("notifications")
 }
 
 /// Announcement banner (Super Admin). Null organizationId = all orgs.
