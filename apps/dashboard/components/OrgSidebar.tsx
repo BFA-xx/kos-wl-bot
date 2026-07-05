@@ -13,7 +13,6 @@ import {
   IconChart,
   IconDoc,
   IconGear,
-  IconCard,
   IconLife,
   IconShield,
   IconLogout,
@@ -33,7 +32,7 @@ const NAV = [
   { seg: "reports", label: "Reports", Icon: IconDoc },
   { seg: "settings", label: "Settings", Icon: IconGear },
   { seg: "team", label: "Team", Icon: IconUsers },
-  { seg: "billing", label: "Billing", Icon: IconCard },
+  // Billing intentionally hidden until paid plans launch (page still exists).
   { seg: "support", label: "Support", Icon: IconLife },
 ];
 

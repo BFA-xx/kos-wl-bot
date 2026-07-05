@@ -512,6 +512,16 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+/// Tiny key-value store for service liveness (e.g. the bot heartbeat the
+/// Super Admin health page reads). Written by the bot, read by the dashboard.
+model SystemStatus {
+  key       String   @id
+  value     String?
+  updatedAt DateTime @updatedAt
+
+  @@map("system_status")
+}
+
 /// Global feature flags (Super Admin).
 model FeatureFlag {
   key         String   @id

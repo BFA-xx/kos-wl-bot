@@ -18,6 +18,7 @@ import { audit } from "./auditService.js";
 export class Scheduler {
   private transitionTimer?: NodeJS.Timeout;
   private running = false;
+  private lastHeartbeat = 0;
 
   constructor(private readonly client: Client) {}
 
@@ -34,6 +35,27 @@ export class Scheduler {
     if (this.transitionTimer) clearInterval(this.transitionTimer);
   }
 
+  /**
+   * Liveness heartbeat for the Super Admin health page (the dashboard can't
+   * reach the bot's localhost API from Vercel, so status flows via the DB).
+   * Throttled to ~1 write/minute.
+   */
+  private async heartbeat(): Promise<void> {
+    if (Date.now() - this.lastHeartbeat < 60_000) return;
+    this.lastHeartbeat = Date.now();
+    const value = JSON.stringify({
+      guilds: this.client.guilds.cache.size,
+      user: this.client.user?.tag ?? null,
+    });
+    await prisma.systemStatus
+      .upsert({
+        where: { key: "bot-heartbeat" },
+        create: { key: "bot-heartbeat", value },
+        update: { value },
+      })
+      .catch(() => undefined);
+  }
+
   /** Open due UPCOMING raffles and close+draw due LIVE raffles. */
   private async tick(): Promise<void> {
     if (this.running) return; // prevent overlap on slow draws
@@ -43,6 +65,7 @@ export class Scheduler {
       // Post raffles created from the dashboard, and run dashboard reroll
       // requests. This is how the Vercel dashboard drives the bot (they share
       // only the DB — the dashboard can't reach the bot's local API).
+      await this.heartbeat();
       await this.publishDashboardRaffles();
       await this.processRerollRequests();
       await this.processEditRequests();

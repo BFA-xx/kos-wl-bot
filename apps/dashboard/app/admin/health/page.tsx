@@ -17,7 +17,22 @@ export default async function AdminHealthPage() {
     prisma.walletProfile.count(),
   ]);
 
-  const botConfigured = Boolean(process.env.INTERNAL_API_TOKEN);
+  // The bot writes a heartbeat row every ~60s; treat it as online if we've
+  // heard from it in the last 3 minutes.
+  const hb = await prisma.systemStatus.findUnique({ where: { key: "bot-heartbeat" } });
+  const botOnline = Boolean(hb && Date.now() - hb.updatedAt.getTime() < 3 * 60_000);
+  const hbInfo = (() => {
+    try {
+      return hb?.value ? (JSON.parse(hb.value) as { guilds?: number; user?: string }) : null;
+    } catch {
+      return null;
+    }
+  })();
+  const botLabel = botOnline
+    ? `online${hbInfo?.guilds != null ? ` · ${hbInfo.guilds} servers` : ""}`
+    : hb
+      ? `offline — last seen ${hb.updatedAt.toLocaleString()}`
+      : "waiting for first heartbeat";
 
   return (
     <>
@@ -36,15 +51,12 @@ export default async function AdminHealthPage() {
         <SectionTitle>Services</SectionTitle>
         <div className="space-y-2 text-sm">
           <Service name="Database" ok label="connected" />
-          <Service
-            name="Bot control API"
-            ok={botConfigured}
-            label={botConfigured ? "configured" : "not configured"}
-          />
+          <Service name="Discord bot" ok={botOnline} label={botLabel} />
         </div>
         <p className="mt-4 text-xs text-kos-muted">
-          The bot's internal control API is reachable only when the dashboard and
-          bot are co-located (or bridged over a private network).
+          Dashboard commands (post, edit, end, reroll) are delivered to the bot
+          through the database — no direct network link is needed. The bot
+          reports a heartbeat every minute.
         </p>
       </Card>
     </>
