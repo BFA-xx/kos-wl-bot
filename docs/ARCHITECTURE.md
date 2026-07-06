@@ -1,97 +1,202 @@
-# Architecture
+# KOS Architecture
 
-## Overview
+Last verified against `main` at `2542f6c` on 2026-07-06.
 
+## Product
+
+KOS is a Discord-first whitelist raffle platform that is becoming a reusable
+community-engagement platform. It currently supports multi-tenant organizations,
+Discord and web raffle participation, reusable verification tasks, linked X
+accounts, wallet collection, verifiable draws, proof artifacts, and platform
+administration.
+
+Phase 3 is delivered through S2.5. S3 (points, campaigns, rewards) and S4
+(role-weighted draws) are not implemented.
+
+## Runtime topology
+
+```mermaid
+flowchart LR
+  M[Discord members] --> D[Discord API]
+  D <--> B[Discord bot on EC2 / PM2]
+  W[Web users] --> V[Next.js dashboard on Vercel]
+  B <--> P[(Shared PostgreSQL / Neon)]
+  V <--> P
+  V --> D
+  B --> F[Local proof files]
+  V --> X[X OAuth / API]
 ```
-            Discord  ◀──gateway──▶  ┌───────────────────────────┐
-                                    │        @kos/bot           │
-   members click Enter/Leave  ───▶  │  commands · interactions  │
-                                    │  services · scheduler     │
-                                    │  proof (pdf/csv/card)     │
-                                    │  internal HTTP API :4000  │
-                                    └─────────────┬─────────────┘
-                                                  │ Prisma
-                                                  ▼
-                                         ┌──────────────────┐
-                                         │   PostgreSQL     │
-                                         └────────┬─────────┘
-                                                  │ Prisma (read) + actions
-                                    ┌─────────────┴─────────────┐
-                                    │      @kos/dashboard       │
-                                    │   Next.js + Tailwind      │
-                                    │   reroll/end ──▶ bot :4000│
-                                    └───────────────────────────┘
+
+- `apps/bot`: long-running Discord gateway process. It owns Discord
+  interactions, scheduling, final draws, announcements, wallet DMs, and proof
+  generation.
+- `apps/dashboard`: Next.js 14 App Router application. It owns Discord OAuth,
+  organization administration, member pages, public-with-login community
+  pages, task verification, and web entry.
+- `packages/db`: shared Prisma schema/client and migrations.
+- PostgreSQL is the integration boundary between Vercel and the bot. Both must
+  use the same `DATABASE_URL`.
+
+The bot still exposes an authenticated localhost control API on port 4000, but
+production dashboard actions no longer depend on it. Vercel queues publish,
+edit, end, and reroll work in PostgreSQL; the bot scheduler consumes it.
+
+## Repository layout
+
+```text
+apps/bot/             Discord bot, scheduler, raffle engine, proofs
+apps/dashboard/       Next.js dashboard, APIs, organization and member UIs
+packages/db/          Prisma schema, migrations, shared database client
+scripts/              EC2 deployment helper
+infra/nginx/          Legacy/all-in-one VPS reverse-proxy example
+docs/                 Operating and engineering documentation
 ```
 
-The **bot** owns all Discord side effects. The **dashboard** reads the database
-directly (fast) and proxies the few *write* actions that must produce live
-Discord messages (reroll, end) to the bot's internal HTTP API.
+## Identity and authorization
 
-## Packages
+Discord snowflakes are the global `User.id`. Discord OAuth writes encrypted
+access/refresh tokens to `User` and issues a seven-day, HMAC-signed,
+HTTP-only `kos_session` cookie.
 
-- **`packages/db`** — Prisma schema + a singleton client exported as `@kos/db`.
-  Both apps depend on it, so the data model lives in exactly one place.
-- **`apps/bot`** — discord.js v14 gateway client.
-- **`apps/dashboard`** — Next.js 14 App Router UI + API routes.
+The dashboard has three access levels:
 
-## Bot service layer
+1. Signed-in user: `/me`, web raffle entry, wallets, task completion.
+2. Organization member/owner: `/:org/*`, guarded by `requireOrgAccess` and
+   string permissions stored on `OrganizationRole`.
+3. KOS super-admin: `/admin/*`, guarded by `User.isSuperAdmin`.
 
-| Service | Responsibility |
-| --- | --- |
-| `raffleService` | Raffle CRUD, posting/refreshing the live embed, stats. |
-| `eligibilityService` | Role match (ANY/ALL), blacklist, anti-alt checks, reaction gating. |
-| `entryService` | Enter/leave inside a transaction; duplicate prevention via a unique index. |
-| `winnerService` | Verifiable draw, announcement, reroll; orchestrates wallet DMs + proof. |
-| `walletService` | Winner DM forms, validation, encrypted storage, export. |
-| `proofService` | Renders PDF + CSV + PNG, persists artifacts, delivers to the proof channel. |
-| `blacklistService` | Per-guild blacklist add/remove/list. |
-| `scheduler` | Sweep loop: open/close/draw transitions + live embed refresh. |
-| `auditService` | Append-only audit log; never throws into the main path. |
+Tenant isolation is anchored by unique `GuildConnection.guildId`. Raffle-owned
+data is scoped through the set of guild IDs connected to an organization.
+Organization-native data such as tasks is scoped directly by
+`organizationId`.
 
-## Scheduling model
+Middleware requires a valid session for every route except `/login`,
+`/api/auth/*`, Next.js assets, and the favicon. Consequently `/c/:slug` pages
+are accessible without organization membership but are not anonymous public
+pages.
 
-A single **sweep** (`SCHEDULER_TICK_SECONDS`, default 15s) recomputes state
-from the database every tick:
+## Main data model
 
-- `UPCOMING` whose `startAt` passed → `LIVE` (+ embed refresh).
-- `LIVE` whose `endAt` passed → `closeAndDraw` (draw → announce → wallet DMs → proof).
+### Discord raffle domain
 
-Because state is derived from the DB rather than in-memory timers, the bot
-**survives restarts** and never "forgets" a scheduled raffle. A second loop
-(`EMBED_REFRESH_SECONDS`) keeps countdowns/entry counts fresh; entries also
-trigger a debounced immediate refresh.
+- `Guild`: Discord server configuration and manager roles.
+- `User`: global Discord identity, OAuth credentials, super-admin flag.
+- `Raffle`: schedule, status, channels, eligibility, wallet rules, draw proof,
+  and database-mediated bot request fields.
+- `RaffleRole`: eligible Discord roles with ANY/ALL semantics.
+- `Participant`: unique `(raffleId, userId)` entry plus anti-alt snapshot.
+- `Winner`: selected participant, position, reroll/replacement history.
+- `WalletProfile`: reusable per-user/per-chain wallet registry.
+- `Wallet`: optional raffle-specific winner wallet.
+- `Blacklist`, `Log`, `Proof`: guild-scoped enforcement, audit, and artifacts.
 
-## Verifiable winner draw
+### Multi-tenant platform
 
-1. At draw time the bot generates a random 32-byte `seed` and publishes its
-   `SHA-256` commitment (`drawSeedHash`) in the announcement and proof.
-2. Each entrant gets a key = `HMAC-SHA256(seed, discordId)`. Entrants are sorted
-   by key and the first *N* win — uniform, duplicate-free selection.
-3. Anyone can later recompute the keys from the revealed seed + participant list
-   and confirm the winners, and check `SHA-256(seed) == drawSeedHash`.
+- `Organization`, `OrganizationMember`, `OrganizationRole`,
+  `OrganizationInvite`, `GuildConnection`.
+- `Subscription`: FREE/PRO/SCALE scaffold; paid billing is not wired.
+- `AuditLog`: organization audit trail.
+- `Announcement`, `FeatureFlag`: super-admin platform controls.
+- `SystemStatus`: service liveness key/value store; currently bot heartbeat.
 
-This combines cryptographic randomness (`crypto.randomBytes`) with public
-verifiability. See `utils/random.ts`.
+### Phase 3 account and task domain
 
-## Data model (Prisma)
+- `ConnectedAccount`: one external account per provider per KOS user; one
+  provider identity cannot be shared between users. X is implemented;
+  Telegram/GitHub are enum reservations.
+- `TaskDefinition`: organization-owned reusable task.
+- `TaskCompletion`: one user status/evidence record per task.
+- `RaffleTask`: task-to-raffle gate.
+- `Notification`: personal win/result/system notification. Announcements are
+  merged at read time instead of copied per user.
 
-`Guild`, `User`, `Raffle`, `RaffleRole`, `Participant`, `Winner`, `Wallet`,
-`Blacklist`, `Proof`, `Log`. Highlights:
+There are no points, campaign, reward, redemption, role-weight, or participant
+weight tables yet.
 
-- `Raffle.id` is an auto-increment int and doubles as the human Raffle ID (`#2345`).
-- `Participant` has a unique `(raffleId, userId)` — the duplicate-entry guard is
-  enforced at the database level, race-safe under concurrent clicks.
-- `Winner.replaced` keeps rerolled winners for the audit trail.
-- `Wallet.address` stores AES-256-GCM ciphertext when `WALLET_ENCRYPTION_KEY` is set.
-- Anti-alt rules live in `Raffle.requirements` (typed/validated with Zod).
+## Raffle lifecycle and data flow
 
-## Scalability notes
+### Bot-created raffle
 
-- All hot-path lookups hit indexed columns (`@@index` on guild/status/endAt,
-  unique on participant/winner/blacklist).
-- Entry and reroll mutations run in transactions to keep `entryCount` consistent.
-- Multiple guilds and simultaneous raffles are first-class (everything is keyed
-  by `guildId` / `raffleId`); the single sweep handles any number of raffles.
-- Embed edits are throttled/debounced to stay within Discord rate limits.
-- For multi-process horizontal scaling, move the per-user rate limiter and
-  embed-refresh debounce to Redis (currently in-memory; fine for one process).
+1. `/raffle create` opens a modal and an in-memory setup draft (15-minute TTL).
+2. `createRaffle` writes LIVE or UPCOMING state and role/requirement data.
+3. The bot posts the Discord embed and stores `messageId`.
+4. The scheduler transitions UPCOMING to LIVE and LIVE to ENDED.
+
+### Dashboard-created raffle
+
+1. `POST /api/:org/raffles` validates tenant scope and writes status DRAFT.
+2. The bot scheduler finds DRAFT rows with a channel, chooses LIVE/UPCOMING,
+   and posts the embed.
+3. A failed Discord post changes the raffle to CANCELLED and logs the reason.
+
+Dashboard edits set `editRequestedAt`; end-now sets LIVE with `endAt = now`;
+rerolls set `rerollRequest` and `rerollRequestedAt`. The scheduler clears and
+processes those requests.
+
+### Entry
+
+Discord and web entry write the same `Participant` table and maintain
+`Raffle.entryCount` transactionally.
+
+Both paths enforce blacklist, guild membership, eligible roles, additional
+roles, account/server age, wallet requirements, and verified `RaffleTask`s.
+Discord additionally checks reaction requirements; the web detects these and
+requires entry from Discord. The bot auto-verifies same-guild Discord tasks
+inline. The web verifies guild membership/roles through Discord REST using the
+bot token.
+
+### Draw and proof
+
+1. The bot filters entered users who are not currently blacklisted.
+2. It creates a 32-byte random seed and SHA-256 commitment.
+3. Each candidate is ranked by `HMAC-SHA256(seed, userId)`; the first N win.
+4. The transaction stores ENDED state, the seed/commitment, and winners.
+5. Discord announcements, web notifications, wallet DMs, and PDF/CSV/PNG
+   proof generation follow.
+
+Rerolls use a new seed but do not persist that reroll seed or commitment. They
+mark replaced winners, add replacements, notify replacements, and regenerate
+the proof from the raffle's original commitment.
+
+## Task Verification Engine
+
+`verifyTask` dispatches by `TaskType`:
+
+- X follow/like/repost/comment: requires linked X identity, then records a
+  link-and-attest VERIFIED result. No real engagement API check is made.
+- Discord join/role: real Discord REST membership/role check when the bot token
+  is available; otherwise NEEDS_REVIEW.
+- Visit link: click-and-attest VERIFIED.
+- Manual: NEEDS_REVIEW for organization approval/rejection.
+
+Task completion evidence is stored as JSON. Organization task CRUD and review
+APIs use `raffle:create` permission. Task points are stored but not awarded;
+the ledger arrives in S3.
+
+## Wallets and encryption
+
+Ethereum/Base, Solana, and Bitcoin addresses receive format-only validation.
+`WalletProfile` is shared between Discord and web. Winner exports prefer a
+raffle-specific `Wallet`, then fall back to a matching reusable profile.
+
+OAuth tokens and wallet addresses use AES-256-GCM with
+`WALLET_ENCRYPTION_KEY`. If the key is absent, current helpers permit plaintext
+storage for development. Bot and dashboard must share the same key.
+
+## Deployment
+
+- Dashboard: Vercel, rooted at `apps/dashboard`; pushes to `main` trigger
+  deployment.
+- Bot: EC2 under PM2 as `kos-bot`; `scripts/deploy-ec2.sh` rsyncs code, builds
+  DB/bot, registers slash commands, restarts PM2, and checks localhost health.
+- Database: shared managed PostgreSQL/Neon. Migrations are additive Prisma SQL
+  migrations under `packages/db/prisma/migrations`.
+- Proof files: generated on the bot host under `PROOF_OUTPUT_DIR` and posted to
+  Discord. The dashboard does not serve those local paths.
+
+## Verification posture
+
+There is no automated test suite. Current safety nets are strict TypeScript,
+Prisma schema validation, package builds, database constraints, and production
+smoke checks. See `docs/HANDOFF.md` for the latest verified commands and known
+gaps.

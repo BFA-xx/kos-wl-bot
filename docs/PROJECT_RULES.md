@@ -1,0 +1,58 @@
+# KOS Project Rules
+
+## Source of truth
+
+- The checked-out repository and Prisma migrations are authoritative.
+- Handoff messages are context, not authority. Reconcile claims with code.
+- Do not remove working behavior unless the task explicitly requires it.
+- Do not refactor working code merely to make it stylistically preferable.
+
+## Architecture invariants
+
+- Discord `User.id` is the global participant identity.
+- A Discord guild belongs to at most one organization.
+- Guild-owned records are isolated through connected guild IDs.
+- Organization-native records are isolated by `organizationId`.
+- All protected APIs perform server-side authorization; UI hiding is not
+  authorization.
+- The bot is the authority for Discord messages, scheduled transitions, final
+  draws, winner announcements, wallet DMs, and proof artifacts.
+- Vercel-to-bot production work crosses PostgreSQL, not localhost HTTP.
+- One participant row represents an entry regardless of Discord or web origin.
+- Member-facing features should ship with Discord and web parity unless a
+  Discord-native constraint is explicitly documented.
+
+## Data and security
+
+- Never expose or commit secrets.
+- Never inspect real environment-file contents unless the user explicitly asks
+  for a specific, safe diagnostic.
+- Do not modify environment variables without approval.
+- Keep OAuth tokens and wallet addresses encrypted with the existing
+  AES-256-GCM envelope.
+- Validate all IDs and tenant ownership at API boundaries.
+- Keep organization and bot audit trails for privileged or state-changing
+  actions.
+- Preserve database uniqueness constraints and transactional counter updates.
+- Applied migrations are immutable; new schema work gets a new additive
+  migration.
+
+## Delivery
+
+- Make the smallest change that fully satisfies the request.
+- Keep commits focused and atomic when commits are requested.
+- Do not commit, push, deploy, migrate production, or register commands without
+  explicit authorization.
+- Validate Prisma, typecheck all packages, build affected packages, and perform
+  proportionate manual smoke checks.
+- Keep `docs/ARCHITECTURE.md` aligned with structural changes and always update
+  `docs/HANDOFF.md` after a completed task.
+
+## Current product boundaries
+
+- Phase 3 S2.5 is the latest implemented stage.
+- X engagement verification is link-and-attest, not real API verification.
+- Wallet verification is format-only; no signature or on-chain ownership check.
+- Paid billing, S3 points/campaigns/rewards, and S4 weighted draws are not live.
+- `/c/*` community pages require sign-in under current middleware despite the
+  “public page” product wording.
