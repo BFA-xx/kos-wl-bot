@@ -14,6 +14,7 @@ import {
 import { upsertUser } from "./userService.js";
 import { audit } from "./auditService.js";
 import { logger } from "../logger.js";
+import { awardTaskPoints } from "./pointsService.js";
 
 export type EnterOutcome =
   | {
@@ -243,13 +244,13 @@ async function checkRequiredTasks(
 
     for (const { task } of links) {
       if (statusByTask.get(task.id) === "VERIFIED") {
-        await awardTaskPoints(
-          task.organizationId,
-          member.id,
-          task.id,
-          task.title,
-          task.points,
-        );
+        await awardTaskPoints({
+          organizationId: task.organizationId,
+          userId: member.id,
+          taskId: task.id,
+          taskTitle: task.title,
+          points: task.points,
+        });
         continue;
       }
 
@@ -289,13 +290,13 @@ async function checkRequiredTasks(
             },
           })
           .catch(() => undefined);
-        await awardTaskPoints(
-          task.organizationId,
-          member.id,
-          task.id,
-          task.title,
-          task.points,
-        );
+        await awardTaskPoints({
+          organizationId: task.organizationId,
+          userId: member.id,
+          taskId: task.id,
+          taskTitle: task.title,
+          points: task.points,
+        });
         continue;
       }
 
@@ -325,28 +326,6 @@ async function checkRequiredTasks(
   }
 
   return missing;
-}
-
-async function awardTaskPoints(
-  organizationId: string,
-  userId: string,
-  taskId: string,
-  taskTitle: string,
-  points: number,
-) {
-  if (points <= 0) return;
-  await prisma.pointsLedger
-    .create({
-      data: {
-        organizationId,
-        userId,
-        delta: points,
-        reason: `Task: ${taskTitle}`,
-        sourceType: "TASK",
-        sourceId: taskId,
-      },
-    })
-    .catch(() => undefined);
 }
 
 function legacySocialTasks(raffleId: number, requirements: unknown) {

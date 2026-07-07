@@ -127,7 +127,8 @@ gateway and scheduler require an always-on process.
 role-weighted draws each use additive migrations and independently verified
 deploys. Applied migrations are never rewritten.
 **Why:** Small production releases reduce migration and rollback risk. S1, S2,
-and the S2.5 parity follow-up are complete; S3/S4 remain future work.
+the S2.5 parity follow-up, the first S3 points/rewards slice, and the first S4
+weighted-draw slice are complete; campaigns remain future work.
 
 ## D015 — Billing remains scaffolded but hidden
 
@@ -175,3 +176,23 @@ raffles use a deterministic Efraimidis-Spirakis exponential race
 replacement.
 **Why:** It gives proportional weighted odds while preserving verifiability and
 avoiding visible duplicate entries.
+
+## D020 — Reward claims spend points through the ledger
+
+**Status:** Accepted
+**Decision:** Rewards are organization-owned catalog items. A redemption writes
+a `RewardRedemption` row and a negative `PointsLedger` row with
+`sourceType = REWARD_REDEEM`. Cancelled/rejected pending claims write a
+positive `REWARD_REFUND` ledger row instead of mutating a balance.
+**Why:** The existing points model stays append-only and auditable. It also
+keeps web and Discord redemptions identical because both surfaces use the same
+tables and ledger semantics.
+
+## D021 — Points activity is hosted in a configured Discord channel
+
+**Status:** Accepted
+**Decision:** Each connected `Guild` can set `defaultPointsChannelId`. Web task
+awards, Discord task awards, and reward redemptions post best-effort updates to
+that channel when configured.
+**Why:** Communities need one obvious place for earning/spending activity and
+leaderboards, while still letting members use both web and Discord.

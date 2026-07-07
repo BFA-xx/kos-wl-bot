@@ -12,6 +12,7 @@ import type { Server } from "node:http";
 
 async function main() {
   const client = createClient();
+  globalThis.kosClient = client;
   let scheduler: Scheduler | undefined;
   let internalApi: Server | undefined;
 

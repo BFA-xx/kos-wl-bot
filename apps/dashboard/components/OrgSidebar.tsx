@@ -22,14 +22,19 @@ import {
   IconCard,
 } from "./icons";
 
-const NAV = [
+const NAV: {
+  seg: string;
+  label: string;
+  Icon: typeof IconGrid;
+  soon?: boolean;
+}[] = [
   { seg: "dashboard", label: "Dashboard", Icon: IconGrid },
   { seg: "campaigns", label: "Campaigns", Icon: IconMegaphone },
   { seg: "raffles", label: "Raffles", Icon: IconTicket },
   { seg: "tasks", label: "Tasks", Icon: IconCheck },
   { seg: "participants", label: "Participants", Icon: IconUsers },
   { seg: "points", label: "Points", Icon: IconChart },
-  { seg: "rewards", label: "Rewards", Icon: IconCard, soon: true },
+  { seg: "rewards", label: "Rewards", Icon: IconCard },
   { seg: "wallets", label: "Wallets", Icon: IconWallet },
   { seg: "analytics", label: "Analytics", Icon: IconChart },
   { seg: "reports", label: "Reports", Icon: IconDoc },

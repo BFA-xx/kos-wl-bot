@@ -53,6 +53,7 @@
 - Phase 3 S2.5 is the latest implemented stage.
 - X engagement verification is link-and-attest, not real API verification.
 - Wallet verification is format-only; no signature or on-chain ownership check.
-- Paid billing, S3 points/campaigns/rewards, and S4 weighted draws are not live.
+- Paid billing and campaigns are not live. Points, rewards, and weighted draws
+  have first production slices and must remain Discord + web parity features.
 - `/c/*` community pages require sign-in under current middleware despite the
   “public page” product wording.

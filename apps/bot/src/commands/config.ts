@@ -53,6 +53,12 @@ export const configCommand: Command = {
             .setName("proof")
             .setDescription("Default proof delivery channel")
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
+        )
+        .addChannelOption((o) =>
+          o
+            .setName("points")
+            .setDescription("Points, rewards, and leaderboard channel")
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
         ),
     )
     .addSubcommand((s) => s.setName("show").setDescription("Show current configuration")),
@@ -141,14 +147,16 @@ async function listManagers(interaction: ChatInputCommandInteraction, guildId: s
 async function setChannels(interaction: ChatInputCommandInteraction, guildId: string) {
   const announce = interaction.options.getChannel("announce");
   const proof = interaction.options.getChannel("proof");
-  if (!announce && !proof) {
-    return interaction.reply({ content: "Provide an announce and/or proof channel.", flags: MessageFlags.Ephemeral });
+  const points = interaction.options.getChannel("points");
+  if (!announce && !proof && !points) {
+    return interaction.reply({ content: "Provide an announce, proof, and/or points channel.", flags: MessageFlags.Ephemeral });
   }
   await prisma.guild.update({
     where: { id: guildId },
     data: {
       ...(announce ? { defaultAnnounceChannelId: announce.id } : {}),
       ...(proof ? { defaultProofChannelId: proof.id } : {}),
+      ...(points ? { defaultPointsChannelId: points.id } : {}),
     },
   });
   return interaction.reply({
@@ -177,6 +185,11 @@ async function showConfig(interaction: ChatInputCommandInteraction, guildId: str
       {
         name: "Default Proof Channel",
         value: guild.defaultProofChannelId ? `<#${guild.defaultProofChannelId}>` : "—",
+        inline: true,
+      },
+      {
+        name: "Points Channel",
+        value: guild.defaultPointsChannelId ? `<#${guild.defaultPointsChannelId}>` : "—",
         inline: true,
       },
     )

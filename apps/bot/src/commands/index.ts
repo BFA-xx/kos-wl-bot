@@ -3,12 +3,18 @@ import { raffleCommand } from "./raffle.js";
 import { blacklistCommand } from "./blacklist.js";
 import { walletCommand } from "./wallet.js";
 import { configCommand } from "./config.js";
+import { pointsCommand } from "./points.js";
+import { tasksCommand } from "./tasks.js";
+import { rewardsCommand } from "./rewards.js";
 
 export const commands: Command[] = [
   raffleCommand,
   blacklistCommand,
   walletCommand,
   configCommand,
+  pointsCommand,
+  tasksCommand,
+  rewardsCommand,
 ];
 
 /** Lookup map by command name for the interaction router. */

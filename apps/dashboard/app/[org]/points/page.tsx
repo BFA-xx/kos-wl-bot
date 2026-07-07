@@ -2,6 +2,8 @@
 
 import useSWR from "swr";
 import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Empty,
   PageTitle,
@@ -32,12 +34,17 @@ interface PointsData {
     reason: string;
     createdAt: string;
   }[];
+  guilds: {
+    id: string;
+    name: string;
+    pointsChannelId: string | null;
+  }[];
   error?: string;
 }
 
 export default function PointsPage() {
   const { org } = useParams<{ org: string }>();
-  const { data } = useSWR<PointsData>(`/api/${org}/points`, fetcher, {
+  const { data, mutate } = useSWR<PointsData>(`/api/${org}/points`, fetcher, {
     refreshInterval: 15000,
   });
 
@@ -46,6 +53,11 @@ export default function PointsPage() {
       <PageTitle
         title="Points"
         subtitle="A live ledger of member points earned from verified tasks. Campaigns and rewards build on this balance."
+        action={
+          <Link href={`/${org}/rewards`} className="kos-btn-primary">
+            Manage rewards
+          </Link>
+        }
       />
 
       {data?.error ? (
@@ -113,6 +125,8 @@ export default function PointsPage() {
             </div>
 
             <div>
+              <PointsChannelCard org={org} data={data} mutate={mutate} />
+
               <SectionTitle>Recent awards</SectionTitle>
               {!data ? (
                 <Empty>Loading…</Empty>
@@ -151,6 +165,90 @@ export default function PointsPage() {
         </>
       )}
     </>
+  );
+}
+
+function PointsChannelCard({
+  org,
+  data,
+  mutate,
+}: {
+  org: string;
+  data?: PointsData;
+  mutate: () => void;
+}) {
+  const guilds = data?.guilds ?? [];
+  const [guildId, setGuildId] = useState("");
+  const current = guilds.find((g) => g.id === guildId) ?? guilds[0];
+  const { data: meta } = useSWR<{ channels: { id: string; name: string }[] }>(
+    current ? `/api/${org}/guilds/${current.id}/meta` : null,
+    fetcher,
+  );
+  const [channelId, setChannelId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    if (!guildId && guilds[0]) setGuildId(guilds[0].id);
+  }, [guildId, guilds]);
+  useEffect(() => {
+    setChannelId(current?.pointsChannelId ?? "");
+  }, [current?.id, current?.pointsChannelId]);
+
+  async function save() {
+    if (!current) return;
+    setSaving(true);
+    setMsg("");
+    const res = await fetch(`/api/${org}/points`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ guildId: current.id, pointsChannelId: channelId }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setSaving(false);
+    setMsg(res.ok ? "Points channel saved." : body.error || "Could not save channel.");
+    if (res.ok) mutate();
+  }
+
+  return (
+    <div className="kos-card mb-5 p-4">
+      <SectionTitle>Points channel</SectionTitle>
+      {guilds.length === 0 ? (
+        <p className="text-sm text-kos-muted">
+          Connect a Discord server before hosting points in a channel.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {guilds.length > 1 ? (
+            <select className="kos-input" value={guildId} onChange={(e) => setGuildId(e.target.value)}>
+              {guilds.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <select className="kos-input" value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+            <option value="">No points channel</option>
+            {(meta?.channels ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                #{c.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs leading-5 text-kos-muted">
+            KOS posts task awards, reward redemptions, and `/points panel`
+            updates here.
+          </p>
+          <div className="flex items-center gap-2">
+            <button className="kos-btn-primary text-xs" onClick={save} disabled={saving}>
+              {saving ? "Saving…" : "Save channel"}
+            </button>
+            {msg ? <span className="text-xs text-kos-muted">{msg}</span> : null}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -11,6 +11,7 @@ const NAV = [
   { href: "/me", label: "Profile", exact: true },
   { href: "/me/tasks", label: "Tasks" },
   { href: "/me/points", label: "Points" },
+  { href: "/me/rewards", label: "Rewards" },
   { href: "/me/wallets", label: "Wallets" },
   { href: "/me/history", label: "History" },
   { href: "/me/communities", label: "Communities" },

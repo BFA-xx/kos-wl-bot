@@ -36,9 +36,14 @@ export default function MePointsPage() {
         title="My points"
         subtitle="Your earned points across KOS communities. Points are awarded when verification tasks are completed."
         action={
-          <Link href="/me/tasks" className="kos-btn-primary">
-            Earn more
-          </Link>
+          <>
+            <Link href="/me/tasks" className="kos-btn-primary">
+              Earn more
+            </Link>
+            <Link href="/me/rewards" className="kos-btn">
+              Spend points
+            </Link>
+          </>
         }
       />
 

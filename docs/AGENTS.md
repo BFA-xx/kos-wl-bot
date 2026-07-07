@@ -6,7 +6,8 @@ agent taking over KOS.
 ## Project snapshot
 
 KOS is a Discord-first whitelist raffle platform evolving into a reusable
-community-engagement platform. The implemented product is Phase 3 S2.5:
+community-engagement platform. The implemented product is Phase 3 S2.5 plus
+the first S3/S4 slices:
 
 - Discord raffle creation, entry, scheduling, winner draws, rerolls, wallet
   collection, announcements, and PDF/CSV/PNG proofs.
@@ -16,9 +17,13 @@ community-engagement platform. The implemented product is Phase 3 S2.5:
   task completion, community browsing, and notifications.
 - Reusable Task Verification Engine attached to raffles.
 - Web entry/leave using the same participant and winner tables as Discord.
+- Points ledger with member/org points pages, Discord/web task awarding, and a
+  configurable Discord points channel.
+- Rewards store with web and Discord redemption flows.
+- Role-weighted raffles with participant weight snapshots and deterministic
+  weighted draws.
 
-S3 points/campaigns/rewards and S4 weighted draws are planned but do not exist
-in the schema or application.
+Campaigns are still planned and not implemented.
 
 The actual repository is `/Users/adebayodaniel/KOS RAF`. The remote is
 `BFA-xx/kos-wl-bot`; the takeover audit was performed on `main` at `2542f6c`.
@@ -71,7 +76,8 @@ Core raffle models are `Guild`, `User`, `Raffle`, `RaffleRole`, `Participant`,
 Platform models are `Organization`, membership/role/invite models,
 `GuildConnection`, `Subscription`, `AuditLog`, `Announcement`, `FeatureFlag`,
 and `SystemStatus`. Phase 3 adds `ConnectedAccount`, `TaskDefinition`,
-`TaskCompletion`, `RaffleTask`, and `Notification`.
+`TaskCompletion`, `RaffleTask`, `Notification`, `PointsLedger`, `RoleWeight`,
+`Reward`, and `RewardRedemption`.
 
 Discord and web entry converge on unique `(raffleId, userId)` participants and
 transactional `entryCount` updates. Gates cover blacklist, guild membership,
@@ -91,7 +97,9 @@ Task verification behavior:
 - Discord join/role tasks use live Discord REST checks when a bot token exists.
 - Visit-link tasks attest immediately.
 - Manual tasks enter the organization's review queue.
-- `TaskDefinition.points` is stored for S3 but currently awards nothing.
+- `TaskDefinition.points` awards once per user/task through `PointsLedger`.
+  Reward redemptions spend points through negative ledger rows and refunds use
+  positive refund rows.
 
 Wallet validation is format-only for Ethereum/Base, Solana, and Bitcoin.
 Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
@@ -114,6 +122,10 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   generous spacing, visible focus states, and collapsible command-center
   navigation. Preserve that direction when adding points, rewards, campaigns,
   and weighted-role controls.
+- Rewards and points must stay Discord + web parity features where technically
+  possible. Current Discord commands are `/points`, `/tasks`, and `/rewards`;
+  current web surfaces are `/:org/points`, `/:org/rewards`, `/me/points`,
+  `/me/tasks`, and `/me/rewards`.
 - Legacy social/link raffle steps are click-and-attest gates, not paid X API
   checks. They persist `SOCIAL_TASK_CLICK` / `SOCIAL_TASK_VERIFY` guild `Log`
   rows with a stable metadata `taskKey`; both web entry and bot entry check for

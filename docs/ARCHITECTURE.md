@@ -1,17 +1,17 @@
 # KOS Architecture
 
-Last verified against `main` at `2542f6c` on 2026-07-06.
+Last verified against `main` on 2026-07-07.
 
 ## Product
 
 KOS is a Discord-first whitelist raffle platform that is becoming a reusable
 community-engagement platform. It currently supports multi-tenant organizations,
 Discord and web raffle participation, reusable verification tasks, linked X
-accounts, wallet collection, verifiable draws, proof artifacts, and platform
-administration.
+accounts, points, rewards, role-weighted draws, wallet collection, verifiable
+draws, proof artifacts, and platform administration.
 
-Phase 3 is delivered through S2.5. S3 (points, campaigns, rewards) and S4
-(role-weighted draws) are not implemented.
+Phase 3 is delivered through S2.5 plus the first S3/S4 slices. Campaigns remain
+planned but are not implemented.
 
 ## Runtime topology
 
@@ -109,9 +109,12 @@ pages.
 - `RaffleTask`: task-to-raffle gate.
 - `Notification`: personal win/result/system notification. Announcements are
   merged at read time instead of copied per user.
+- `PointsLedger`: append-only points awards/spends/refunds.
+- `RoleWeight`: organization role multipliers for weighted raffles.
+- `Reward`: organization reward catalog item.
+- `RewardRedemption`: member reward claim.
 
-There are no points, campaign, reward, redemption, role-weight, or participant
-weight tables yet.
+There are no campaign/redemption-campaign models yet.
 
 ## Raffle lifecycle and data flow
 
@@ -170,8 +173,33 @@ the proof from the raffle's original commitment.
 - Manual: NEEDS_REVIEW for organization approval/rejection.
 
 Task completion evidence is stored as JSON. Organization task CRUD and review
-APIs use `raffle:create` permission. Task points are stored but not awarded;
-the ledger arrives in S3.
+APIs use existing organization permissions. Task points are awarded once per
+`(organizationId, userId, taskId)` through the append-only `PointsLedger`.
+
+## Points and rewards
+
+Balances are computed as `SUM(PointsLedger.delta)` per organization/user.
+Positive task rows use `sourceType = TASK`; reward claims spend points with
+negative `REWARD_REDEEM` rows; rejected/cancelled pending reward claims refund
+with positive `REWARD_REFUND` rows.
+
+Each connected `Guild` can set `defaultPointsChannelId`. Web and Discord task
+awards plus reward redemptions post best-effort activity updates to that
+channel when configured.
+
+Web surfaces:
+
+- `/:org/points`: leaderboard, recent awards, points-channel configuration.
+- `/me/points`: member balances/recent awards.
+- `/:org/rewards`: reward catalog and redemption fulfillment/refund queue.
+- `/me/rewards`: member reward store and personal redemption history.
+
+Discord surfaces:
+
+- `/points balance`, `/points leaderboard`, `/points panel`.
+- `/tasks list`, `/tasks verify`.
+- `/rewards list`, `/rewards redeem`, `/rewards mine`.
+- Manager-only `/rewards create`, `/rewards fulfill`, `/rewards cancel`.
 
 ## Wallets and encryption
 

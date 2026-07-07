@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,29 +7,11 @@ export const metadata: Metadata = {
   description: "Premium NFT whitelist raffle management.",
 };
 
-const kosSans = localFont({
-  src: [
-    {
-      path: "../../bot/assets/fonts/Inter-Regular.ttf",
-      weight: "400",
-      style: "normal",
-    },
-    {
-      path: "../../bot/assets/fonts/Inter-Bold.ttf",
-      weight: "700",
-      style: "normal",
-    },
-  ],
+const kosSans = Inter({
+  subsets: ["latin"],
   variable: "--font-kos-sans",
   display: "swap",
-  fallback: [
-    "Inter",
-    "Geist",
-    "SF Pro Display",
-    "SF Pro Text",
-    "Arial",
-    "sans-serif",
-  ],
+  adjustFontFallback: true,
 });
 
 // Set the theme class before paint to avoid a flash. Defaults to dark (KOS).

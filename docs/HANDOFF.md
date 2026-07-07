@@ -20,6 +20,9 @@ Phase 3 is implemented through S2.5:
 - S3/S4 first slice is committed, pushed, migrated, and deployed: task points
   ledger, org/member points pages, role-weight manager, weighted raffle
   toggles, entry weight snapshots, and deterministic weighted draws.
+- S3 rewards/points-channel slice is complete locally: configurable Discord
+  points channels, web reward store/management, and Discord commands for
+  points, tasks, and rewards.
 
 The approved development workstream is **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -385,10 +388,8 @@ build-approval prompts and workspace-file scaffolding.
 
 ### Typography follow-up — committed/pushed/deployed
 
-- The dashboard now loads a real self-hosted Inter font through
-  `next/font/local` instead of relying on device/system fallback fonts.
-- The font files are existing tracked assets, so the dashboard build does not
-  depend on Google Fonts or another external font CDN.
+- The dashboard initially moved from device/system fallback fonts to tracked
+  Inter font assets.
 - Global typography now routes through `--font-kos-sans` and enables Inter's
   readability alternates for cleaner UI text rendering.
 
@@ -402,6 +403,43 @@ Verification:
 - Vercel production build changed to `vyHDOsTNlFBJAuqCOBxyJ`; the served CSS
   contains both `--font-kos-sans` and `@font-face`, confirming the self-hosted
   Inter font is active in production.
+
+### Points channel, rewards, and Discord parity slice — complete locally
+
+- Migration `20260707230000_rewards_points_channel` adds:
+  - `Guild.defaultPointsChannelId`;
+  - `Reward`;
+  - `RewardRedemption`;
+  - `RewardRedemptionStatus`.
+- Typography was upgraded again from two static local Inter weights to the
+  full Inter variable family through `next/font/google`, so medium/semibold
+  and heading weights are no longer browser-synthesized.
+- Org managers can configure a points channel from `/:org/points`; Discord
+  admins can also set it with `/config channels points:#channel`.
+- Task point awards and reward redemptions post best-effort updates to the
+  configured points channel.
+- Org managers can create/pause rewards and fulfill/refund pending claims at
+  `/:org/rewards`.
+- Members can browse and redeem rewards at `/me/rewards`; `/me/points` now
+  links directly to both earning tasks and spending rewards.
+- Discord parity added:
+  - `/points balance`, `/points leaderboard`, `/points panel`;
+  - `/tasks list`, `/tasks verify`;
+  - `/rewards list`, `/rewards redeem`, `/rewards mine`;
+  - manager-only `/rewards create`, `/rewards fulfill`, `/rewards cancel`.
+- Reward redemptions spend points through the append-only `PointsLedger` with
+  negative `REWARD_REDEEM` rows. Cancelled/rejected pending claims refund via
+  positive `REWARD_REFUND` rows and restore stock when the reward has limited
+  inventory.
+
+Verification:
+
+- `corepack pnpm --filter @kos/db build`
+- `corepack pnpm --filter @kos/bot typecheck`
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `corepack pnpm --filter @kos/bot build`
+- `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
+- `git diff --check`
 
 ## Assumptions
 

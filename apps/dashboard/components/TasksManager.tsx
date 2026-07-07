@@ -203,7 +203,7 @@ export function TasksManager() {
             <input className="kos-input" placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} />
             <div className="flex items-center gap-2">
               <input type="number" min={0} className="kos-input max-w-[110px]" value={points} onChange={(e) => setPoints(Number(e.target.value))} />
-              <span className="text-xs text-kos-muted">points (used by campaigns later)</span>
+              <span className="text-xs text-kos-muted">points members earn on verification</span>
             </div>
           </div>
 
