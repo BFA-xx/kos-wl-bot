@@ -4,7 +4,16 @@ import useSWR from "swr";
 import Link from "next/link";
 import { useState } from "react";
 import { useParams } from "next/navigation";
-import { PageTitle, StatCard, Card, SectionTitle, Segmented, Empty, StatusBadge } from "@/components/ui";
+import {
+  PageTitle,
+  StatCard,
+  Card,
+  SectionTitle,
+  Segmented,
+  Empty,
+  StatusBadge,
+  TableShell,
+} from "@/components/ui";
 import { AreaChart } from "@/components/AreaChart";
 import { BarChart } from "@/components/BarChart";
 
@@ -37,12 +46,18 @@ const RANGES = [
 export default function AnalyticsPage() {
   const { org } = useParams<{ org: string }>();
   const [days, setDays] = useState("30");
-  const { data } = useSWR<Analytics>(`/api/${org}/analytics?days=${days}`, fetcher);
+  const { data } = useSWR<Analytics>(
+    `/api/${org}/analytics?days=${days}`,
+    fetcher,
+  );
 
   if (data?.error) {
     return (
       <>
-        <PageTitle title="Analytics" subtitle="Performance across your raffles." />
+        <PageTitle
+          title="Analytics"
+          subtitle="Performance across your raffles."
+        />
         <Empty>You don't have permission to view analytics.</Empty>
       </>
     );
@@ -53,11 +68,17 @@ export default function AnalyticsPage() {
       <PageTitle
         title="Analytics"
         subtitle="Performance across your raffles."
-        action={<Segmented options={RANGES as any} value={days} onChange={setDays} />}
+        action={
+          <Segmented options={RANGES as any} value={days} onChange={setDays} />
+        }
       />
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard accent label="Total entries" value={data?.totalEntries ?? "—"} />
+        <StatCard
+          accent
+          label="Total entries"
+          value={data?.totalEntries ?? "—"}
+        />
         <StatCard label="Total raffles" value={data?.totalRaffles ?? "—"} />
       </div>
 
@@ -91,10 +112,16 @@ export default function AnalyticsPage() {
                     <span className="text-xs text-kos-muted">#{r.id}</span>
                     <StatusBadge status={r.status} />
                   </div>
-                  <div className="mt-1 truncate font-medium">{r.projectName}</div>
-                  <div className="truncate text-sm text-kos-muted">{r.title}</div>
+                  <div className="mt-1 truncate font-medium">
+                    {r.projectName}
+                  </div>
+                  <div className="truncate text-sm text-kos-muted">
+                    {r.title}
+                  </div>
                   {r.createdByName ? (
-                    <div className="truncate text-xs text-kos-muted/80">Hosted by {r.createdByName}</div>
+                    <div className="truncate text-xs text-kos-muted/80">
+                      Hosted by {r.createdByName}
+                    </div>
                   ) : null}
                 </div>
                 <div className="ml-3 shrink-0 text-right">
@@ -114,9 +141,9 @@ export default function AnalyticsPage() {
         ) : data.hosts.length === 0 ? (
           <Empty>No hosts yet.</Empty>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-kos-border">
-            <table className="w-full text-sm">
-              <thead className="bg-kos-panel/60 text-left text-xs uppercase tracking-wide text-kos-muted">
+          <TableShell>
+            <table className="kos-table">
+              <thead>
                 <tr>
                   <th className="px-4 py-3">Host</th>
                   <th className="px-4 py-3 text-right">Raffles</th>
@@ -125,15 +152,17 @@ export default function AnalyticsPage() {
               </thead>
               <tbody>
                 {data.hosts.map((h) => (
-                  <tr key={h.name} className="border-t border-kos-border/60">
+                  <tr key={h.name}>
                     <td className="px-4 py-3 font-medium">{h.name}</td>
                     <td className="px-4 py-3 text-right">{h.raffles}</td>
-                    <td className="px-4 py-3 text-right text-kos-muted">{h.entries}</td>
+                    <td className="px-4 py-3 text-right text-kos-muted">
+                      {h.entries}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableShell>
         )}
       </div>
     </>

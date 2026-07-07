@@ -1,13 +1,26 @@
 import { type GuildMember } from "discord.js";
-import { prisma, LogCategory, Prisma, RaffleStatus, type WalletChain } from "@kos/db";
+import {
+  prisma,
+  LogCategory,
+  Prisma,
+  RaffleStatus,
+  type WalletChain,
+} from "@kos/db";
 import { createHash } from "node:crypto";
-import { evaluateEligibility, parseRequirements } from "./eligibilityService.js";
+import {
+  evaluateEligibility,
+  parseRequirements,
+} from "./eligibilityService.js";
 import { upsertUser } from "./userService.js";
 import { audit } from "./auditService.js";
 import { logger } from "../logger.js";
 
 export type EnterOutcome =
-  | { status: "entered"; entryCount: number; missingWalletChains: WalletChain[] }
+  | {
+      status: "entered";
+      entryCount: number;
+      missingWalletChains: WalletChain[];
+    }
   | { status: "duplicate" }
   | { status: "ineligible"; reasons: string[] }
   | { status: "no_wallet"; chains: WalletChain[] }
@@ -51,7 +64,11 @@ export async function enterRaffle(
   }
 
   // Task Engine gate: all required verification tasks must be VERIFIED.
-  const missingTasks = await checkRequiredTasks(raffle.id, member, raffle.requirements);
+  const missingTasks = await checkRequiredTasks(
+    raffle.id,
+    member,
+    raffle.requirements,
+  );
   if (missingTasks.length > 0) {
     return { status: "tasks_incomplete", missing: missingTasks };
   }
@@ -64,6 +81,7 @@ export async function enterRaffle(
   });
 
   try {
+    const weight = await entryWeightForMember(raffle, member);
     const entryCount = await prisma.$transaction(async (tx) => {
       await tx.participant.create({
         data: {
@@ -78,6 +96,7 @@ export async function enterRaffle(
           flagReason: eligibility.flags.length
             ? eligibility.flags.join(", ")
             : null,
+          weight,
         },
       });
       const updated = await tx.raffle.update({
@@ -95,7 +114,9 @@ export async function enterRaffle(
       action: "ENTRY_ADD",
       message: `${member.user.username} entered raffle #${raffleId}`,
       actorId: member.id,
-      metadata: eligibility.flags.length ? { flags: eligibility.flags } : undefined,
+      metadata: eligibility.flags.length
+        ? { flags: eligibility.flags }
+        : undefined,
     });
 
     // Which of the raffle's wallet chains does this user still need to register?
@@ -170,6 +191,32 @@ export async function leaveRaffle(
   }
 }
 
+async function entryWeightForMember(
+  raffle: { guildId: string; useRoleWeights: boolean },
+  member: GuildMember,
+): Promise<number> {
+  if (!raffle.useRoleWeights) return 1;
+  const roleIds = [...member.roles.cache.keys()];
+  if (roleIds.length === 0) return 1;
+  const conn = await prisma.guildConnection.findUnique({
+    where: { guildId: raffle.guildId },
+    select: { organizationId: true },
+  });
+  if (!conn) return 1;
+  const weights = await prisma.roleWeight.findMany({
+    where: {
+      organizationId: conn.organizationId,
+      guildId: raffle.guildId,
+      roleId: { in: roleIds },
+    },
+    select: { multiplier: true },
+  });
+  return Math.max(
+    1,
+    ...weights.map((w) => Math.max(1, Math.min(100, w.multiplier))),
+  );
+}
+
 /**
  * Task Engine gate (Phase 3). Returns the titles of REQUIRED verification
  * tasks the user hasn't completed. Discord tasks are auto-verified inline —
@@ -195,7 +242,16 @@ async function checkRequiredTasks(
     const statusByTask = new Map(completions.map((c) => [c.taskId, c.status]));
 
     for (const { task } of links) {
-      if (statusByTask.get(task.id) === "VERIFIED") continue;
+      if (statusByTask.get(task.id) === "VERIFIED") {
+        await awardTaskPoints(
+          task.organizationId,
+          member.id,
+          task.id,
+          task.title,
+          task.points,
+        );
+        continue;
+      }
 
       // Inline auto-verify for Discord tasks in THIS guild.
       const cfg = (task.config ?? {}) as { guildId?: string; roleId?: string };
@@ -203,7 +259,9 @@ async function checkRequiredTasks(
       const passes =
         inThisGuild &&
         (task.type === "DISCORD_JOIN" ||
-          (task.type === "DISCORD_ROLE" && cfg.roleId && member.roles.cache.has(cfg.roleId)));
+          (task.type === "DISCORD_ROLE" &&
+            cfg.roleId &&
+            member.roles.cache.has(cfg.roleId)));
 
       if (passes) {
         await prisma.taskCompletion
@@ -214,15 +272,30 @@ async function checkRequiredTasks(
               userId: member.id,
               status: "VERIFIED",
               verifiedAt: new Date(),
-              evidence: { method: "bot_inline_check", guildId: cfg.guildId, at: new Date().toISOString() },
+              evidence: {
+                method: "bot_inline_check",
+                guildId: cfg.guildId,
+                at: new Date().toISOString(),
+              },
             },
             update: {
               status: "VERIFIED",
               verifiedAt: new Date(),
-              evidence: { method: "bot_inline_check", guildId: cfg.guildId, at: new Date().toISOString() },
+              evidence: {
+                method: "bot_inline_check",
+                guildId: cfg.guildId,
+                at: new Date().toISOString(),
+              },
             },
           })
           .catch(() => undefined);
+        await awardTaskPoints(
+          task.organizationId,
+          member.id,
+          task.id,
+          task.title,
+          task.points,
+        );
         continue;
       }
 
@@ -254,12 +327,39 @@ async function checkRequiredTasks(
   return missing;
 }
 
+async function awardTaskPoints(
+  organizationId: string,
+  userId: string,
+  taskId: string,
+  taskTitle: string,
+  points: number,
+) {
+  if (points <= 0) return;
+  await prisma.pointsLedger
+    .create({
+      data: {
+        organizationId,
+        userId,
+        delta: points,
+        reason: `Task: ${taskTitle}`,
+        sourceType: "TASK",
+        sourceId: taskId,
+      },
+    })
+    .catch(() => undefined);
+}
+
 function legacySocialTasks(raffleId: number, requirements: unknown) {
   const tasks = parseRequirements(requirements).tasks ?? [];
   return tasks.flatMap((task, index) => {
     if (!task.label.trim()) return [];
     const url = task.url?.trim() || null;
-    const hash = createHash("sha1").update(`${task.label.trim()}\n${url ?? ""}`).digest("hex").slice(0, 12);
-    return [{ label: task.label.trim(), key: `legacy:${raffleId}:${index}:${hash}` }];
+    const hash = createHash("sha1")
+      .update(`${task.label.trim()}\n${url ?? ""}`)
+      .digest("hex")
+      .slice(0, 12);
+    return [
+      { label: task.label.trim(), key: `legacy:${raffleId}:${index}:${hash}` },
+    ];
   });
 }

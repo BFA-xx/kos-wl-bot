@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { OrgProvider, type OrgClientContext } from "@/lib/org-context";
@@ -27,7 +28,9 @@ export function OrgShell({
     const t = q.trim();
     if (!t) return;
     const n = t.replace(/^#/, "");
-    router.push(/^\d+$/.test(n) ? `/${ctx.slug}/raffles/${n}` : `/${ctx.slug}/raffles`);
+    router.push(
+      /^\d+$/.test(n) ? `/${ctx.slug}/raffles/${n}` : `/${ctx.slug}/raffles`,
+    );
     setOpen(false);
   }
 
@@ -48,7 +51,9 @@ export function OrgShell({
             ) : (
               <div>
                 <div className="text-sm font-semibold tracking-tight">KOS</div>
-                <div className="text-[11px] uppercase tracking-[0.22em] text-kos-muted">Command Center</div>
+                <div className="text-[11px] uppercase tracking-[0.22em] text-kos-muted">
+                  Command Center
+                </div>
               </div>
             )}
             <button
@@ -56,7 +61,9 @@ export function OrgShell({
               className="kos-btn hidden h-8 w-8 p-0 lg:inline-flex"
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-              <IconChevron className={`h-4 w-4 transition-transform ${collapsed ? "-rotate-90" : "rotate-90"}`} />
+              <IconChevron
+                className={`h-4 w-4 transition-transform ${collapsed ? "-rotate-90" : "rotate-90"}`}
+              />
             </button>
           </div>
           <OrgSidebarContent collapsed={collapsed} />
@@ -83,7 +90,9 @@ export function OrgShell({
         ) : null}
 
         {/* Main column */}
-        <div className={`transition-all duration-300 ${collapsed ? "lg:pl-24" : "lg:pl-72"}`}>
+        <div
+          className={`transition-all duration-300 ${collapsed ? "lg:pl-24" : "lg:pl-72"}`}
+        >
           <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#0A0A0A]/70 backdrop-blur-2xl">
             <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
               <button
@@ -106,6 +115,29 @@ export function OrgShell({
                 </span>
               </form>
               <div className="ml-auto flex items-center gap-2">
+                <Link
+                  href="/me"
+                  className="kos-btn hidden h-10 px-3 text-xs sm:inline-flex"
+                >
+                  My profile
+                </Link>
+                <Link
+                  href="/me"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/[0.10] bg-white/[0.04] text-[11px] font-bold text-kos-fg transition-colors hover:border-white/[0.18] hover:bg-white/[0.07]"
+                  aria-label="Open My KOS profile"
+                  title="My KOS profile"
+                >
+                  {ctx.user.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={ctx.user.avatarUrl}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    ctx.user.name.slice(0, 2).toUpperCase()
+                  )}
+                </Link>
                 <ThemeToggle />
               </div>
             </div>

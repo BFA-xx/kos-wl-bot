@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { useState } from "react";
 import { fmtDate } from "@/lib/format";
 import { useOrg } from "@/lib/org-context";
+import { TableShell } from "@/components/ui";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -45,7 +46,9 @@ export function ParticipantsLive({ raffleId }: { raffleId: number }) {
 
   async function copyUsernames() {
     try {
-      await navigator.clipboard.writeText(filtered.map((p) => p.username).join("\n"));
+      await navigator.clipboard.writeText(
+        filtered.map((p) => p.username).join("\n"),
+      );
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -59,7 +62,9 @@ export function ParticipantsLive({ raffleId }: { raffleId: number }) {
         <h3 className="text-sm font-semibold uppercase tracking-wide text-kos-grey">
           Participants
           <span className="ml-2 text-kos-white">{data?.count ?? "—"}</span>
-          {data?.spots ? <span className="text-kos-grey"> / {data.spots} spots</span> : null}
+          {data?.spots ? (
+            <span className="text-kos-grey"> / {data.spots} spots</span>
+          ) : null}
           {live ? (
             <span className="ml-2 inline-flex items-center gap-1 text-xs text-kos-silver">
               <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-kos-silver" />
@@ -85,35 +90,39 @@ export function ParticipantsLive({ raffleId }: { raffleId: number }) {
       ) : all.length === 0 ? (
         <p className="text-sm text-kos-grey">No entries yet.</p>
       ) : (
-        <div className="max-h-[420px] overflow-y-auto overflow-x-auto">
-          <table className="w-full min-w-[420px] text-sm">
-            <thead className="sticky top-0 bg-kos-card text-left text-xs uppercase tracking-wide text-kos-grey">
-              <tr>
-                <th className="px-2 py-2">#</th>
-                <th className="px-2 py-2">User</th>
-                <th className="px-2 py-2">Entered</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p, i) => (
-                <tr key={p.userId} className="border-b border-kos-line/50">
-                  <td className="px-2 py-2 text-kos-grey">{i + 1}</td>
-                  <td className="px-2 py-2">
-                    {p.username}
-                    {p.flagged ? (
-                      <span
-                        className="ml-2 text-xs text-kos-grey"
-                        title={p.flagReason ?? "flagged"}
-                      >
-                        ⚑
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="px-2 py-2 text-kos-grey">{fmtDate(p.enteredAt)}</td>
+        <div className="max-h-[420px] overflow-y-auto">
+          <TableShell>
+            <table className="kos-table min-w-[420px]">
+              <thead>
+                <tr>
+                  <th className="px-2 py-2">#</th>
+                  <th className="px-2 py-2">User</th>
+                  <th className="px-2 py-2">Entered</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((p, i) => (
+                  <tr key={p.userId}>
+                    <td className="px-2 py-2 text-kos-grey">{i + 1}</td>
+                    <td className="px-2 py-2">
+                      {p.username}
+                      {p.flagged ? (
+                        <span
+                          className="ml-2 text-xs text-kos-grey"
+                          title={p.flagReason ?? "flagged"}
+                        >
+                          ⚑
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-2 py-2 text-kos-grey">
+                      {fmtDate(p.enteredAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableShell>
         </div>
       )}
     </div>

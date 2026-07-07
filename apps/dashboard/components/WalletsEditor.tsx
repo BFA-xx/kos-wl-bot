@@ -21,7 +21,10 @@ interface Wallet {
 
 /** Add / update / remove payout wallets — web parity with /wallet register. */
 export function WalletsEditor() {
-  const { data, mutate } = useSWR<{ wallets: Wallet[] }>("/api/me/wallets", fetcher);
+  const { data, mutate } = useSWR<{ wallets: Wallet[] }>(
+    "/api/me/wallets",
+    fetcher,
+  );
   const [chain, setChain] = useState("ETHEREUM");
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
@@ -58,12 +61,22 @@ export function WalletsEditor() {
 
   return (
     <div className="space-y-5">
-      <form onSubmit={save} className="kos-card space-y-3 p-4">
-        <div className="text-xs font-semibold uppercase tracking-wide text-kos-muted">
-          Add or update a wallet
+      <form onSubmit={save} className="kos-card space-y-4 p-5">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-kos-muted">
+            Add or update a wallet
+          </div>
+          <p className="mt-1 text-sm text-kos-muted">
+            One registry powers Discord and the web. Update here and the bot
+            sees it instantly.
+          </p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <select className="kos-input sm:max-w-[160px]" value={chain} onChange={(e) => setChain(e.target.value)}>
+        <div className="grid gap-2 sm:grid-cols-[10rem_1fr_auto]">
+          <select
+            className="kos-input sm:max-w-[160px]"
+            value={chain}
+            onChange={(e) => setChain(e.target.value)}
+          >
             {CHAINS.map((c) => (
               <option key={c.key} value={c.key}>
                 {c.label}
@@ -76,7 +89,11 @@ export function WalletsEditor() {
             value={address}
             onChange={(e) => setAddress(e.target.value)}
           />
-          <button type="submit" disabled={busy || !address.trim()} className="kos-btn-primary whitespace-nowrap disabled:opacity-50">
+          <button
+            type="submit"
+            disabled={busy || !address.trim()}
+            className="kos-btn-primary whitespace-nowrap disabled:opacity-50"
+          >
             {busy ? "Saving…" : byChain.has(chain) ? "Update" : "Add wallet"}
           </button>
         </div>
@@ -86,25 +103,32 @@ export function WalletsEditor() {
       {!data ? (
         <Empty>Loading…</Empty>
       ) : wallets.length === 0 ? (
-        <Empty>No wallets yet. Add one above — some raffles require it to enter.</Empty>
+        <Empty>
+          No wallets yet. Add one above — some raffles require it to enter.
+        </Empty>
       ) : (
-        <div className="space-y-2">
+        <div className="grid gap-3">
           {wallets.map((w) => (
             <div
               key={w.chain}
-              className="flex flex-col gap-2 rounded-xl border border-kos-border bg-kos-panel/50 p-4 sm:flex-row sm:items-center sm:justify-between"
+              className="kos-card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0">
                 <div className="text-sm font-semibold">
                   {CHAINS.find((c) => c.key === w.chain)?.label ?? w.chain}
                 </div>
-                <code className="break-all text-xs text-kos-muted">{w.address}</code>
+                <code className="break-all text-xs text-kos-muted">
+                  {w.address}
+                </code>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="text-[11px] text-kos-muted">
                   updated {new Date(w.updatedAt).toLocaleDateString()}
                 </span>
-                <button onClick={() => remove(w.chain)} className="text-xs text-kos-muted hover:text-red-400">
+                <button
+                  onClick={() => remove(w.chain)}
+                  className="text-xs text-kos-muted hover:text-red-400"
+                >
                   Remove
                 </button>
               </div>
@@ -114,8 +138,9 @@ export function WalletsEditor() {
       )}
 
       <p className="text-xs text-kos-muted/70">
-        Also works in Discord with <code>/wallet register</code> — it's the same registry.
-        Addresses are encrypted at rest and only shared with the community whose raffle you win.
+        Also works in Discord with <code>/wallet register</code> — it's the same
+        registry. Addresses are encrypted at rest and only shared with the
+        community whose raffle you win.
       </p>
     </div>
   );

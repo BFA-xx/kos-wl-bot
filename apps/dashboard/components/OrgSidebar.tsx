@@ -28,7 +28,7 @@ const NAV = [
   { seg: "raffles", label: "Raffles", Icon: IconTicket },
   { seg: "tasks", label: "Tasks", Icon: IconCheck },
   { seg: "participants", label: "Participants", Icon: IconUsers },
-  { seg: "points", label: "Points", Icon: IconChart, soon: true },
+  { seg: "points", label: "Points", Icon: IconChart },
   { seg: "rewards", label: "Rewards", Icon: IconCard, soon: true },
   { seg: "wallets", label: "Wallets", Icon: IconWallet },
   { seg: "analytics", label: "Analytics", Icon: IconChart },
@@ -66,7 +66,11 @@ export function OrgSidebarContent({
 
           if (soon) {
             return (
-              <div key={seg} className={`${cls} cursor-not-allowed opacity-60`} title={`${label} coming soon`}>
+              <div
+                key={seg}
+                className={`${cls} cursor-not-allowed opacity-60`}
+                title={`${label} coming soon`}
+              >
                 <Icon className="text-kos-muted" />
                 {collapsed ? null : <span className="truncate">{label}</span>}
                 {collapsed ? null : (
@@ -87,11 +91,17 @@ export function OrgSidebarContent({
               title={collapsed ? label : undefined}
             >
               <Icon
-                className={active ? "text-blue-300" : "text-kos-muted group-hover:text-kos-fg"}
+                className={
+                  active
+                    ? "text-blue-300"
+                    : "text-kos-muted group-hover:text-kos-fg"
+                }
               />
               {collapsed ? null : <span className="truncate">{label}</span>}
               {active ? (
-                <span className={`${collapsed ? "absolute right-1.5" : "ml-auto"} h-1.5 w-1.5 rounded-full bg-blue-400`} />
+                <span
+                  className={`${collapsed ? "absolute right-1.5" : "ml-auto"} h-1.5 w-1.5 rounded-full bg-blue-400`}
+                />
               ) : null}
             </Link>
           );
@@ -110,7 +120,9 @@ export function OrgSidebarContent({
             {collapsed ? null : "Super Admin"}
           </Link>
         ) : null}
-        <div className={`flex items-center gap-2.5 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-2.5 py-2 ${collapsed ? "justify-center" : ""}`}>
+        <div
+          className={`flex items-center gap-2.5 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-2.5 py-2 ${collapsed ? "justify-center" : ""}`}
+        >
           <Link
             href="/me"
             onClick={onNavigate}
@@ -120,32 +132,50 @@ export function OrgSidebarContent({
             <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-kos-panel text-[11px] font-bold">
               {org.user.avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={org.user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                <img
+                  src={org.user.avatarUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 org.user.name.slice(0, 2).toUpperCase()
               )}
             </div>
-            {collapsed ? null : <div className="min-w-0 leading-tight">
-              <div className="truncate text-xs font-medium">{org.user.name}</div>
-              <div className="text-[11px] text-kos-muted">{org.isOwner ? "Owner" : "Member"} · My profile</div>
-            </div>}
+            {collapsed ? null : (
+              <div className="min-w-0 leading-tight">
+                <div className="truncate text-xs font-medium">
+                  {org.user.name}
+                </div>
+                <div className="text-[11px] text-kos-muted">
+                  {org.isOwner ? "Owner" : "Member"} · My profile
+                </div>
+              </div>
+            )}
           </Link>
-          {collapsed ? null : <form action="/api/auth/logout" method="post" className="ml-auto">
-            <button
-              className="rounded-lg p-1.5 text-kos-muted transition-colors hover:text-kos-fg"
-              aria-label="Sign out"
-              title="Sign out"
-            >
-              <IconLogout />
-            </button>
-          </form>}
+          {collapsed ? null : (
+            <form action="/api/auth/logout" method="post" className="ml-auto">
+              <button
+                className="rounded-lg p-1.5 text-kos-muted transition-colors hover:text-kos-fg"
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <IconLogout />
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function OrgSwitcher({ onNavigate, collapsed = false }: { onNavigate?: () => void; collapsed?: boolean }) {
+function OrgSwitcher({
+  onNavigate,
+  collapsed = false,
+}: {
+  onNavigate?: () => void;
+  collapsed?: boolean;
+}) {
   const org = useOrg();
   const [open, setOpen] = useState(false);
 
@@ -159,22 +189,32 @@ function OrgSwitcher({ onNavigate, collapsed = false }: { onNavigate?: () => voi
         <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-kos-fg text-[11px] font-black text-kos-bg">
           {org.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={org.logoUrl} alt="" className="h-full w-full object-cover" />
+            <img
+              src={org.logoUrl}
+              alt=""
+              className="h-full w-full object-cover"
+            />
           ) : (
             org.name.slice(0, 2).toUpperCase()
           )}
         </div>
-        {collapsed ? null : <div className="min-w-0 flex-1 leading-tight">
-          <div className="truncate text-sm font-semibold">{org.name}</div>
-          <div className="text-[11px] text-kos-muted">/{org.slug}</div>
-        </div>}
-        {collapsed ? null : <IconChevron
-          className={`text-kos-muted transition-transform ${open ? "rotate-180" : ""}`}
-        />}
+        {collapsed ? null : (
+          <div className="min-w-0 flex-1 leading-tight">
+            <div className="truncate text-sm font-semibold">{org.name}</div>
+            <div className="text-[11px] text-kos-muted">/{org.slug}</div>
+          </div>
+        )}
+        {collapsed ? null : (
+          <IconChevron
+            className={`text-kos-muted transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        )}
       </button>
 
       {open ? (
-        <div className={`absolute top-full z-40 mt-1.5 overflow-hidden rounded-2xl border border-white/[0.09] bg-[#111] shadow-2xl ${collapsed ? "left-0 w-72" : "left-0 right-0"}`}>
+        <div
+          className={`absolute top-full z-40 mt-1.5 overflow-hidden rounded-2xl border border-white/[0.09] bg-[#111] shadow-2xl ${collapsed ? "left-0 w-72" : "left-0 right-0"}`}
+        >
           <div className="max-h-60 overflow-y-auto py-1">
             {org.orgs.map((o) => (
               <Link
@@ -189,13 +229,19 @@ function OrgSwitcher({ onNavigate, collapsed = false }: { onNavigate?: () => voi
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-kos-fg/90 text-[10px] font-black text-kos-bg">
                   {o.logoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={o.logoUrl} alt="" className="h-full w-full object-cover" />
+                    <img
+                      src={o.logoUrl}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     o.name.slice(0, 2).toUpperCase()
                   )}
                 </div>
                 <span className="min-w-0 flex-1 truncate">{o.name}</span>
-                {o.slug === org.slug ? <IconCheck className="text-blue-300" /> : null}
+                {o.slug === org.slug ? (
+                  <IconCheck className="text-blue-300" />
+                ) : null}
               </Link>
             ))}
           </div>

@@ -4,7 +4,13 @@ import useSWR from "swr";
 import Link from "next/link";
 import { useState } from "react";
 import { useParams } from "next/navigation";
-import { PageTitle, StatusBadge, Segmented, Empty } from "@/components/ui";
+import {
+  PageTitle,
+  StatusBadge,
+  Segmented,
+  Empty,
+  TableShell,
+} from "@/components/ui";
 import { NewRaffleModal } from "@/components/NewRaffleModal";
 import { useCan } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -50,9 +56,16 @@ export default function RafflesPage() {
         subtitle="Every whitelist raffle across your connected servers."
         action={
           <>
-            <Segmented options={FILTERS as any} value={status} onChange={setStatus} />
+            <Segmented
+              options={FILTERS as any}
+              value={status}
+              onChange={setStatus}
+            />
             {canCreate ? (
-              <button className="kos-btn-primary" onClick={() => setShowNew(true)}>
+              <button
+                className="kos-btn-primary"
+                onClick={() => setShowNew(true)}
+              >
                 + New raffle
               </button>
             ) : null}
@@ -65,9 +78,9 @@ export default function RafflesPage() {
       ) : raffles.length === 0 ? (
         <Empty>No raffles yet. Run one from Discord with /raffle.</Empty>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-kos-border">
-          <table className="w-full text-sm">
-            <thead className="bg-kos-panel/60 text-left text-xs uppercase tracking-wide text-kos-muted">
+        <TableShell>
+          <table className="kos-table">
+            <thead>
               <tr>
                 <th className="px-4 py-3">#</th>
                 <th className="px-4 py-3">Project / Title</th>
@@ -79,9 +92,12 @@ export default function RafflesPage() {
             </thead>
             <tbody>
               {raffles.map((r) => (
-                <tr key={r.id} className="border-t border-kos-border/60 hover:bg-kos-fg/[0.03]">
+                <tr key={r.id}>
                   <td className="px-4 py-3 text-kos-muted">
-                    <Link href={`/${org}/raffles/${r.id}`} className="hover:text-kos-fg">
+                    <Link
+                      href={`/${org}/raffles/${r.id}`}
+                      className="hover:text-kos-fg"
+                    >
                       #{r.id}
                     </Link>
                   </td>
@@ -94,14 +110,20 @@ export default function RafflesPage() {
                   <td className="px-4 py-3">
                     <StatusBadge status={r.status} />
                   </td>
-                  <td className="px-4 py-3 text-right font-medium">{r.entryCount}</td>
-                  <td className="px-4 py-3 text-right text-kos-muted">{r.spots}</td>
-                  <td className="hidden px-4 py-3 text-kos-muted md:table-cell">{fmtDate(r.endAt)}</td>
+                  <td className="px-4 py-3 text-right font-medium">
+                    {r.entryCount}
+                  </td>
+                  <td className="px-4 py-3 text-right text-kos-muted">
+                    {r.spots}
+                  </td>
+                  <td className="hidden px-4 py-3 text-kos-muted md:table-cell">
+                    {fmtDate(r.endAt)}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </TableShell>
       )}
     </>
   );

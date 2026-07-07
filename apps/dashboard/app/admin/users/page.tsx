@@ -1,7 +1,10 @@
 import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
-import { PageTitle, StatCard } from "@/components/ui";
-import { AddSuperAdmin, UserAdminToggle } from "@/components/admin/UserAdminControls";
+import { PageTitle, StatCard, TableShell } from "@/components/ui";
+import {
+  AddSuperAdmin,
+  UserAdminToggle,
+} from "@/components/admin/UserAdminControls";
 import { fmtDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -33,9 +36,9 @@ export default async function AdminUsersPage() {
 
       <AddSuperAdmin />
 
-      <div className="overflow-hidden rounded-2xl border border-kos-border">
-        <table className="w-full text-sm">
-          <thead className="bg-kos-panel/60 text-left text-xs uppercase tracking-wide text-kos-muted">
+      <TableShell>
+        <table className="kos-table">
+          <thead>
             <tr>
               <th className="px-4 py-3">User</th>
               <th className="px-4 py-3">Email</th>
@@ -46,7 +49,7 @@ export default async function AdminUsersPage() {
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id} className="border-t border-kos-border/60">
+              <tr key={u.id}>
                 <td className="px-4 py-3">
                   <div className="font-medium">
                     {u.globalName ?? u.username}
@@ -64,13 +67,17 @@ export default async function AdminUsersPage() {
                   {u.lastLoginAt ? fmtDate(u.lastLoginAt) : "—"}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <UserAdminToggle id={u.id} isSuperAdmin={u.isSuperAdmin} isSelf={u.id === me.id} />
+                  <UserAdminToggle
+                    id={u.id}
+                    isSuperAdmin={u.isSuperAdmin}
+                    isSelf={u.id === me.id}
+                  />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      </TableShell>
     </>
   );
 }

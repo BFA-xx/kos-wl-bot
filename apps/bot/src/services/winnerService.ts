@@ -1,11 +1,19 @@
 import { type Client } from "discord.js";
 import { prisma, LogCategory, RaffleStatus } from "@kos/db";
-import { verifiableSample, generateDrawSeed } from "../utils/random.js";
+import {
+  verifiableSample,
+  verifiableWeightedSample,
+  generateDrawSeed,
+} from "../utils/random.js";
 import {
   buildWinnerEmbed,
   buildWinnerMentions,
 } from "../embeds/winnerEmbed.js";
-import { getRaffle, fetchTextChannel, refreshRaffleMessage } from "./raffleService.js";
+import {
+  getRaffle,
+  fetchTextChannel,
+  refreshRaffleMessage,
+} from "./raffleService.js";
 import { dmWinnersForWallets } from "./walletService.js";
 import { isBlacklisted } from "./blacklistService.js";
 import { audit } from "./auditService.js";
@@ -16,6 +24,7 @@ interface DrawnWinner {
   userId: string;
   username: string;
   participantId: number;
+  weight: number;
 }
 
 /**
@@ -30,25 +39,42 @@ export async function closeAndDraw(
 ): Promise<void> {
   const raffle = await getRaffle(raffleId);
   if (!raffle) return;
-  if (raffle.status === RaffleStatus.ENDED || raffle.status === RaffleStatus.CANCELLED) {
+  if (
+    raffle.status === RaffleStatus.ENDED ||
+    raffle.status === RaffleStatus.CANCELLED
+  ) {
     return;
   }
 
   // Eligible pool = entered users who are not currently blacklisted.
   const participants = await prisma.participant.findMany({
     where: { raffleId },
-    select: { id: true, userId: true, username: true },
+    select: { id: true, userId: true, username: true, weight: true },
   });
   const pool: DrawnWinner[] = [];
   for (const p of participants) {
     if (await isBlacklisted(raffle.guildId, p.userId)) continue;
-    pool.push({ userId: p.userId, username: p.username, participantId: p.id });
+    pool.push({
+      userId: p.userId,
+      username: p.username,
+      participantId: p.id,
+      weight: p.weight,
+    });
   }
 
   const { seed, hash } = generateDrawSeed();
-  const drawn = verifiableSample(pool, raffle.spots, seed, (p) => p.userId);
+  const drawn = raffle.useRoleWeights
+    ? verifiableWeightedSample(
+        pool,
+        raffle.spots,
+        seed,
+        (p) => p.userId,
+        (p) => p.weight,
+      )
+    : verifiableSample(pool, raffle.spots, seed, (p) => p.userId);
 
-  const endedAt = raffle.endAt.getTime() < Date.now() ? raffle.endAt : new Date();
+  const endedAt =
+    raffle.endAt.getTime() < Date.now() ? raffle.endAt : new Date();
 
   await prisma.$transaction(async (tx) => {
     await tx.raffle.update({
@@ -81,12 +107,23 @@ export async function closeAndDraw(
     action: "RAFFLE_DRAW",
     message: `Drew ${drawn.length} winner(s) from ${pool.length} eligible entries`,
     actorId: actorId ?? null,
-    metadata: { drawSeedHash: hash, spots: raffle.spots },
+    metadata: {
+      drawSeedHash: hash,
+      spots: raffle.spots,
+      weighted: raffle.useRoleWeights,
+      totalWeight: pool.reduce((sum, p) => sum + Math.max(1, p.weight), 0),
+    },
   });
 
   // Web-parity notifications: winners get a WIN, other entrants a RESULT.
-  await notifyRaffleResults(raffleId, raffle.guildId, raffle.projectName, drawn, participants).catch(
-    (err) => logger.warn({ err, raffleId }, "result notifications failed"),
+  await notifyRaffleResults(
+    raffleId,
+    raffle.guildId,
+    raffle.projectName,
+    drawn,
+    participants,
+  ).catch((err) =>
+    logger.warn({ err, raffleId }, "result notifications failed"),
   );
 
   // Lock the live embed (buttons disabled, status ENDED).
@@ -124,7 +161,9 @@ async function notifyRaffleResults(
     where: { guildId },
     include: { organization: { select: { slug: true } } },
   });
-  const link = conn ? `/c/${conn.organization.slug}/raffles/${raffleId}` : "/me/history";
+  const link = conn
+    ? `/c/${conn.organization.slug}/raffles/${raffleId}`
+    : "/me/history";
 
   const winnerIds = new Set(winners.map((w) => w.userId));
   const losers = participants.filter((p) => !winnerIds.has(p.userId));
@@ -236,17 +275,30 @@ export async function rerollWinners(
   const winnerIds = new Set(currentWinners.map((w) => w.userId));
   const participants = await prisma.participant.findMany({
     where: { raffleId },
-    select: { id: true, userId: true, username: true },
+    select: { id: true, userId: true, username: true, weight: true },
   });
   const pool: DrawnWinner[] = [];
   for (const p of participants) {
     if (winnerIds.has(p.userId)) continue;
     if (await isBlacklisted(raffle.guildId, p.userId)) continue;
-    pool.push({ userId: p.userId, username: p.username, participantId: p.id });
+    pool.push({
+      userId: p.userId,
+      username: p.username,
+      participantId: p.id,
+      weight: p.weight,
+    });
   }
 
   const { seed } = generateDrawSeed();
-  const replacements = verifiableSample(pool, toReplace.length, seed, (p) => p.userId);
+  const replacements = raffle.useRoleWeights
+    ? verifiableWeightedSample(
+        pool,
+        toReplace.length,
+        seed,
+        (p) => p.userId,
+        (p) => p.weight,
+      )
+    : verifiableSample(pool, toReplace.length, seed, (p) => p.userId);
 
   const added: { userId: string; username: string }[] = [];
   await prisma.$transaction(async (tx) => {
@@ -282,20 +334,30 @@ export async function rerollWinners(
     metadata: {
       removed: toReplace.map((w) => w.userId),
       added: added.map((w) => w.userId),
+      weighted: raffle.useRoleWeights,
+      totalWeight: pool.reduce((sum, p) => sum + Math.max(1, p.weight), 0),
     },
   });
 
   // Notify freshly drawn replacement winners on the web too.
   if (added.length > 0) {
-    await notifyRaffleResults(raffleId, raffle.guildId, raffle.projectName, added, []).catch(
-      (err) => logger.warn({ err, raffleId }, "reroll notifications failed"),
+    await notifyRaffleResults(
+      raffleId,
+      raffle.guildId,
+      raffle.projectName,
+      added,
+      [],
+    ).catch((err) =>
+      logger.warn({ err, raffleId }, "reroll notifications failed"),
     );
   }
 
   // Announce reroll + wallet DM new winners + refresh proof.
   if (added.length > 0) {
     const channelId = raffle.announceChannelId ?? raffle.channelId;
-    const channel = channelId ? await fetchTextChannel(client, channelId) : null;
+    const channel = channelId
+      ? await fetchTextChannel(client, channelId)
+      : null;
     if (channel) {
       await channel
         .send({
@@ -316,7 +378,10 @@ export async function rerollWinners(
   );
 
   return {
-    replaced: toReplace.map((w) => ({ userId: w.userId, username: w.username })),
+    replaced: toReplace.map((w) => ({
+      userId: w.userId,
+      username: w.username,
+    })),
     added,
   };
 }

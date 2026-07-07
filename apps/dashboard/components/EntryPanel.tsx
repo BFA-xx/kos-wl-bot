@@ -25,21 +25,37 @@ interface Status {
 }
 
 /** Web Enter/Leave with the live gate checklist — parity with the bot's button. */
-export function EntryPanel({ raffleId, compact = false }: { raffleId: number; compact?: boolean }) {
-  const { data, mutate } = useSWR<Status>(`/api/me/raffles/${raffleId}`, fetcher, {
-    refreshInterval: 15000,
-  });
+export function EntryPanel({
+  raffleId,
+  compact = false,
+}: {
+  raffleId: number;
+  compact?: boolean;
+}) {
+  const { data, mutate } = useSWR<Status>(
+    `/api/me/raffles/${raffleId}`,
+    fetcher,
+    {
+      refreshInterval: 15000,
+    },
+  );
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   async function act(action: "enter" | "leave") {
     setBusy(true);
     setMsg(null);
-    const res = await fetch(`/api/me/raffles/${raffleId}/${action}`, { method: "POST" });
+    const res = await fetch(`/api/me/raffles/${raffleId}/${action}`, {
+      method: "POST",
+    });
     const body = await res.json().catch(() => ({}));
     setBusy(false);
     if (res.ok) {
-      setMsg(action === "enter" ? "You're in — good luck! 🎉" : "You left the raffle.");
+      setMsg(
+        action === "enter"
+          ? "You're in — good luck! 🎉"
+          : "You left the raffle.",
+      );
       mutate();
     } else if (body.error === "requirements") {
       setMsg("Some requirements aren't met yet — see the checklist below.");
@@ -50,13 +66,26 @@ export function EntryPanel({ raffleId, compact = false }: { raffleId: number; co
   }
 
   if (!data) {
-    return <div className={`${compact ? "rounded-xl border border-kos-border bg-kos-panel/50 p-4" : "kos-card p-5"} text-sm text-kos-muted`}>Checking your eligibility…</div>;
+    return (
+      <div
+        className={`${compact ? "rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4" : "kos-card p-5"} text-sm text-kos-muted`}
+      >
+        Checking your eligibility…
+      </div>
+    );
   }
   if (data.error === "unauthorized") {
     return (
-      <div className={`${compact ? "rounded-xl border border-kos-border bg-kos-panel/50 p-4" : "kos-card p-5"} text-center`}>
-        <p className="text-sm text-kos-muted">Sign in with Discord to enter this raffle.</p>
-        <a href="/api/auth/discord/login" className="kos-btn-primary mt-3 inline-block">
+      <div
+        className={`${compact ? "rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4" : "kos-card p-5"} text-center`}
+      >
+        <p className="text-sm text-kos-muted">
+          Sign in with Discord to enter this raffle.
+        </p>
+        <a
+          href="/api/auth/discord/login"
+          className="kos-btn-primary mt-3 inline-block"
+        >
           Continue with Discord
         </a>
       </div>
@@ -65,7 +94,9 @@ export function EntryPanel({ raffleId, compact = false }: { raffleId: number; co
 
   const live = data.status === "LIVE";
   const showGates = live && !data.entered && data.gates.length > 0;
-  const shell = compact ? "rounded-xl border border-kos-border bg-kos-panel/50 p-4" : "kos-card p-5";
+  const shell = compact
+    ? "rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4"
+    : "kos-card p-5";
 
   return (
     <div className={shell}>
@@ -97,7 +128,11 @@ export function EntryPanel({ raffleId, compact = false }: { raffleId: number; co
             </button>
           ) : null}
           {live && data.entered ? (
-            <button onClick={() => act("leave")} disabled={busy} className="kos-btn ml-auto">
+            <button
+              onClick={() => act("leave")}
+              disabled={busy}
+              className="kos-btn ml-auto"
+            >
               {busy ? "…" : "Leave"}
             </button>
           ) : null}
@@ -105,12 +140,17 @@ export function EntryPanel({ raffleId, compact = false }: { raffleId: number; co
       </div>
 
       {showGates ? (
-        <div className="mt-4 space-y-1.5 border-t border-kos-border pt-4">
+        <div className="mt-4 grid gap-2 border-t border-white/[0.08] pt-4 sm:grid-cols-2">
           {data.gates.map((g) => (
-            <div key={g.key} className="flex items-start gap-2.5 text-sm">
+            <div
+              key={g.key}
+              className="flex items-start gap-2.5 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3 text-sm"
+            >
               <span
-                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                  g.ok ? "bg-emerald-500/20 text-emerald-400" : "bg-kos-panel text-kos-muted"
+                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                  g.ok
+                    ? "bg-emerald-500/20 text-emerald-400"
+                    : "bg-kos-panel text-kos-muted"
                 }`}
               >
                 {g.ok ? "✓" : "·"}
@@ -121,7 +161,10 @@ export function EntryPanel({ raffleId, compact = false }: { raffleId: number; co
                   <div className="text-xs text-kos-muted/80">
                     {g.reason}{" "}
                     {g.url ? (
-                      <Link href={g.url} className="text-kos-fg underline-offset-2 hover:underline">
+                      <Link
+                        href={g.url}
+                        className="text-kos-fg underline-offset-2 hover:underline"
+                      >
                         Fix it →
                       </Link>
                     ) : null}
@@ -131,8 +174,9 @@ export function EntryPanel({ raffleId, compact = false }: { raffleId: number; co
             </div>
           ))}
           {data.discordOnly ? (
-            <p className="pt-1 text-xs text-amber-400/90">
-              This raffle has a Discord-native requirement — enter it from Discord.
+            <p className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-3 text-xs text-amber-300/90 sm:col-span-2">
+              This raffle has a Discord-native requirement — enter it from
+              Discord.
             </p>
           ) : null}
         </div>

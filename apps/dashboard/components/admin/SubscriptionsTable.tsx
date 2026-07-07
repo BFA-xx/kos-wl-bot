@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { TableShell } from "@/components/ui";
 
 interface Row {
   id: string;
@@ -31,9 +32,9 @@ export function SubscriptionsTable({ initial }: { initial: Row[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-kos-border">
-      <table className="w-full text-sm">
-        <thead className="bg-kos-panel/60 text-left text-xs uppercase tracking-wide text-kos-muted">
+    <TableShell>
+      <table className="kos-table">
+        <thead>
           <tr>
             <th className="px-4 py-3">Organization</th>
             <th className="px-4 py-3">Plan</th>
@@ -43,7 +44,7 @@ export function SubscriptionsTable({ initial }: { initial: Row[] }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} className="border-t border-kos-border/60">
+            <tr key={r.id}>
               <td className="px-4 py-3">
                 <div className="font-medium">{r.org}</div>
                 <div className="text-[11px] text-kos-muted">/{r.slug}</div>
@@ -74,7 +75,9 @@ export function SubscriptionsTable({ initial }: { initial: Row[] }) {
                   ))}
                 </select>
               </td>
-              <td className="px-4 py-3 text-xs text-kos-muted">{saving === r.id ? "saving…" : ""}</td>
+              <td className="px-4 py-3 text-xs text-kos-muted">
+                {saving === r.id ? "saving…" : ""}
+              </td>
             </tr>
           ))}
           {rows.length === 0 ? (
@@ -86,6 +89,6 @@ export function SubscriptionsTable({ initial }: { initial: Row[] }) {
           ) : null}
         </tbody>
       </table>
-    </div>
+    </TableShell>
   );
 }

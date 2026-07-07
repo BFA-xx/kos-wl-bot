@@ -107,6 +107,7 @@ model User {
   // Phase 3: linked external accounts (X, etc).
   connectedAccounts ConnectedAccount[]
   TaskCompletion    TaskCompletion[]
+  pointsLedger      PointsLedger[]
   notifications     Notification[]
 
   /// Last time the user opened their notification feed (announcement unread
@@ -170,6 +171,10 @@ model Raffle {
   /// before they can enter.
   requireWallet Boolean @default(false)
 
+  /// When true, participant weights are snapshotted from org role multipliers
+  /// at entry and the final draw uses the weighted verifiable sampler.
+  useRoleWeights Boolean @default(false)
+
   entryCount Int @default(0)
 
   /// When true, the live embed hides the entry count / entrant list.
@@ -227,6 +232,25 @@ model RaffleRole {
   @@map("raffle_roles")
 }
 
+/// Organization-level role multipliers for weighted raffles. A participant's
+/// entry weight is the maximum multiplier of their held roles at entry time.
+model RoleWeight {
+  id             String   @id @default(cuid())
+  organizationId String
+  guildId        String
+  roleId         String
+  roleName       String
+  multiplier     Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, roleId])
+  @@index([organizationId, guildId])
+  @@map("role_weights")
+}
+
 /// A single entry into a raffle.
 model Participant {
   id        Int      @id @default(autoincrement())
@@ -240,6 +264,8 @@ model Participant {
   joinedGuildAt    DateTime?
   flagged          Boolean   @default(false)
   flagReason       String?
+  /// Snapshot used by weighted draws. Defaults to 1 for uniform odds.
+  weight           Int       @default(1)
 
   raffle Raffle  @relation(fields: [raffleId], references: [id], onDelete: Cascade)
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -396,6 +422,8 @@ model Organization {
   subscription     Subscription?
   auditLogs        AuditLog[]
   TaskDefinition   TaskDefinition[]
+  pointsLedger     PointsLedger[]
+  roleWeights      RoleWeight[]
 
   @@index([ownerId])
   @@map("organizations")
@@ -642,6 +670,28 @@ model TaskCompletion {
   @@index([userId])
   @@index([taskId, status])
   @@map("task_completions")
+}
+
+/// Append-only organization points ledger. Balance is SUM(delta) per
+/// (organizationId, userId). Awarding task points uses sourceType/sourceId to
+/// stay idempotent.
+model PointsLedger {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  delta          Int
+  reason         String
+  sourceType     String
+  sourceId       String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId, sourceType, sourceId])
+  @@index([organizationId, userId])
+  @@index([organizationId, createdAt])
+  @@map("points_ledger")
 }
 
 /// Attach a task to a raffle. Required tasks gate entry.

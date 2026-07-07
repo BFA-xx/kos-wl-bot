@@ -52,14 +52,21 @@ export default async function RaffleDetailPage({
           },
         },
       },
-      winners: { where: { replaced: false }, orderBy: { position: "asc" }, include: { wallet: true } },
+      winners: {
+        where: { replaced: false },
+        orderBy: { position: "asc" },
+        include: { wallet: true },
+      },
       proof: true,
       _count: { select: { participants: true } },
     },
   });
   if (!raffle) notFound();
 
-  const canEdit = hasPermission({ isOwner, permissions }, PERMISSIONS.RAFFLE_EDIT);
+  const canEdit = hasPermission(
+    { isOwner, permissions },
+    PERMISSIONS.RAFFLE_EDIT,
+  );
   const verificationTasks = canEdit
     ? await prisma.taskDefinition.findMany({
         where: { organizationId: org.id, active: true },
@@ -88,7 +95,10 @@ export default async function RaffleDetailPage({
   return (
     <>
       <div className="mb-2">
-        <Link href={`/${params.org}/raffles`} className="text-sm text-kos-muted hover:text-kos-fg">
+        <Link
+          href={`/${params.org}/raffles`}
+          className="text-sm text-kos-muted hover:text-kos-fg"
+        >
           ← All raffles
         </Link>
       </div>
@@ -111,6 +121,7 @@ export default async function RaffleDetailPage({
                 bannerUrl: raffle.bannerUrl,
                 hideEntries: raffle.hideEntries,
                 requireWallet: raffle.requireWallet,
+                useRoleWeights: raffle.useRoleWeights,
                 startPing: raffle.startPing,
                 roleMatchMode: raffle.roleMatchMode,
                 walletChains: raffle.walletChains,
@@ -118,10 +129,17 @@ export default async function RaffleDetailPage({
                 announceChannelId: raffle.announceChannelId,
                 proofChannelId: raffle.proofChannelId,
                 tasks:
-                  ((raffle.requirements as { tasks?: { label: string; url?: string }[] } | null)?.tasks) ?? [],
+                  (
+                    raffle.requirements as {
+                      tasks?: { label: string; url?: string }[];
+                    } | null
+                  )?.tasks ?? [],
                 verificationTasks,
                 verificationTaskIds: raffle.RaffleTask.map((rt) => rt.taskId),
-                roles: raffle.eligibleRoles.map((r) => ({ roleId: r.roleId, roleName: r.roleName })),
+                roles: raffle.eligibleRoles.map((r) => ({
+                  roleId: r.roleId,
+                  roleName: r.roleName,
+                })),
               }}
             />
             <StatusBadge status={raffle.status} />
@@ -133,29 +151,57 @@ export default async function RaffleDetailPage({
         <StatCard label="WL Spots" value={raffle.spots} />
         <StatCard label="Entries" value={raffle._count.participants} />
         <StatCard label="Winners" value={raffle.winners.length} />
-        <StatCard label="Role Mode" value={<span className="text-base">{raffle.roleMatchMode}</span>} />
+        <StatCard
+          label="Role Mode"
+          value={<span className="text-base">{raffle.roleMatchMode}</span>}
+        />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="kos-card p-4">
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-kos-muted">Details</h3>
+          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-kos-muted">
+            Details
+          </h3>
           <dl className="space-y-2 text-sm">
             <Row label="Start" value={fmtDate(raffle.startAt)} />
             <Row label="End" value={fmtDate(raffle.endAt)} />
             <Row label="Drawn" value={fmtDate(raffle.drawnAt)} />
             <Row
               label="Eligible Roles"
-              value={raffle.eligibleRoles.length ? raffle.eligibleRoles.map((r) => r.roleName).join(", ") : "Everyone"}
+              value={
+                raffle.eligibleRoles.length
+                  ? raffle.eligibleRoles.map((r) => r.roleName).join(", ")
+                  : "Everyone"
+              }
             />
-            <Row label="Collect Wallets" value={raffle.collectWallets ? "Yes" : "No"} />
-            <Row label="Wallet Chains" value={raffle.walletChains.join(", ") || "—"} />
+            <Row
+              label="Collect Wallets"
+              value={raffle.collectWallets ? "Yes" : "No"}
+            />
+            <Row
+              label="Weighted Draw"
+              value={raffle.useRoleWeights ? "Yes" : "No"}
+            />
+            <Row
+              label="Wallet Chains"
+              value={raffle.walletChains.join(", ") || "—"}
+            />
             {raffle.drawSeedHash ? (
-              <Row label="Draw Commitment" value={<code className="text-xs">{raffle.drawSeedHash.slice(0, 28)}…</code>} />
+              <Row
+                label="Draw Commitment"
+                value={
+                  <code className="text-xs">
+                    {raffle.drawSeedHash.slice(0, 28)}…
+                  </code>
+                }
+              />
             ) : null}
           </dl>
 
           <div className="mt-4 border-t border-kos-border pt-3">
-            <div className="mb-3 text-xs uppercase tracking-wide text-kos-muted">Entry Requirements</div>
+            <div className="mb-3 text-xs uppercase tracking-wide text-kos-muted">
+              Entry Requirements
+            </div>
             <div className="space-y-2">
               {raffle.requireWallet ? (
                 <RequirementRow
@@ -201,7 +247,11 @@ export default async function RaffleDetailPage({
                 <RequirementRow
                   key={`${task.label}-${i}`}
                   title={task.label}
-                  body={task.url ? "Social/off-platform step with external link." : "Social/off-platform step."}
+                  body={
+                    task.url
+                      ? "Social/off-platform step with external link."
+                      : "Social/off-platform step."
+                  }
                   href={task.url}
                 />
               ))}
@@ -221,7 +271,8 @@ export default async function RaffleDetailPage({
               socialTasks.length === 0 &&
               extraRequirementKeys.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-kos-border bg-kos-panel/50 p-3 text-sm text-kos-muted">
-                  No extra entry requirements beyond the raffle's role and timing settings.
+                  No extra entry requirements beyond the raffle's role and
+                  timing settings.
                 </div>
               ) : null}
             </div>
@@ -229,21 +280,33 @@ export default async function RaffleDetailPage({
         </div>
 
         <div className="kos-card p-4">
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-kos-muted">Winners</h3>
+          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-kos-muted">
+            Winners
+          </h3>
           {raffle.winners.length === 0 ? (
             <div className="rounded-xl border border-dashed border-kos-border bg-kos-panel/50 p-4 text-sm text-kos-muted">
               <div className="font-medium text-kos-fg">Winners pending</div>
-              <p className="mt-1">The draw has not run yet. Winners and wallet status will appear here after the raffle ends.</p>
+              <p className="mt-1">
+                The draw has not run yet. Winners and wallet status will appear
+                here after the raffle ends.
+              </p>
             </div>
           ) : (
             <ol className="space-y-1 text-sm">
               {raffle.winners.map((w) => (
                 <li key={w.id} className="flex items-center justify-between">
                   <span>
-                    <span className="text-kos-muted">{w.position}.</span> {w.username}
-                    {w.fromReroll ? <span className="ml-2 text-xs text-kos-muted">(reroll)</span> : null}
+                    <span className="text-kos-muted">{w.position}.</span>{" "}
+                    {w.username}
+                    {w.fromReroll ? (
+                      <span className="ml-2 text-xs text-kos-muted">
+                        (reroll)
+                      </span>
+                    ) : null}
                   </span>
-                  <span className="text-xs text-kos-muted">{w.wallet ? `${w.wallet.chain} ✓` : "no wallet"}</span>
+                  <span className="text-xs text-kos-muted">
+                    {w.wallet ? `${w.wallet.chain} ✓` : "no wallet"}
+                  </span>
                 </li>
               ))}
             </ol>
@@ -291,7 +354,9 @@ function RequirementRow({
 
   return (
     <div className="flex items-start gap-3 rounded-xl border border-kos-border bg-kos-panel/50 p-3">
-      <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] ${dot}`}>
+      <span
+        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] ${dot}`}
+      >
         ✓
       </span>
       <div className="min-w-0 flex-1">
@@ -312,22 +377,33 @@ function RequirementRow({
   );
 }
 
-function getSocialTasks(req: Record<string, unknown>): { label: string; url?: string }[] {
+function getSocialTasks(
+  req: Record<string, unknown>,
+): { label: string; url?: string }[] {
   if (!Array.isArray(req.tasks)) return [];
   return req.tasks.flatMap((task) => {
     if (!task || typeof task !== "object") return [];
     const t = task as { label?: unknown; url?: unknown };
     if (typeof t.label !== "string" || !t.label.trim()) return [];
-    return [{ label: t.label, url: typeof t.url === "string" && t.url.trim() ? t.url : undefined }];
+    return [
+      {
+        label: t.label,
+        url: typeof t.url === "string" && t.url.trim() ? t.url : undefined,
+      },
+    ];
   });
 }
 
 function positiveNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : null;
 }
 
 function stringList(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && v.length > 0) : [];
+  return Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === "string" && v.length > 0)
+    : [];
 }
 
 function formatTaskType(type: string): string {

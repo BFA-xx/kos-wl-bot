@@ -16,7 +16,8 @@ export async function GET(
   try {
     const { guildIds } = await requireOrgAccess(params.org);
     const id = Number(params.id);
-    if (!Number.isFinite(id)) return NextResponse.json({ error: "bad id" }, { status: 400 });
+    if (!Number.isFinite(id))
+      return NextResponse.json({ error: "bad id" }, { status: 400 });
 
     const raffle = await prisma.raffle.findFirst({
       where: { id, guildId: { in: guildIds } },
@@ -35,10 +36,12 @@ export async function GET(
         _count: { select: { participants: true } },
       },
     });
-    if (!raffle) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (!raffle)
+      return NextResponse.json({ error: "not found" }, { status: 404 });
     return NextResponse.json({ raffle });
   } catch (err) {
-    if (err instanceof AccessError) return NextResponse.json({ error: err.message }, { status: err.status });
+    if (err instanceof AccessError)
+      return NextResponse.json({ error: err.message }, { status: err.status });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
@@ -53,7 +56,10 @@ export async function PATCH(
   { params }: { params: { org: string; id: string } },
 ) {
   try {
-    const { org, user, guildIds } = await requireOrgAccess(params.org, PERMISSIONS.RAFFLE_EDIT);
+    const { org, user, guildIds } = await requireOrgAccess(
+      params.org,
+      PERMISSIONS.RAFFLE_EDIT,
+    );
     const id = Number(params.id);
     const existing = await prisma.raffle.findFirst({
       where: { id, guildId: { in: guildIds } },
@@ -65,9 +71,13 @@ export async function PATCH(
         requirements: true,
       },
     });
-    if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (!existing)
+      return NextResponse.json({ error: "not found" }, { status: 404 });
     if (existing.status === "ENDED" || existing.status === "CANCELLED") {
-      return NextResponse.json({ error: "This raffle has ended and can't be edited." }, { status: 400 });
+      return NextResponse.json(
+        { error: "This raffle has ended and can't be edited." },
+        { status: 400 },
+      );
     }
 
     const b = await req.json().catch(() => ({}));
@@ -76,19 +86,33 @@ export async function PATCH(
 
     if (str(b.projectName)) data.projectName = str(b.projectName);
     if (str(b.title)) data.title = str(b.title);
-    if ("description" in b) data.description = b.description ? String(b.description) : null;
+    if ("description" in b)
+      data.description = b.description ? String(b.description) : null;
     if (Number.isInteger(b.spots) && b.spots > 0) data.spots = b.spots;
-    if ("bannerUrl" in b) data.bannerUrl = b.bannerUrl ? String(b.bannerUrl) : null;
-    if ("externalUrl" in b) data.externalUrl = b.externalUrl ? String(b.externalUrl) : null;
+    if ("bannerUrl" in b)
+      data.bannerUrl = b.bannerUrl ? String(b.bannerUrl) : null;
+    if ("externalUrl" in b)
+      data.externalUrl = b.externalUrl ? String(b.externalUrl) : null;
     if ("hideEntries" in b) data.hideEntries = Boolean(b.hideEntries);
     if ("requireWallet" in b) data.requireWallet = Boolean(b.requireWallet);
-    if (["everyone", "here", "none"].includes(b.startPing)) data.startPing = b.startPing;
-    if (b.roleMatchMode === "ALL" || b.roleMatchMode === "ANY") data.roleMatchMode = b.roleMatchMode;
-    if ("announceChannelId" in b) data.announceChannelId = /^\d{5,25}$/.test(String(b.announceChannelId)) ? String(b.announceChannelId) : null;
-    if ("proofChannelId" in b) data.proofChannelId = /^\d{5,25}$/.test(String(b.proofChannelId)) ? String(b.proofChannelId) : null;
+    if ("useRoleWeights" in b) data.useRoleWeights = Boolean(b.useRoleWeights);
+    if (["everyone", "here", "none"].includes(b.startPing))
+      data.startPing = b.startPing;
+    if (b.roleMatchMode === "ALL" || b.roleMatchMode === "ANY")
+      data.roleMatchMode = b.roleMatchMode;
+    if ("announceChannelId" in b)
+      data.announceChannelId = /^\d{5,25}$/.test(String(b.announceChannelId))
+        ? String(b.announceChannelId)
+        : null;
+    if ("proofChannelId" in b)
+      data.proofChannelId = /^\d{5,25}$/.test(String(b.proofChannelId))
+        ? String(b.proofChannelId)
+        : null;
 
     if (Array.isArray(b.walletChains)) {
-      const wc = b.walletChains.filter((c: string) => CHAINS.includes(c)) as WalletChain[];
+      const wc = b.walletChains.filter((c: string) =>
+        CHAINS.includes(c),
+      ) as WalletChain[];
       if (wc.length) data.walletChains = wc;
     }
     if ("collectWallets" in b) data.collectWallets = Boolean(b.collectWallets);
@@ -99,7 +123,9 @@ export async function PATCH(
         .slice(0, 10)
         .map((t: { label: string; url?: string }) => ({
           label: String(t.label).trim().slice(0, 80),
-          ...(t.url && /^https?:\/\//i.test(t.url) ? { url: String(t.url) } : {}),
+          ...(t.url && /^https?:\/\//i.test(t.url)
+            ? { url: String(t.url) }
+            : {}),
         }));
       const requirements = {
         ...((existing.requirements ?? {}) as Record<string, unknown>),
@@ -118,28 +144,37 @@ export async function PATCH(
     if (b.endAt) {
       const e = new Date(b.endAt);
       if (isNaN(e.getTime()) || e.getTime() <= Date.now()) {
-        return NextResponse.json({ error: "End time must be in the future." }, { status: 400 });
+        return NextResponse.json(
+          { error: "End time must be in the future." },
+          { status: 400 },
+        );
       }
       data.endAt = e;
     }
 
     // Prepare relation replacements. They are applied in the same transaction
     // as the raffle update so a failed edit cannot leave partial gate changes.
-    const roles: { roleId: string; roleName: string }[] | null = Array.isArray(b.roles)
+    const roles: { roleId: string; roleName: string }[] | null = Array.isArray(
+      b.roles,
+    )
       ? (b.roles as { roleId?: unknown; roleName?: unknown }[])
-        .filter((r) => /^\d{5,25}$/.test(String(r?.roleId)))
-        .map((r) => ({
-          roleId: String(r.roleId),
-          roleName: String(r.roleName ?? r.roleId),
-        }))
+          .filter((r) => /^\d{5,25}$/.test(String(r?.roleId)))
+          .map((r) => ({
+            roleId: String(r.roleId),
+            roleName: String(r.roleName ?? r.roleId),
+          }))
       : null;
 
-    const verificationTaskIds: string[] | null = Array.isArray(b.verificationTaskIds)
-      ? [...new Set<string>(
-          (b.verificationTaskIds as unknown[]).filter(
-            (x: unknown): x is string => typeof x === "string",
+    const verificationTaskIds: string[] | null = Array.isArray(
+      b.verificationTaskIds,
+    )
+      ? [
+          ...new Set<string>(
+            (b.verificationTaskIds as unknown[]).filter(
+              (x: unknown): x is string => typeof x === "string",
+            ),
           ),
-        )].slice(0, 20)
+        ].slice(0, 20)
       : null;
 
     // If already posted, ask the bot to re-render the embed.
@@ -149,7 +184,9 @@ export async function PATCH(
       await tx.raffle.update({ where: { id }, data });
 
       if (roles) {
-        const uniqueRoles = [...new Map(roles.map((r) => [r.roleId, r])).values()];
+        const uniqueRoles = [
+          ...new Map(roles.map((r) => [r.roleId, r])).values(),
+        ];
         await tx.raffleRole.deleteMany({ where: { raffleId: id } });
         if (uniqueRoles.length) {
           await tx.raffleRole.createMany({
@@ -172,15 +209,26 @@ export async function PATCH(
         await tx.raffleTask.deleteMany({ where: { raffleId: id } });
         if (valid.length) {
           await tx.raffleTask.createMany({
-            data: valid.map((t) => ({ raffleId: id, taskId: t.id, required: true })),
+            data: valid.map((t) => ({
+              raffleId: id,
+              taskId: t.id,
+              required: true,
+            })),
           });
         }
       }
     });
-    await logAudit(org.id, user.id, "RAFFLE_EDIT", { targetType: "raffle", targetId: String(id) });
-    return NextResponse.json({ ok: true, willRefresh: Boolean(existing.messageId) });
+    await logAudit(org.id, user.id, "RAFFLE_EDIT", {
+      targetType: "raffle",
+      targetId: String(id),
+    });
+    return NextResponse.json({
+      ok: true,
+      willRefresh: Boolean(existing.messageId),
+    });
   } catch (err) {
-    if (err instanceof AccessError) return NextResponse.json({ error: err.message }, { status: err.status });
+    if (err instanceof AccessError)
+      return NextResponse.json({ error: err.message }, { status: err.status });
     console.error("raffle edit failed", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }

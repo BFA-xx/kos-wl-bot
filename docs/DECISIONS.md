@@ -145,3 +145,33 @@ every minute; the admin health page treats a heartbeat under three minutes old
 as online.
 **Why:** It measures the deployed bot from Vercel without exposing or relying on
 the obsolete localhost control channel.
+
+## D017 — Points are an append-only ledger
+
+**Status:** Accepted
+**Decision:** Store point awards in `PointsLedger` and compute balances as
+`SUM(delta)` per `(organizationId, userId)`. Task points use a unique
+`sourceType/sourceId` so completing the same reusable task awards points only
+once.
+**Why:** A ledger is auditable, idempotent, and can support future manual
+adjustments, campaigns, reward claims, and exports without mutating a fragile
+balance column.
+
+## D018 — Weighted raffle odds are snapshotted at entry
+
+**Status:** Accepted
+**Decision:** When a weighted raffle entry is recorded, store
+`Participant.weight` as the highest configured multiplier among the entrant's
+current Discord roles. Missing role weights default to `1×`.
+**Why:** Draw odds must be reproducible from persisted data even if Discord
+roles or org settings change before the raffle closes.
+
+## D019 — Weighted draws use deterministic weighted sampling
+
+**Status:** Accepted
+**Decision:** Uniform raffles keep the existing HMAC ranking sampler. Weighted
+raffles use a deterministic Efraimidis-Spirakis exponential race
+(`-ln(U)/weight`, with `U` derived from HMAC(seed, userId)) to sample without
+replacement.
+**Why:** It gives proportional weighted odds while preserving verifiability and
+avoiding visible duplicate entries.

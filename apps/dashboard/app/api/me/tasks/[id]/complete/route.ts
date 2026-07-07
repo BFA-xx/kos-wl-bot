@@ -8,19 +8,24 @@ import {
   LEGACY_TASK_VERIFY,
   parseLegacyTaskId,
 } from "@/lib/legacy-raffle-tasks";
+import { awardTaskPoints } from "@/lib/points";
 import { LogCategory, type Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /** Run the verification engine for one task as the signed-in user. */
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
+export async function POST(
+  _req: Request,
+  { params }: { params: { id: string } },
+) {
   try {
     const user = await requireUser();
     const legacy = parseLegacyTaskId(params.id);
     if (legacy) {
       const resolved = await resolveLegacyTask(params.id);
-      if (!resolved) return NextResponse.json({ error: "Task not found." }, { status: 404 });
+      if (!resolved)
+        return NextResponse.json({ error: "Task not found." }, { status: 404 });
 
       if (resolved.task.url) {
         const clicked = await prisma.log.findFirst({
@@ -63,14 +68,24 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ status: "VERIFIED" });
     }
 
-    const task = await prisma.taskDefinition.findUnique({ where: { id: params.id } });
-    if (!task) return NextResponse.json({ error: "Task not found." }, { status: 404 });
+    const task = await prisma.taskDefinition.findUnique({
+      where: { id: params.id },
+    });
+    if (!task)
+      return NextResponse.json({ error: "Task not found." }, { status: 404 });
 
     // Already verified? Don't re-run (keeps evidence + reviewer decisions).
     const existing = await prisma.taskCompletion.findUnique({
       where: { taskId_userId: { taskId: task.id, userId: user.id } },
     });
     if (existing?.status === "VERIFIED") {
+      await awardTaskPoints({
+        organizationId: task.organizationId,
+        userId: user.id,
+        taskId: task.id,
+        taskTitle: task.title,
+        points: task.points,
+      });
       return NextResponse.json({ status: "VERIFIED" });
     }
     if (existing?.status === "NEEDS_REVIEW") {
@@ -98,13 +113,24 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       },
     });
 
+    if (result.status === "VERIFIED") {
+      await awardTaskPoints({
+        organizationId: task.organizationId,
+        userId: user.id,
+        taskId: task.id,
+        taskTitle: task.title,
+        points: task.points,
+      });
+    }
+
     return NextResponse.json({
       status: result.status,
       reason: result.reason ?? null,
       action: result.action ?? null,
     });
   } catch (err) {
-    if (err instanceof AccessError) return NextResponse.json({ error: err.message }, { status: err.status });
+    if (err instanceof AccessError)
+      return NextResponse.json({ error: err.message }, { status: err.status });
     console.error("task complete failed", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
@@ -118,6 +144,8 @@ async function resolveLegacyTask(id: string) {
     select: { id: true, guildId: true, requirements: true },
   });
   if (!raffle) return null;
-  const task = getLegacyRaffleTasks(raffle.id, raffle.requirements).find((t) => t.id === id);
+  const task = getLegacyRaffleTasks(raffle.id, raffle.requirements).find(
+    (t) => t.id === id,
+  );
   return task ? { raffle, task } : null;
 }

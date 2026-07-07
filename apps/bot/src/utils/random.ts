@@ -61,7 +61,52 @@ export function verifiableSample<T>(
     key: createHmac("sha256", seed).update(idOf(item)).digest("hex"),
   }));
   ranked.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  return ranked.slice(0, Math.max(0, Math.min(count, ranked.length))).map((r) => r.item);
+  return ranked
+    .slice(0, Math.max(0, Math.min(count, ranked.length)))
+    .map((r) => r.item);
+}
+
+/**
+ * Deterministic weighted sampling without replacement.
+ *
+ * Uses the Efraimidis-Spirakis exponential race: each item gets
+ * score = -ln(U) / weight, where U is derived from HMAC(seed, id). Sorting by
+ * the smallest score gives a reproducible draw where larger weights have
+ * proportionally better odds, without duplicating rows or creating visible
+ * "extra entries".
+ */
+export function verifiableWeightedSample<T>(
+  pool: readonly T[],
+  count: number,
+  seed: string,
+  idOf: (item: T) => string,
+  weightOf: (item: T) => number,
+): T[] {
+  const ranked = pool.map((item) => {
+    const id = idOf(item);
+    const key = createHmac("sha256", seed)
+      .update(`weighted:${id}`)
+      .digest("hex");
+    const weight = Math.max(1, Math.floor(weightOf(item) || 1));
+    return {
+      item,
+      key,
+      score: -Math.log(unitFromHex(key)) / weight,
+    };
+  });
+  ranked.sort(
+    (a, b) => a.score - b.score || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+  );
+  return ranked
+    .slice(0, Math.max(0, Math.min(count, ranked.length)))
+    .map((r) => r.item);
+}
+
+function unitFromHex(hex: string): number {
+  // 13 hex chars = 52 random bits, safely representable in JS. Add one so U is
+  // never zero, and divide by 2^52 + 1 so U is always strictly below one.
+  const n = Number(BigInt(`0x${hex.slice(0, 13)}`)) + 1;
+  return n / (0x10000000000000 + 1);
 }
 
 /** Verify that a revealed seed matches its published commitment hash. */

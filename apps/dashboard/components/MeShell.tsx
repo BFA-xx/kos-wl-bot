@@ -10,12 +10,11 @@ import { IconLogout } from "./icons";
 const NAV = [
   { href: "/me", label: "Profile", exact: true },
   { href: "/me/tasks", label: "Tasks" },
+  { href: "/me/points", label: "Points" },
   { href: "/me/wallets", label: "Wallets" },
   { href: "/me/history", label: "History" },
   { href: "/me/communities", label: "Communities" },
 ];
-
-const SOON = ["Points"];
 
 export function MeShell({
   user,
@@ -38,7 +37,9 @@ export function MeShell({
             </div>
             <div className="hidden leading-tight sm:block">
               <div className="text-sm font-semibold">My KOS</div>
-              <div className="text-[10px] uppercase tracking-[0.22em] text-kos-muted">Member Hub</div>
+              <div className="text-[10px] uppercase tracking-[0.22em] text-kos-muted">
+                Member Hub
+              </div>
             </div>
           </Link>
 
@@ -56,33 +57,35 @@ export function MeShell({
                 {n.label}
               </Link>
             ))}
-            {SOON.map((s) => (
-              <span
-                key={s}
-                className="hidden cursor-default whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-kos-muted/40 md:block"
-                title="Coming soon"
-              >
-                {s}
-              </span>
-            ))}
           </nav>
 
           <div className="ml-auto flex items-center gap-2">
             <NotificationsBell />
             <ThemeToggle />
-            <Link href="/" className="kos-btn hidden text-xs md:inline-flex" title="Organization dashboards">
+            <Link
+              href="/"
+              className="kos-btn hidden text-xs md:inline-flex"
+              title="Organization dashboards"
+            >
               Dashboard
             </Link>
             <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-white/[0.08] bg-white/[0.04] text-[10px] font-bold">
               {user.avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                <img
+                  src={user.avatarUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 user.name.slice(0, 2).toUpperCase()
               )}
             </div>
             <form action="/api/auth/logout" method="post">
-              <button className="rounded-lg p-1.5 text-kos-muted hover:text-kos-fg" aria-label="Sign out">
+              <button
+                className="rounded-lg p-1.5 text-kos-muted hover:text-kos-fg"
+                aria-label="Sign out"
+              >
                 <IconLogout />
               </button>
             </form>

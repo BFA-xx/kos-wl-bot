@@ -54,10 +54,13 @@ export async function fetchGuildMember(
 ): Promise<RestMember | "not_member" | "unavailable"> {
   const botToken = process.env.DISCORD_BOT_TOKEN || process.env.BOT_TOKEN;
   if (!botToken) return "unavailable";
-  const res = await fetch(`https://discord.com/api/guilds/${guildId}/members/${userId}`, {
-    headers: { authorization: `Bot ${botToken}` },
-    cache: "no-store",
-  });
+  const res = await fetch(
+    `https://discord.com/api/guilds/${guildId}/members/${userId}`,
+    {
+      headers: { authorization: `Bot ${botToken}` },
+      cache: "no-store",
+    },
+  );
   if (res.status === 404) return "not_member";
   if (!res.ok) return "unavailable";
   const m = (await res.json()) as { roles?: string[]; joined_at?: string };
@@ -89,7 +92,14 @@ export async function evaluateWebGates(
   });
   if (black) {
     return {
-      gates: [{ key: "blacklist", label: "Account standing", ok: false, reason: "You are blacklisted from raffles in this server." }],
+      gates: [
+        {
+          key: "blacklist",
+          label: "Account standing",
+          ok: false,
+          reason: "You are blacklisted from raffles in this server.",
+        },
+      ],
       canEnter: false,
       discordOnly: false,
     };
@@ -108,7 +118,8 @@ export async function evaluateWebGates(
       key: "member",
       label: `Member of ${guildName}`,
       ok: false,
-      reason: "Couldn't check Discord right now — try again in a minute, or enter in Discord.",
+      reason:
+        "Couldn't check Discord right now — try again in a minute, or enter in Discord.",
     });
     return { gates, canEnter: false, discordOnly };
   }
@@ -126,16 +137,23 @@ export async function evaluateWebGates(
   // 3. Eligible roles (ANY/ALL) — same semantics as the bot.
   if (raffle.eligibleRoles.length > 0) {
     const names = raffle.eligibleRoles.map((r) => r.roleName).join(", ");
-    const owned = raffle.eligibleRoles.filter((r) => member.roles.includes(r.roleId));
+    const owned = raffle.eligibleRoles.filter((r) =>
+      member.roles.includes(r.roleId),
+    );
     const ok =
       raffle.roleMatchMode === "ALL"
         ? owned.length === raffle.eligibleRoles.length
         : owned.length > 0;
     gates.push({
       key: "roles",
-      label: raffle.roleMatchMode === "ALL" ? `Hold all roles: ${names}` : `Hold a role: ${names}`,
+      label:
+        raffle.roleMatchMode === "ALL"
+          ? `Hold all roles: ${names}`
+          : `Hold a role: ${names}`,
       ok,
-      reason: ok ? undefined : `You need ${raffle.roleMatchMode === "ALL" ? "all of" : "one of"}: ${names}.`,
+      reason: ok
+        ? undefined
+        : `You need ${raffle.roleMatchMode === "ALL" ? "all of" : "one of"}: ${names}.`,
     });
   }
 
@@ -153,22 +171,31 @@ export async function evaluateWebGates(
   // 5. Account / server age.
   if (req.minAccountAgeDays && req.minAccountAgeDays > 0) {
     const created = snowflakeDate(user.id);
-    const ok = created !== null && Date.now() - created.getTime() >= req.minAccountAgeDays * DAY_MS;
+    const ok =
+      created !== null &&
+      Date.now() - created.getTime() >= req.minAccountAgeDays * DAY_MS;
     gates.push({
       key: "account-age",
       label: `Discord account ≥ ${req.minAccountAgeDays} days old`,
       ok,
-      reason: ok ? undefined : `Your account must be at least ${req.minAccountAgeDays} days old.`,
+      reason: ok
+        ? undefined
+        : `Your account must be at least ${req.minAccountAgeDays} days old.`,
     });
   }
   if (req.minServerAgeDays && req.minServerAgeDays > 0) {
-    const joined = member.joined_at ? new Date(member.joined_at).getTime() : null;
-    const ok = joined !== null && Date.now() - joined >= req.minServerAgeDays * DAY_MS;
+    const joined = member.joined_at
+      ? new Date(member.joined_at).getTime()
+      : null;
+    const ok =
+      joined !== null && Date.now() - joined >= req.minServerAgeDays * DAY_MS;
     gates.push({
       key: "server-age",
       label: `In the server ≥ ${req.minServerAgeDays} days`,
       ok,
-      reason: ok ? undefined : `You must have been in the server for ${req.minServerAgeDays}+ days.`,
+      reason: ok
+        ? undefined
+        : `You must have been in the server for ${req.minServerAgeDays}+ days.`,
     });
   }
 
@@ -205,7 +232,11 @@ export async function evaluateWebGates(
   });
   if (raffleTasks.length > 0) {
     const completions = await prisma.taskCompletion.findMany({
-      where: { userId: user.id, taskId: { in: raffleTasks.map((t) => t.taskId) }, status: "VERIFIED" },
+      where: {
+        userId: user.id,
+        taskId: { in: raffleTasks.map((t) => t.taskId) },
+        status: "VERIFIED",
+      },
       select: { taskId: true },
     });
     const done = new Set(completions.map((c) => c.taskId));
@@ -251,7 +282,11 @@ export async function evaluateWebGates(
     }
   }
 
-  return { gates, canEnter: gates.every((g) => g.ok) && !discordOnly, discordOnly };
+  return {
+    gates,
+    canEnter: gates.every((g) => g.ok) && !discordOnly,
+    discordOnly,
+  };
 }
 
 /** Record a web entry (mirrors the bot's transaction + audit log). */
@@ -260,6 +295,7 @@ export async function recordWebEntry(
   raffle: RaffleWithRoles,
   member: RestMember,
 ): Promise<number> {
+  const weight = await entryWeightForRoles(raffle, member.roles);
   const entryCount = await prisma.$transaction(async (tx) => {
     await tx.participant.create({
       data: {
@@ -268,6 +304,7 @@ export async function recordWebEntry(
         username: user.username,
         accountCreatedAt: snowflakeDate(user.id),
         joinedGuildAt: member.joined_at ? new Date(member.joined_at) : null,
+        weight,
       },
     });
     const updated = await tx.raffle.update({
@@ -292,4 +329,28 @@ export async function recordWebEntry(
     .catch(() => undefined);
 
   return entryCount;
+}
+
+async function entryWeightForRoles(
+  raffle: RaffleWithRoles,
+  roleIds: string[],
+): Promise<number> {
+  if (!raffle.useRoleWeights || roleIds.length === 0) return 1;
+  const conn = await prisma.guildConnection.findUnique({
+    where: { guildId: raffle.guildId },
+    select: { organizationId: true },
+  });
+  if (!conn) return 1;
+  const weights = await prisma.roleWeight.findMany({
+    where: {
+      organizationId: conn.organizationId,
+      guildId: raffle.guildId,
+      roleId: { in: roleIds },
+    },
+    select: { multiplier: true },
+  });
+  return Math.max(
+    1,
+    ...weights.map((w) => Math.max(1, Math.min(100, w.multiplier))),
+  );
 }

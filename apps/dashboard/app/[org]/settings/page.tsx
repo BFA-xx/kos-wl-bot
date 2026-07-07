@@ -3,11 +3,16 @@ import { AccessError, requireOrgAccess } from "@/lib/access";
 import { PageTitle, Card, SectionTitle } from "@/components/ui";
 import { BrandingForm } from "@/components/BrandingForm";
 import { ServersManager } from "@/components/ServersManager";
+import { RoleWeightsManager } from "@/components/RoleWeightsManager";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export default async function SettingsPage({ params }: { params: { org: string } }) {
+export default async function SettingsPage({
+  params,
+}: {
+  params: { org: string };
+}) {
   let org;
   try {
     ({ org } = await requireOrgAccess(params.org));
@@ -18,7 +23,10 @@ export default async function SettingsPage({ params }: { params: { org: string }
 
   return (
     <>
-      <PageTitle title="Settings" subtitle="Branding and connected Discord servers." />
+      <PageTitle
+        title="Settings"
+        subtitle="Branding and connected Discord servers."
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -36,6 +44,11 @@ export default async function SettingsPage({ params }: { params: { org: string }
         <Card>
           <SectionTitle>Discord servers</SectionTitle>
           <ServersManager />
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <SectionTitle>Weighted raffle roles</SectionTitle>
+          <RoleWeightsManager />
         </Card>
       </div>
     </>

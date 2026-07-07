@@ -22,6 +22,7 @@ export interface RaffleEmbedData {
   endAt: Date;
   entryCount: number;
   hideEntries: boolean;
+  useRoleWeights: boolean;
   bannerUrl: string | null;
   externalUrl: string | null;
   requirements: unknown;
@@ -61,7 +62,8 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
     `# ${raffle.projectName.toUpperCase()}`,
     `-# ${raffle.title}`,
   ];
-  if (raffle.externalUrl) head.push(`-# [Visit project ↗](${raffle.externalUrl})`);
+  if (raffle.externalUrl)
+    head.push(`-# [Visit project ↗](${raffle.externalUrl})`);
   if (raffle.description) head.push("", raffle.description.slice(0, 1500));
   head.push("", `**Status** — ${statusBadge(raffle.status)}`, countdown);
 
@@ -100,6 +102,13 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
     { name: "Start", value: discordFull(raffle.startAt), inline: true },
     { name: "End", value: discordFull(raffle.endAt), inline: true },
   );
+  if (raffle.useRoleWeights) {
+    embed.addFields({
+      name: "Draw Mode",
+      value: "Weighted by configured role multipliers.",
+      inline: false,
+    });
+  }
 
   const tasks = parseRequirements(raffle.requirements).tasks ?? [];
   const textTasks = tasks.filter((t) => !t.url);
@@ -118,7 +127,11 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
 
   const reqLines = describeRequirements(raffle.requirements);
   if (reqLines) {
-    embed.addFields({ name: "Entry Requirements", value: reqLines, inline: false });
+    embed.addFields({
+      name: "Entry Requirements",
+      value: reqLines,
+      inline: false,
+    });
   }
 
   if (raffle.bannerUrl) embed.setImage(raffle.bannerUrl);
@@ -194,8 +207,9 @@ function describeRequirements(raw: unknown): string | null {
     lines.push(`• In server ≥ ${req.minServerAgeDays}d`);
   if (req.minMessages) lines.push(`• ≥ ${req.minMessages} messages`);
   if (req.requiredRoleIds?.length)
-    lines.push(`• Required roles: ${req.requiredRoleIds.map((r) => `<@&${r}>`).join(", ")}`);
-  if (req.requiredReaction)
-    lines.push(`• React on the announcement post`);
+    lines.push(
+      `• Required roles: ${req.requiredRoleIds.map((r) => `<@&${r}>`).join(", ")}`,
+    );
+  if (req.requiredReaction) lines.push(`• React on the announcement post`);
   return lines.length ? lines.join("\n") : null;
 }
