@@ -145,6 +145,11 @@ export function TasksManager() {
     <div className="space-y-6">
       <div className="kos-card p-4">
         <SectionTitle>Create a task</SectionTitle>
+        <p className="mb-4 text-sm text-kos-muted">
+          Active tasks appear on members&apos; `/me/tasks` page as standalone
+          ways to earn points. Attach a task to a raffle only when it should
+          also gate raffle entry.
+        </p>
         <form onSubmit={create} className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <select className="kos-input" value={type} onChange={(e) => setType(e.target.value)}>
@@ -221,7 +226,10 @@ export function TasksManager() {
         {!data ? (
           <Empty>Loading…</Empty>
         ) : data.tasks.length === 0 ? (
-          <Empty>No tasks yet — create one above, then attach it to a raffle.</Empty>
+          <Empty>
+            No tasks yet — create one above and members will see it in their
+            profile Tasks page.
+          </Empty>
         ) : (
           <div className="space-y-2">
             {data.tasks.map((t) => (

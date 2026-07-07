@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 
 export const LEGACY_TASK_CLICK = "SOCIAL_TASK_CLICK";
 export const LEGACY_TASK_VERIFY = "SOCIAL_TASK_VERIFY";
+export const TASK_DEFINITION_CLICK = "TASK_DEFINITION_CLICK";
 
 export interface LegacyRaffleTask {
   id: string;

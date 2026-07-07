@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { AccessError, requireUser } from "@/lib/access";
-import { verifyTask } from "@/lib/verify";
+import { taskActionUrl, verifyTask, type TaskConfig } from "@/lib/verify";
 import {
   getLegacyRaffleTasks,
   LEGACY_TASK_CLICK,
   LEGACY_TASK_VERIFY,
+  TASK_DEFINITION_CLICK,
   parseLegacyTaskId,
 } from "@/lib/legacy-raffle-tasks";
 import { awardTaskPoints } from "@/lib/points";
-import { LogCategory, type Prisma } from "@prisma/client";
+import { LogCategory, type Prisma, type TaskDefinition } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -95,6 +96,26 @@ export async function POST(
       });
     }
 
+    if (requiresOpenBeforeVerify(task)) {
+      const clicked = await prisma.log.findFirst({
+        where: {
+          actorId: user.id,
+          action: TASK_DEFINITION_CLICK,
+          metadata: { path: ["taskId"], equals: task.id },
+        },
+        select: { id: true },
+      });
+      if (!clicked) {
+        return NextResponse.json(
+          {
+            status: "ACTION_REQUIRED",
+            reason: "Open the task first, then verify it here.",
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     const result = await verifyTask(task, user.id);
 
     await prisma.taskCompletion.upsert({
@@ -134,6 +155,18 @@ export async function POST(
     console.error("task complete failed", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
+}
+
+function requiresOpenBeforeVerify(task: Pick<TaskDefinition, "type" | "config">) {
+  const actionUrl = taskActionUrl(task.type, (task.config ?? {}) as TaskConfig);
+  if (!actionUrl) return false;
+  return (
+    task.type === "X_FOLLOW" ||
+    task.type === "X_LIKE" ||
+    task.type === "X_REPOST" ||
+    task.type === "X_COMMENT" ||
+    task.type === "VISIT_LINK"
+  );
 }
 
 async function resolveLegacyTask(id: string) {

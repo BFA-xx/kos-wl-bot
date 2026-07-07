@@ -460,6 +460,38 @@ Verification:
   project is assumed to auto-deploy `main`; this shell has no Vercel CLI/API
   credential to inspect the deployment record directly.
 
+### Standalone member tasks clarity — complete locally
+
+- `/api/me/tasks` now returns two explicit member lanes:
+  - `taskGroups`: active standalone Task Engine tasks grouped by community,
+    with each member's completion/click state and current org point balance;
+  - `raffles`: live raffle task workspaces with the existing entry panel.
+- `/me/tasks` now leads with "Standalone earning tasks" so members can
+  complete org-created tasks and earn points even when those tasks are not
+  attached to a raffle.
+- Raffle task workspaces remain available below the standalone earning tasks,
+  preserving web raffle entry behavior.
+- Web X/link/visit tasks now use the same Open → Verify flow as legacy raffle
+  social steps: members must open the task link before the server accepts
+  verification. Already-verified tasks remain backward-compatible.
+- Org task-builder copy now explains that active tasks appear immediately on
+  the member profile Tasks page, and should be attached to raffles only when
+  they also gate entry.
+- `/me/points` copy now points members to Tasks as the earning surface.
+- Discord already exposes standalone org tasks through `/tasks list` and
+  `/tasks verify`; `/points panel` copy now says that explicitly.
+
+Verification:
+
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `corepack pnpm --filter @kos/bot typecheck`
+- `git diff --check`
+- `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
+- `corepack pnpm --filter @kos/bot build`
+
+No database migration is required; the implementation reuses
+`TaskDefinition`, `TaskCompletion`, `PointsLedger`, and `Log` for click state.
+
 ## Assumptions
 
 - `/Users/adebayodaniel/KOS RAF` is the intended repository because it is the
@@ -467,6 +499,9 @@ Verification:
   Claude's final commit.
 - "Active raffles" for the profile Tasks hub means `Raffle.status = LIVE`
   within non-suspended organizations that have connected guilds.
+- Active org-created tasks are intended to be visible as standalone earning
+  tasks to signed-in members; raffle attachment is only needed when that task
+  must gate raffle entry.
 - Legacy social/link task verification is intentionally click-and-attest, not
   paid X API verification.
 - Vercel is configured to auto-deploy pushes to `main`; the route-canary checks

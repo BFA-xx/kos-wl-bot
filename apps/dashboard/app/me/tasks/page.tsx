@@ -4,7 +4,7 @@ import Link from "next/link";
 import useSWR, { mutate as mutateKey } from "swr";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { PageTitle, Card, Empty } from "@/components/ui";
+import { PageTitle, Card, Empty, SectionTitle, StatCard } from "@/components/ui";
 import { EntryPanel } from "@/components/EntryPanel";
 import { fmtDate } from "@/lib/format";
 
@@ -13,6 +13,7 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 interface TaskRow {
   id: string;
   kind?: "VERIFICATION" | "SOCIAL";
+  source?: "STANDALONE" | "RAFFLE";
   type: string;
   typeLabel: string;
   title: string;
@@ -24,6 +25,18 @@ interface TaskRow {
   verifiable?: boolean;
   requiresClick?: boolean;
   clicked?: boolean;
+}
+interface TaskOrg {
+  id: string;
+  slug: string;
+  name: string;
+  logoUrl: string | null;
+  guildId?: string | null;
+}
+interface TaskGroup {
+  org: TaskOrg;
+  balance: number;
+  tasks: TaskRow[];
 }
 interface RaffleSummary {
   id: number;
@@ -43,6 +56,7 @@ interface RaffleSummary {
 interface Data {
   raffle?: { id: number; projectName: string; title: string; status: string };
   raffles?: RaffleSummary[];
+  taskGroups?: TaskGroup[];
   xLinked: boolean;
   tasks?: TaskRow[];
   error?: string;
@@ -165,7 +179,7 @@ function TasksInner() {
         }
         action={
           <Link href="/me/tasks" className="kos-btn">
-            All active raffles
+            All tasks
           </Link>
         }
       />
@@ -251,29 +265,58 @@ function TasksHub({
       <>
         <PageTitle
           title="Tasks"
-          subtitle="Active raffle tasks and web entry."
+          subtitle="Standalone earning tasks, active raffle tasks, and web entry."
         />
         <Empty>{data.error}</Empty>
       </>
     );
   }
 
+  const taskGroups = data?.taskGroups ?? [];
   const raffles = data?.raffles ?? [];
-  const hasXTasks = raffles.some((r) =>
-    r.tasks.some((t) => t.type.startsWith("X_")),
+  const standaloneTasks = taskGroups.flatMap((group) => group.tasks);
+  const hasXTasks = [...standaloneTasks, ...raffles.flatMap((r) => r.tasks)].some((t) =>
+    t.type.startsWith("X_"),
   );
+  const standaloneSummary = taskSummary(standaloneTasks);
 
   return (
     <>
       <PageTitle
         title="Tasks"
-        subtitle="Active raffles, verification tasks, and web entry in one place."
+        subtitle="Complete standalone tasks to earn points. Raffle tasks live below when a community uses them for entry."
+        action={
+          <>
+            <Link href="/me/points" className="kos-btn">
+              My points
+            </Link>
+            <Link href="/me/rewards" className="kos-btn-primary">
+              Rewards
+            </Link>
+          </>
+        }
       />
 
       {!data ? (
-        <Empty>Loading active raffles…</Empty>
+        <Empty>Loading tasks…</Empty>
       ) : (
         <>
+          <div className="mb-6 grid gap-3 sm:grid-cols-3">
+            <StatCard
+              accent
+              label="Available earning tasks"
+              value={standaloneTasks.length}
+            />
+            <StatCard
+              label="Verified"
+              value={`${standaloneSummary.verified}/${standaloneSummary.verifiable}`}
+            />
+            <StatCard
+              label="Live raffle workspaces"
+              value={raffles.length}
+            />
+          </div>
+
           {!data.xLinked && hasXTasks ? (
             <Card className="mb-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -292,28 +335,112 @@ function TasksHub({
             </Card>
           ) : null}
 
-          {raffles.length === 0 ? (
-            <Empty>
-              No active raffles right now. When communities go live, their tasks
-              will show here.
-            </Empty>
-          ) : (
-            <div className="space-y-4">
-              {raffles.map((raffle) => (
-                <RaffleTaskCard
-                  key={raffle.id}
-                  raffle={raffle}
-                  busy={busy}
-                  notes={notes}
-                  onComplete={onComplete}
-                  onOpen={onOpen}
-                />
-              ))}
-            </div>
-          )}
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_28rem]">
+            <section>
+              <SectionTitle>Standalone earning tasks</SectionTitle>
+              {taskGroups.length === 0 ? (
+                <Empty>
+                  No standalone earning tasks are live yet. When a community
+                  creates a task with points, it will appear here immediately.
+                </Empty>
+              ) : (
+                <div className="space-y-4">
+                  {taskGroups.map((group) => (
+                    <StandaloneTaskGroupCard
+                      key={group.org.id}
+                      group={group}
+                      busy={busy}
+                      notes={notes}
+                      onComplete={onComplete}
+                      onOpen={onOpen}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section>
+              <SectionTitle>Raffle task workspaces</SectionTitle>
+              {raffles.length === 0 ? (
+                <Empty>
+                  No active raffles right now. When communities go live, their
+                  raffle entry tasks will show here.
+                </Empty>
+              ) : (
+                <div className="space-y-4">
+                  {raffles.map((raffle) => (
+                    <RaffleTaskCard
+                      key={raffle.id}
+                      raffle={raffle}
+                      busy={busy}
+                      notes={notes}
+                      onComplete={onComplete}
+                      onOpen={onOpen}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
         </>
       )}
     </>
+  );
+}
+
+function StandaloneTaskGroupCard({
+  group,
+  busy,
+  notes,
+  onComplete,
+  onOpen,
+}: {
+  group: TaskGroup;
+  busy: string | null;
+  notes: Record<string, string>;
+  onComplete: (id: string, raffleIdForRefresh?: number) => void;
+  onOpen: (task: TaskRow, raffleIdForRefresh?: number) => void;
+}) {
+  const summary = taskSummary(group.tasks);
+  const potentialPoints = group.tasks
+    .filter((task) => task.status !== "VERIFIED")
+    .reduce((sum, task) => sum + task.points, 0);
+
+  return (
+    <div className="kos-card p-4 sm:p-5">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 gap-3">
+          <CommunityAvatar org={group.org} />
+          <div className="min-w-0">
+            <div className="truncate text-base font-semibold">
+              {group.org.name}
+            </div>
+            <div className="mt-1 text-xs text-kos-muted">
+              {summary.verified}/{summary.verifiable} verified · current balance{" "}
+              <span className="font-semibold text-kos-fg">{group.balance}</span>{" "}
+              pts
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+          <span className="kos-badge border-blue-400/20 text-blue-300">
+            +{potentialPoints} available pts
+          </span>
+          <Link href={`/c/${group.org.slug}`} className="kos-btn text-xs">
+            Community
+          </Link>
+        </div>
+      </div>
+
+      <TaskList
+        tasks={group.tasks}
+        busy={busy}
+        notes={notes}
+        compact
+        onComplete={onComplete}
+        onOpen={onOpen}
+      />
+    </div>
   );
 }
 
@@ -446,6 +573,23 @@ function RaffleTaskCard({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function CommunityAvatar({ org }: { org: TaskOrg }) {
+  return (
+    <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/[0.08] bg-kos-fg text-xs font-black text-kos-bg">
+      {org.logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={org.logoUrl}
+          alt=""
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        org.name.slice(0, 2).toUpperCase()
+      )}
+    </span>
   );
 }
 

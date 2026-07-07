@@ -34,7 +34,7 @@ export default function MePointsPage() {
     <>
       <PageTitle
         title="My points"
-        subtitle="Your earned points across KOS communities. Points are awarded when verification tasks are completed."
+        subtitle="Your earned points across KOS communities. Complete standalone tasks on the Tasks page to earn more."
         action={
           <>
             <Link href="/me/tasks" className="kos-btn-primary">
@@ -71,7 +71,8 @@ export default function MePointsPage() {
                 <Empty>Loading points…</Empty>
               ) : data.balances.length === 0 ? (
                 <Empty>
-                  No points yet. Complete raffle tasks to start earning.
+                  No points yet. Open Tasks to complete standalone community
+                  tasks and start earning.
                 </Empty>
               ) : (
                 <div className="grid gap-3">
