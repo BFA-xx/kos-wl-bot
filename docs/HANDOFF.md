@@ -460,7 +460,7 @@ Verification:
   project is assumed to auto-deploy `main`; this shell has no Vercel CLI/API
   credential to inspect the deployment record directly.
 
-### Standalone member tasks clarity — complete locally
+### Standalone member tasks clarity — committed/pushed/deployed
 
 - `/api/me/tasks` now returns two explicit member lanes:
   - `taskGroups`: active standalone Task Engine tasks grouped by community,
@@ -488,6 +488,14 @@ Verification:
 - `git diff --check`
 - `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
 - `corepack pnpm --filter @kos/bot build`
+- Code committed as `a8f44b9` (`Clarify standalone member tasks`) and pushed
+  to `origin/main`.
+- EC2 bot deployed via `./scripts/deploy-ec2.sh`; Discord slash command count
+  remained 7, PM2 reported `kos-bot` online, and the local internal health
+  endpoint returned `{"ok":true,"ready":true}`.
+- Vercel production route canaries for the member task surface returned
+  expected auth responses: `/api/me/tasks` → `401`, `/me/tasks` →
+  `307 /login?next=%2Fme%2Ftasks`.
 
 No database migration is required; the implementation reuses
 `TaskDefinition`, `TaskCompletion`, `PointsLedger`, and `Log` for click state.
