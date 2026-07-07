@@ -17,15 +17,16 @@ Phase 3 is implemented through S2.5:
   login routing.
 - Follow-up: database-backed bot heartbeat and Billing hidden from org nav.
 
-The approved development workstream is **S2.5 hardening**. Two local hardening
-slices are complete but not committed or deployed:
+The approved development workstream is **S2.5 hardening**. Two hardening slices
+have been committed and pushed to `main`:
 
 - raffle verification task gates can now be edited, relation replacement is
   atomic, and editing legacy social tasks preserves the other anti-alt
   requirements;
 - the member Tasks area now acts as an active-raffle workspace, and the org
   raffle detail page renders entry requirements as clean cards instead of raw
-  requirements JSON.
+  requirements JSON. A follow-up also renders legacy raffle social/link tasks
+  (Follow/Like/Retweet/etc.) in the member Tasks cards.
 
 Claude reported the production database migrated, the bot online in two
 guilds, and the Vercel dashboard deployed. This audit verified the repository
@@ -44,6 +45,8 @@ Neon.
   fresh Next.js production build.
 - The profile Tasks hub and org raffle detail UI hardening also pass dashboard
   TypeScript and a fresh Next.js production build.
+- The legacy social-task rendering and responsive banner/card follow-up passes
+  dashboard TypeScript and a fresh Next.js production build.
 - No automated test files exist.
 
 ## Handoff reconciliation
@@ -62,8 +65,9 @@ precision points:
    commitment. Reroll reproducibility is therefore incomplete.
 5. Billing is hidden from navigation only; `/:org/billing` remains reachable.
 6. `/me/tasks` is no longer only a deep-link target. It now lists live raffles
-   from public KOS communities, shows attached verification tasks inline, and
-   embeds the same web entry panel used by public raffle pages.
+   from public KOS communities, shows attached verification tasks and legacy
+   raffle social/link tasks inline, and embeds the same web entry panel used by
+   public raffle pages.
 
 ## Known technical debt and risks
 
@@ -155,20 +159,25 @@ Verification: dashboard typecheck and production build pass. No database,
 Discord, or browser integration smoke test was run, and the repository still
 has no automated test harness.
 
-### Profile task hub and org raffle detail cleanup — complete locally
+### Profile task hub and org raffle detail cleanup — committed/pushed
 
 - `/api/me/tasks` now supports two modes:
   - no `raffle` query param: returns up to 50 live raffles from non-suspended
     public KOS communities, plus the signed-in user's attached task completion
-    states;
+    states and the raffle's legacy social/link tasks from `requirements.tasks`;
   - `?raffle=N`: preserves the existing one-raffle task detail response.
-- `/me/tasks` now shows active raffle cards with inline verification tasks,
-  X-link prompting, task verification buttons, a focus view link, and the
-  existing `EntryPanel` so members can complete tasks and enter from the Tasks
-  tab.
+- `/me/tasks` now shows active raffle cards with inline Task Engine verification
+  tasks, legacy Follow/Like/Retweet/etc. social steps, X-link prompting, task
+  verification buttons, a focus view link, and the existing `EntryPanel` so
+  members can complete tasks and enter from the Tasks tab.
 - `/me/tasks?raffle=N` now keeps the focused task list but also embeds the web
   entry panel and no longer tells users to enter in Discord after completing
   tasks.
+- Legacy social/link tasks render as "Open step" actions, not fake verified
+  checks, because they are honor-system links rather than `TaskCompletion`
+  records.
+- Active raffle cards use a responsive banner frame that contains unusual image
+  sizes with a blurred backdrop instead of fixed-cropping every banner.
 - The org raffle detail page now renders an `Entry Requirements` card for
   wallet, account-age, server-age, reaction, Task Engine, and legacy social
   requirements instead of dumping `requirements` JSON.
@@ -177,8 +186,8 @@ has no automated test harness.
 
 Verification: `pnpm --filter @kos/dashboard typecheck` and
 `pnpm --filter @kos/dashboard build` pass with a placeholder `DATABASE_URL`.
-No authenticated browser smoke test, live Discord gate check, or production
-deploy was run.
+Changes were pushed to GitHub `main` for Vercel deployment. No authenticated
+browser smoke test or live Discord gate check was run.
 
 ## Assumptions
 

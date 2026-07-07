@@ -12,6 +12,7 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface TaskRow {
   id: string;
+  kind?: "VERIFICATION" | "SOCIAL";
   type: string;
   typeLabel: string;
   title: string;
@@ -20,6 +21,7 @@ interface TaskRow {
   points: number;
   actionUrl: string | null;
   status: string;
+  verifiable?: boolean;
 }
 interface RaffleSummary {
   id: number;
@@ -50,6 +52,7 @@ const STATUS_CHIP: Record<string, { label: string; cls: string }> = {
   PENDING: { label: "Not verified", cls: "border-kos-border text-kos-muted" },
   REJECTED: { label: "Rejected", cls: "border-red-500/30 text-red-400" },
   NOT_STARTED: { label: "To do", cls: "border-kos-border text-kos-muted" },
+  ACTION_REQUIRED: { label: "Open step", cls: "border-sky-400/30 text-sky-400" },
 };
 
 export default function MeTasksPage() {
@@ -100,15 +103,14 @@ function TasksInner() {
   if (data?.error) {
     return (
       <>
-        <PageTitle title="Tasks" subtitle="Verification tasks." />
+        <PageTitle title="Tasks" subtitle="Raffle tasks." />
         <Empty>{data.error}</Empty>
       </>
     );
   }
 
   const tasks = data?.tasks ?? [];
-  const done = tasks.filter((t) => t.status === "VERIFIED").length;
-  const requiredLeft = tasks.filter((t) => t.required && t.status !== "VERIFIED").length;
+  const summary = taskSummary(tasks);
 
   return (
     <>
@@ -130,15 +132,18 @@ function TasksInner() {
         <Card className="mb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-kos-muted">
-              <span className="text-lg font-semibold text-kos-fg">{done}</span> / {tasks.length} verified
+              <span className="text-lg font-semibold text-kos-fg">{summary.verified}</span> / {summary.verifiable} verified
+              {summary.social > 0 ? (
+                <span className="ml-2">· {summary.social} raffle step{summary.social === 1 ? "" : "s"}</span>
+              ) : null}
             </div>
-            {requiredLeft === 0 ? (
+            {summary.requiredLeft === 0 ? (
               <span className="kos-badge border-emerald-400/30 text-emerald-400">
-                All required tasks done — enter below 🎉
+                {summary.social > 0 ? "Open each step, then enter below" : "All required tasks done — enter below 🎉"}
               </span>
             ) : (
               <span className="kos-badge border-amber-400/30 text-amber-400">
-                {requiredLeft} required task{requiredLeft === 1 ? "" : "s"} left
+                {summary.requiredLeft} required task{summary.requiredLeft === 1 ? "" : "s"} left
               </span>
             )}
             {!data.xLinked && tasks.some((t) => t.type.startsWith("X_")) ? (
@@ -154,7 +159,7 @@ function TasksInner() {
         <Empty>Loading…</Empty>
       ) : tasks.length === 0 ? (
         <Card className="text-sm text-kos-muted">
-          This raffle has no verification tasks. Check the entry panel below for the remaining gates.
+          This raffle has no raffle tasks. Check the entry panel below for the remaining gates.
         </Card>
       ) : (
         <TaskList
@@ -257,19 +262,19 @@ function RaffleTaskCard({
   notes: Record<string, string>;
   onComplete: (id: string, raffleIdForRefresh?: number) => void;
 }) {
-  const done = raffle.tasks.filter((t) => t.status === "VERIFIED").length;
-  const requiredLeft = raffle.tasks.filter((t) => t.required && t.status !== "VERIFIED").length;
+  const summary = taskSummary(raffle.tasks);
   const publicHref = raffle.org ? `/c/${raffle.org.slug}/raffles/${raffle.id}` : "#";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-kos-border bg-kos-card shadow-sm">
-      {raffle.bannerUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={raffle.bannerUrl} alt="" className="h-36 w-full object-cover sm:h-44" />
-      ) : null}
+    <div
+      className={`overflow-hidden rounded-2xl border border-kos-border bg-kos-card shadow-sm ${
+        raffle.bannerUrl ? "lg:grid lg:grid-cols-[minmax(220px,36%)_1fr]" : ""
+      }`}
+    >
+      {raffle.bannerUrl ? <BannerFrame src={raffle.bannerUrl} /> : null}
       <div className="p-4 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
             {raffle.org ? (
               <div className="mb-2 flex items-center gap-2 text-xs text-kos-muted">
                 <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-lg bg-kos-fg text-[9px] font-black text-kos-bg">
@@ -283,13 +288,13 @@ function RaffleTaskCard({
                 {raffle.org.name}
               </div>
             ) : null}
-            <h2 className="truncate text-lg font-semibold">{raffle.projectName}</h2>
+            <h2 className="break-words text-lg font-semibold">{raffle.projectName}</h2>
             <p className="mt-0.5 text-sm text-kos-muted">{raffle.title}</p>
             {raffle.description ? (
               <p className="mt-2 line-clamp-2 text-sm text-kos-muted">{raffle.description}</p>
             ) : null}
           </div>
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
             <span className="kos-badge border-emerald-400/30 text-emerald-400">LIVE</span>
             {raffle.entered ? (
               <span className="kos-badge border-emerald-400/30 text-emerald-400">entered</span>
@@ -297,32 +302,33 @@ function RaffleTaskCard({
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+        <div className="mt-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-3">
           <MiniStat label="Ends" value={fmtDate(raffle.endAt)} />
           <MiniStat label="Entries" value={raffle.entryCount === null ? "—" : raffle.entryCount} />
           <MiniStat label="Spots" value={raffle.spots} />
         </div>
 
         <div className="mt-4 rounded-xl border border-kos-border bg-kos-bg/35 p-3">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-sm font-semibold">Verification tasks</div>
+              <div className="text-sm font-semibold">Raffle tasks</div>
               <div className="text-xs text-kos-muted">
-                {done} / {raffle.tasks.length} verified
-                {requiredLeft > 0
-                  ? ` · ${requiredLeft} required left`
+                {summary.verified} / {summary.verifiable} verified
+                {summary.social > 0 ? ` · ${summary.social} raffle step${summary.social === 1 ? "" : "s"}` : ""}
+                {summary.requiredLeft > 0
+                  ? ` · ${summary.requiredLeft} required left`
                   : raffle.tasks.length > 0
-                    ? " · ready for the entry check"
+                    ? " · ready for entry"
                     : ""}
               </div>
             </div>
-            <Link href={`/me/tasks?raffle=${raffle.id}`} className="kos-btn text-xs">
+            <Link href={`/me/tasks?raffle=${raffle.id}`} className="kos-btn text-center text-xs">
               Focus view
             </Link>
           </div>
           {raffle.tasks.length === 0 ? (
             <p className="rounded-xl border border-dashed border-kos-border p-3 text-sm text-kos-muted">
-              No verification tasks attached. Use the entry checklist below for the remaining gates.
+              No raffle tasks attached. Use the entry checklist below for the remaining gates.
             </p>
           ) : (
             <TaskList
@@ -380,7 +386,7 @@ function TaskList({
                 : "kos-card p-4"
             }
           >
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{t.title}</span>
@@ -400,13 +406,13 @@ function TaskList({
                   <div className="mt-1 text-xs text-amber-400">{notes[t.id]}</div>
                 ) : null}
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
                 {t.actionUrl ? (
-                  <a href={t.actionUrl} target="_blank" rel="noreferrer" className="kos-btn">
+                  <a href={t.actionUrl} target="_blank" rel="noreferrer" className="kos-btn text-center">
                     Open ↗
                   </a>
                 ) : null}
-                {t.status !== "VERIFIED" && t.status !== "NEEDS_REVIEW" ? (
+                {t.verifiable !== false && t.status !== "VERIFIED" && t.status !== "NEEDS_REVIEW" ? (
                   <button
                     onClick={() => onComplete(t.id, raffleId)}
                     disabled={busy === t.id}
@@ -422,6 +428,27 @@ function TaskList({
       })}
     </div>
   );
+}
+
+function BannerFrame({ src }: { src: string }) {
+  return (
+    <div className="relative aspect-[16/9] overflow-hidden bg-kos-panel lg:aspect-auto lg:h-full lg:min-h-[360px]">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-xl" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" className="relative h-full w-full object-contain p-1" />
+    </div>
+  );
+}
+
+function taskSummary(tasks: TaskRow[]) {
+  const verifiable = tasks.filter((t) => t.verifiable !== false);
+  return {
+    verifiable: verifiable.length,
+    verified: verifiable.filter((t) => t.status === "VERIFIED").length,
+    requiredLeft: verifiable.filter((t) => t.required && t.status !== "VERIFIED").length,
+    social: tasks.length - verifiable.length,
+  };
 }
 
 function MiniStat({ label, value }: { label: string; value: string | number }) {

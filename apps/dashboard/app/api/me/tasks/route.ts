@@ -67,6 +67,7 @@ export async function GET(req: NextRequest) {
               entryCount: true,
               hideEntries: true,
               bannerUrl: true,
+              requirements: true,
               participants: {
                 where: { userId: user.id },
                 select: { enteredAt: true },
@@ -112,18 +113,23 @@ export async function GET(req: NextRequest) {
           bannerUrl: raffle.bannerUrl,
           entered: raffle.participants.length > 0,
           enteredAt: raffle.participants[0]?.enteredAt ?? null,
-          tasks: raffle.RaffleTask.map((rt) => ({
-            id: rt.task.id,
-            type: rt.task.type,
-            typeLabel: TASK_TYPE_LABELS[rt.task.type],
-            title: rt.task.title,
-            description: rt.task.description,
-            required: rt.required,
-            points: rt.task.points,
-            active: rt.task.active,
-            actionUrl: taskActionUrl(rt.task.type, (rt.task.config ?? {}) as TaskConfig),
-            status: byTask.get(rt.taskId) ?? "NOT_STARTED",
-          })),
+          tasks: [
+            ...raffle.RaffleTask.map((rt) => ({
+              id: rt.task.id,
+              kind: "VERIFICATION",
+              type: rt.task.type,
+              typeLabel: TASK_TYPE_LABELS[rt.task.type],
+              title: rt.task.title,
+              description: rt.task.description,
+              required: rt.required,
+              points: rt.task.points,
+              active: rt.task.active,
+              actionUrl: taskActionUrl(rt.task.type, (rt.task.config ?? {}) as TaskConfig),
+              status: byTask.get(rt.taskId) ?? "NOT_STARTED",
+              verifiable: true,
+            })),
+            ...legacySocialTasks(raffle.id, raffle.requirements),
+          ],
         })),
       });
     }
@@ -140,6 +146,7 @@ export async function GET(req: NextRequest) {
         projectName: true,
         title: true,
         status: true,
+        requirements: true,
         RaffleTask: {
           include: { task: true },
           orderBy: { id: "asc" },
@@ -171,24 +178,55 @@ export async function GET(req: NextRequest) {
         status: raffle.status,
       },
       xLinked,
-      tasks: raffle.RaffleTask.map((rt) => {
-        const c = byTask.get(rt.taskId);
-        return {
-          id: rt.task.id,
-          type: rt.task.type,
-          typeLabel: TASK_TYPE_LABELS[rt.task.type],
-          title: rt.task.title,
-          description: rt.task.description,
-          required: rt.required,
-          points: rt.task.points,
-          active: rt.task.active,
-          actionUrl: taskActionUrl(rt.task.type, (rt.task.config ?? {}) as TaskConfig),
-          status: c?.status ?? "NOT_STARTED",
-        };
-      }),
+      tasks: [
+        ...raffle.RaffleTask.map((rt) => {
+          const c = byTask.get(rt.taskId);
+          return {
+            id: rt.task.id,
+            kind: "VERIFICATION",
+            type: rt.task.type,
+            typeLabel: TASK_TYPE_LABELS[rt.task.type],
+            title: rt.task.title,
+            description: rt.task.description,
+            required: rt.required,
+            points: rt.task.points,
+            active: rt.task.active,
+            actionUrl: taskActionUrl(rt.task.type, (rt.task.config ?? {}) as TaskConfig),
+            status: c?.status ?? "NOT_STARTED",
+            verifiable: true,
+          };
+        }),
+        ...legacySocialTasks(raffle.id, raffle.requirements),
+      ],
     });
   } catch (err) {
     if (err instanceof AccessError) return NextResponse.json({ error: err.message }, { status: err.status });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
+}
+
+function legacySocialTasks(raffleId: number, requirements: unknown) {
+  const req = (requirements ?? {}) as { tasks?: unknown };
+  if (!Array.isArray(req.tasks)) return [];
+  return req.tasks.flatMap((task, i) => {
+    if (!task || typeof task !== "object") return [];
+    const t = task as { label?: unknown; url?: unknown };
+    if (typeof t.label !== "string" || !t.label.trim()) return [];
+    return [
+      {
+        id: `social-${raffleId}-${i}`,
+        kind: "SOCIAL",
+        type: "SOCIAL_TASK",
+        typeLabel: "Raffle step",
+        title: t.label.trim(),
+        description: "Open and complete this step before entering.",
+        required: true,
+        points: 0,
+        active: true,
+        actionUrl: typeof t.url === "string" && t.url.trim() ? t.url.trim() : null,
+        status: "ACTION_REQUIRED",
+        verifiable: false,
+      },
+    ];
+  });
 }

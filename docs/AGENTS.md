@@ -103,8 +103,9 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Both the new-raffle and edit UIs support verification-task selection. Raffle
   scalar, role, and task-gate edits are committed atomically.
 - The member `/me/tasks` tab is the active-raffle workspace: it lists live
-  raffles, renders attached verification tasks inline, and embeds the web entry
-  panel. `/me/tasks?raffle=N` remains the focused one-raffle view.
+  raffles, renders attached Task Engine checks and legacy social/link raffle
+  steps inline, and embeds the web entry panel. `/me/tasks?raffle=N` remains
+  the focused one-raffle view.
 - Org raffle detail pages should render entry requirements as user-friendly
   cards, not raw `requirements` JSON.
 - Community, raffle, and notification features shipped in S2.5.
