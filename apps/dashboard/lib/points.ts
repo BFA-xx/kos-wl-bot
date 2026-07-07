@@ -85,10 +85,13 @@ export async function redeemReward({
     }
 
     if (reward.stock !== null) {
-      await tx.reward.update({
-        where: { id: reward.id },
+      const claimed = await tx.reward.updateMany({
+        where: { id: reward.id, stock: { gt: 0 } },
         data: { stock: { decrement: 1 } },
       });
+      if (claimed.count === 0) {
+        return { ok: false as const, error: "This reward is out of stock.", status: 409 };
+      }
     }
 
     const redemption = await tx.rewardRedemption.create({

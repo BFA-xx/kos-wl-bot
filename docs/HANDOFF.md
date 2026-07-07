@@ -431,6 +431,8 @@ Verification:
   negative `REWARD_REDEEM` rows. Cancelled/rejected pending claims refund via
   positive `REWARD_REFUND` rows and restore stock when the reward has limited
   inventory.
+- Limited-stock redemptions claim stock with an atomic conditional decrement on
+  both web and Discord paths to avoid overselling during concurrent clicks.
 
 Verification:
 
