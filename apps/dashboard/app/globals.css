@@ -5,8 +5,8 @@
 /* Light theme (fallback) */
 :root {
   --font-sans:
-    "Inter", "Geist", "SF Pro Display", "SF Pro Text", -apple-system,
-    BlinkMacSystemFont, "Segoe UI", sans-serif;
+    var(--font-kos-sans), "Inter", "Geist", "SF Pro Display", "SF Pro Text",
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --kos-bg: 250 250 250; /* page background */
   --kos-panel: 255 255 255; /* inputs / soft surfaces */
   --kos-card: 255 255 255; /* cards */
@@ -47,6 +47,11 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  font-feature-settings:
+    "cv02" 1,
+    "cv03" 1,
+    "cv04" 1,
+    "cv11" 1;
 }
 
 .dark body {

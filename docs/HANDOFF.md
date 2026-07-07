@@ -383,6 +383,21 @@ pnpm 11, while this repository is pinned to `pnpm@9.12.0`. Use
 `corepack pnpm ...` for local verification to avoid pnpm 11's unrelated
 build-approval prompts and workspace-file scaffolding.
 
+### Typography follow-up — complete locally
+
+- The dashboard now loads a real self-hosted Inter font through
+  `next/font/local` instead of relying on device/system fallback fonts.
+- The font files are existing tracked assets, so the dashboard build does not
+  depend on Google Fonts or another external font CDN.
+- Global typography now routes through `--font-kos-sans` and enables Inter's
+  readability alternates for cleaner UI text rendering.
+
+Verification:
+
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `git diff --check`
+- `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
+
 ## Assumptions
 
 - `/Users/adebayodaniel/KOS RAF` is the intended repository because it is the
