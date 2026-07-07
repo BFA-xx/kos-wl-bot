@@ -165,9 +165,6 @@ export default async function CommunityPage({
         </>
       ) : null}
 
-      <p className="mt-10 text-center text-xs text-kos-muted">
-        {org.name} · Powered by KOS
-      </p>
     </div>
   );
 }

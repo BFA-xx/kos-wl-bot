@@ -148,9 +148,6 @@ export function OrgShell({
             <div className="kos-fade">{children}</div>
           </main>
 
-          <footer className="mx-auto max-w-7xl px-4 pb-8 pt-6 text-center text-xs text-kos-muted sm:px-6 lg:px-8">
-            {ctx.name} · Powered by KOS
-          </footer>
         </div>
       </div>
     </OrgProvider>

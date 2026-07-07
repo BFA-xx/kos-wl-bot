@@ -63,6 +63,8 @@ availability described below.
 - The points + weighted-role raffle slice passes dashboard/bot TypeScript,
   `git diff --check`, `@kos/db` build, `@kos/bot` build, and a fresh
   `@kos/dashboard` production build.
+- The profile/full-width layout follow-up passes dashboard TypeScript and a
+  fresh `@kos/dashboard` production build.
 - Production migration `20260707170000_points_role_weights` has been applied
   to Neon via `pnpm --filter @kos/db migrate:deploy`.
 - Commit `e0bd4c8` has been pushed to `origin/main`.
@@ -354,6 +356,28 @@ Deployment verification:
   auth responses rather than not-found responses:
   `/api/me/points` → `401`, `/api/kos/points` → `401`,
   `/me/points` → `307 /login?next=%2Fme%2Fpoints`.
+
+### Profile layout and footer follow-up — complete locally
+
+- Removed decorative bottom footers from the member shell and org dashboard
+  shell so `Powered by KOS` no longer appears as a stuck bottom bar while
+  navigating app pages.
+- Removed the bottom footer-style branding line from public community pages.
+- Expanded the member `/me/*` shell from a centered `max-w-6xl` frame to a
+  full-width content area with responsive page padding, giving profile, tasks,
+  points, wallet, history, and communities pages more room on desktop.
+- The member header now uses full-width spacing, keeps the KOS mark fixed, and
+  lets the tab nav scroll cleanly when horizontal space is tight.
+
+Verification:
+
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
+
+Operational note: invoking the Codex-bundled `pnpm` currently resolves to
+pnpm 11, while this repository is pinned to `pnpm@9.12.0`. Use
+`corepack pnpm ...` for local verification to avoid pnpm 11's unrelated
+build-approval prompts and workspace-file scaffolding.
 
 ## Assumptions
 

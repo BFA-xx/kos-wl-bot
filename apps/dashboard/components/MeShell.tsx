@@ -30,8 +30,8 @@ export function MeShell({
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#0A0A0A]/70 backdrop-blur-2xl">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3 sm:px-6">
-          <Link href="/me" className="flex items-center gap-2.5">
+        <div className="flex w-full items-center gap-3 px-4 py-3 sm:px-6 lg:px-8 xl:px-10">
+          <Link href="/me" className="flex shrink-0 items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 text-xs font-black tracking-tight text-white shadow-[0_14px_40px_-22px_rgba(59,130,246,0.9)]">
               KOS
             </div>
@@ -43,7 +43,7 @@ export function MeShell({
             </div>
           </Link>
 
-          <nav className="flex items-center gap-1 overflow-x-auto rounded-full border border-white/[0.08] bg-white/[0.035] p-1">
+          <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-full border border-white/[0.08] bg-white/[0.035] p-1 lg:flex-none">
             {NAV.map((n) => (
               <Link
                 key={n.href}
@@ -93,13 +93,9 @@ export function MeShell({
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <main className="w-full px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
         <div className="kos-fade">{children}</div>
       </main>
-
-      <footer className="mx-auto max-w-6xl px-4 pb-8 pt-4 text-center text-xs text-kos-muted sm:px-6">
-        Powered by KOS
-      </footer>
     </div>
   );
 }
