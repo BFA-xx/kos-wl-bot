@@ -383,7 +383,7 @@ pnpm 11, while this repository is pinned to `pnpm@9.12.0`. Use
 `corepack pnpm ...` for local verification to avoid pnpm 11's unrelated
 build-approval prompts and workspace-file scaffolding.
 
-### Typography follow-up — complete locally
+### Typography follow-up — committed/pushed/deployed
 
 - The dashboard now loads a real self-hosted Inter font through
   `next/font/local` instead of relying on device/system fallback fonts.
@@ -397,6 +397,11 @@ Verification:
 - `corepack pnpm --filter @kos/dashboard typecheck`
 - `git diff --check`
 - `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
+- Code committed as `c5c5a08` (`Load proper dashboard font`) and pushed to
+  `origin/main`.
+- Vercel production build changed to `vyHDOsTNlFBJAuqCOBxyJ`; the served CSS
+  contains both `--font-kos-sans` and `@font-face`, confirming the self-hosted
+  Inter font is active in production.
 
 ## Assumptions
 
