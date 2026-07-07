@@ -106,6 +106,10 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   raffles, renders attached Task Engine checks and legacy social/link raffle
   steps inline, and embeds the web entry panel. `/me/tasks?raffle=N` remains
   the focused one-raffle view.
+- Legacy social/link raffle steps are click-and-attest gates, not paid X API
+  checks. They persist `SOCIAL_TASK_CLICK` / `SOCIAL_TASK_VERIFY` guild `Log`
+  rows with a stable metadata `taskKey`; both web entry and bot entry check for
+  verification before allowing entry.
 - Org raffle detail pages should render entry requirements as user-friendly
   cards, not raw `requirements` JSON.
 - Community, raffle, and notification features shipped in S2.5.

@@ -2,6 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { AccessError, requireUser } from "@/lib/access";
 import { TASK_TYPE_LABELS, taskActionUrl, type TaskConfig } from "@/lib/verify";
+import {
+  getLegacyRaffleTasks,
+  LEGACY_TASK_CLICK,
+  LEGACY_TASK_VERIFY,
+} from "@/lib/legacy-raffle-tasks";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -90,6 +95,17 @@ export async function GET(req: NextRequest) {
           })
         : [];
       const byTask = new Map(completions.map((c) => [c.taskId, c.status]));
+      const socialLogs = raffles.length
+        ? await prisma.log.findMany({
+            where: {
+              actorId: user.id,
+              raffleId: { in: raffles.map((r) => r.id) },
+              action: { in: [LEGACY_TASK_CLICK, LEGACY_TASK_VERIFY] },
+            },
+            select: { raffleId: true, action: true, metadata: true },
+          })
+        : [];
+      const socialByTask = socialStatusMap(socialLogs);
 
       const xLinked = Boolean(
         await prisma.connectedAccount.findUnique({
@@ -128,7 +144,9 @@ export async function GET(req: NextRequest) {
               status: byTask.get(rt.taskId) ?? "NOT_STARTED",
               verifiable: true,
             })),
-            ...legacySocialTasks(raffle.id, raffle.requirements),
+            ...getLegacyRaffleTasks(raffle.id, raffle.requirements).map((task) =>
+              legacyTaskRow(task, socialByTask.get(task.key)),
+            ),
           ],
         })),
       });
@@ -169,6 +187,18 @@ export async function GET(req: NextRequest) {
         select: { id: true },
       }),
     );
+    const socialTasks = getLegacyRaffleTasks(raffle.id, raffle.requirements);
+    const socialLogs = socialTasks.length
+      ? await prisma.log.findMany({
+          where: {
+            actorId: user.id,
+            raffleId: raffle.id,
+            action: { in: [LEGACY_TASK_CLICK, LEGACY_TASK_VERIFY] },
+          },
+          select: { raffleId: true, action: true, metadata: true },
+        })
+      : [];
+    const socialByTask = socialStatusMap(socialLogs);
 
     return NextResponse.json({
       raffle: {
@@ -196,7 +226,7 @@ export async function GET(req: NextRequest) {
             verifiable: true,
           };
         }),
-        ...legacySocialTasks(raffle.id, raffle.requirements),
+        ...socialTasks.map((task) => legacyTaskRow(task, socialByTask.get(task.key))),
       ],
     });
   } catch (err) {
@@ -205,28 +235,42 @@ export async function GET(req: NextRequest) {
   }
 }
 
-function legacySocialTasks(raffleId: number, requirements: unknown) {
-  const req = (requirements ?? {}) as { tasks?: unknown };
-  if (!Array.isArray(req.tasks)) return [];
-  return req.tasks.flatMap((task, i) => {
-    if (!task || typeof task !== "object") return [];
-    const t = task as { label?: unknown; url?: unknown };
-    if (typeof t.label !== "string" || !t.label.trim()) return [];
-    return [
-      {
-        id: `social-${raffleId}-${i}`,
-        kind: "SOCIAL",
-        type: "SOCIAL_TASK",
-        typeLabel: "Raffle step",
-        title: t.label.trim(),
-        description: "Open and complete this step before entering.",
-        required: true,
-        points: 0,
-        active: true,
-        actionUrl: typeof t.url === "string" && t.url.trim() ? t.url.trim() : null,
-        status: "ACTION_REQUIRED",
-        verifiable: false,
-      },
-    ];
-  });
+function legacyTaskRow(
+  task: { id: string; key: string; label: string; url: string | null },
+  status?: { clicked: boolean; verified: boolean },
+) {
+  return {
+    id: task.id,
+    kind: "SOCIAL",
+    type: "SOCIAL_TASK",
+    typeLabel: "Raffle step",
+    title: task.label,
+    description: task.url
+      ? "Open the link, complete the step, then verify it here."
+      : "Complete this step, then verify it here.",
+    required: true,
+    points: 0,
+    active: true,
+    actionUrl: task.url,
+    status: status?.verified ? "VERIFIED" : status?.clicked ? "CLICKED" : "ACTION_REQUIRED",
+    verifiable: true,
+    requiresClick: Boolean(task.url),
+    clicked: Boolean(status?.clicked || status?.verified || !task.url),
+  };
+}
+
+function socialStatusMap(logs: { action: string; metadata: unknown }[]) {
+  const map = new Map<string, { clicked: boolean; verified: boolean }>();
+  for (const log of logs) {
+    const key = ((log.metadata ?? {}) as { taskKey?: unknown }).taskKey;
+    if (typeof key !== "string") continue;
+    const current = map.get(key) ?? { clicked: false, verified: false };
+    if (log.action === LEGACY_TASK_CLICK) current.clicked = true;
+    if (log.action === LEGACY_TASK_VERIFY) {
+      current.clicked = true;
+      current.verified = true;
+    }
+    map.set(key, current);
+  }
+  return map;
 }

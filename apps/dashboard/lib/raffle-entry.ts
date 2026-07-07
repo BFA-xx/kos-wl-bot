@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
 import type { Raffle, RaffleRole, User } from "@prisma/client";
+import {
+  getLegacyRaffleTasks,
+  LEGACY_TASK_VERIFY,
+} from "@/lib/legacy-raffle-tasks";
 
 /**
  * Web raffle entry — the same gates the Discord bot enforces, evaluated
@@ -213,6 +217,35 @@ export async function evaluateWebGates(
         label: rt.task.title,
         ok,
         reason: ok ? undefined : "Complete and verify this task.",
+        url: `/me/tasks?raffle=${raffle.id}`,
+      });
+    }
+  }
+
+  // 9. Legacy raffle social/link steps — click + attest, no paid X API.
+  const legacyTasks = getLegacyRaffleTasks(raffle.id, raffle.requirements);
+  if (legacyTasks.length > 0) {
+    const logs = await prisma.log.findMany({
+      where: {
+        raffleId: raffle.id,
+        actorId: user.id,
+        action: LEGACY_TASK_VERIFY,
+      },
+      select: { metadata: true },
+    });
+    const done = new Set(
+      logs.flatMap((log) => {
+        const key = ((log.metadata ?? {}) as { taskKey?: unknown }).taskKey;
+        return typeof key === "string" ? [key] : [];
+      }),
+    );
+    for (const task of legacyTasks) {
+      const ok = done.has(task.key);
+      gates.push({
+        key: `legacy-task-${task.key}`,
+        label: task.label,
+        ok,
+        reason: ok ? undefined : "Open and verify this raffle step.",
         url: `/me/tasks?raffle=${raffle.id}`,
       });
     }

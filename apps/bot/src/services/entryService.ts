@@ -1,6 +1,7 @@
 import { type GuildMember } from "discord.js";
 import { prisma, LogCategory, Prisma, RaffleStatus, type WalletChain } from "@kos/db";
-import { evaluateEligibility } from "./eligibilityService.js";
+import { createHash } from "node:crypto";
+import { evaluateEligibility, parseRequirements } from "./eligibilityService.js";
 import { upsertUser } from "./userService.js";
 import { audit } from "./auditService.js";
 import { logger } from "../logger.js";
@@ -50,7 +51,7 @@ export async function enterRaffle(
   }
 
   // Task Engine gate: all required verification tasks must be VERIFIED.
-  const missingTasks = await checkRequiredTasks(raffle.id, member);
+  const missingTasks = await checkRequiredTasks(raffle.id, member, raffle.requirements);
   if (missingTasks.length > 0) {
     return { status: "tasks_incomplete", missing: missingTasks };
   }
@@ -178,53 +179,87 @@ export async function leaveRaffle(
 async function checkRequiredTasks(
   raffleId: number,
   member: GuildMember,
+  requirements: unknown,
 ): Promise<string[]> {
   const links = await prisma.raffleTask.findMany({
     where: { raffleId, required: true, task: { active: true } },
     include: { task: true },
   });
-  if (links.length === 0) return [];
-
-  const completions = await prisma.taskCompletion.findMany({
-    where: { userId: member.id, taskId: { in: links.map((l) => l.taskId) } },
-    select: { taskId: true, status: true },
-  });
-  const statusByTask = new Map(completions.map((c) => [c.taskId, c.status]));
-
   const missing: string[] = [];
-  for (const { task } of links) {
-    if (statusByTask.get(task.id) === "VERIFIED") continue;
 
-    // Inline auto-verify for Discord tasks in THIS guild.
-    const cfg = (task.config ?? {}) as { guildId?: string; roleId?: string };
-    const inThisGuild = cfg.guildId === member.guild.id;
-    const passes =
-      inThisGuild &&
-      (task.type === "DISCORD_JOIN" ||
-        (task.type === "DISCORD_ROLE" && cfg.roleId && member.roles.cache.has(cfg.roleId)));
+  if (links.length > 0) {
+    const completions = await prisma.taskCompletion.findMany({
+      where: { userId: member.id, taskId: { in: links.map((l) => l.taskId) } },
+      select: { taskId: true, status: true },
+    });
+    const statusByTask = new Map(completions.map((c) => [c.taskId, c.status]));
 
-    if (passes) {
-      await prisma.taskCompletion
-        .upsert({
-          where: { taskId_userId: { taskId: task.id, userId: member.id } },
-          create: {
-            taskId: task.id,
-            userId: member.id,
-            status: "VERIFIED",
-            verifiedAt: new Date(),
-            evidence: { method: "bot_inline_check", guildId: cfg.guildId, at: new Date().toISOString() },
-          },
-          update: {
-            status: "VERIFIED",
-            verifiedAt: new Date(),
-            evidence: { method: "bot_inline_check", guildId: cfg.guildId, at: new Date().toISOString() },
-          },
-        })
-        .catch(() => undefined);
-      continue;
+    for (const { task } of links) {
+      if (statusByTask.get(task.id) === "VERIFIED") continue;
+
+      // Inline auto-verify for Discord tasks in THIS guild.
+      const cfg = (task.config ?? {}) as { guildId?: string; roleId?: string };
+      const inThisGuild = cfg.guildId === member.guild.id;
+      const passes =
+        inThisGuild &&
+        (task.type === "DISCORD_JOIN" ||
+          (task.type === "DISCORD_ROLE" && cfg.roleId && member.roles.cache.has(cfg.roleId)));
+
+      if (passes) {
+        await prisma.taskCompletion
+          .upsert({
+            where: { taskId_userId: { taskId: task.id, userId: member.id } },
+            create: {
+              taskId: task.id,
+              userId: member.id,
+              status: "VERIFIED",
+              verifiedAt: new Date(),
+              evidence: { method: "bot_inline_check", guildId: cfg.guildId, at: new Date().toISOString() },
+            },
+            update: {
+              status: "VERIFIED",
+              verifiedAt: new Date(),
+              evidence: { method: "bot_inline_check", guildId: cfg.guildId, at: new Date().toISOString() },
+            },
+          })
+          .catch(() => undefined);
+        continue;
+      }
+
+      missing.push(task.title);
     }
-
-    missing.push(task.title);
   }
+
+  const legacyTasks = legacySocialTasks(raffleId, requirements);
+  if (legacyTasks.length > 0) {
+    const logs = await prisma.log.findMany({
+      where: {
+        raffleId,
+        actorId: member.id,
+        action: "SOCIAL_TASK_VERIFY",
+      },
+      select: { metadata: true },
+    });
+    const done = new Set(
+      logs.flatMap((log) => {
+        const key = ((log.metadata ?? {}) as { taskKey?: unknown }).taskKey;
+        return typeof key === "string" ? [key] : [];
+      }),
+    );
+    for (const task of legacyTasks) {
+      if (!done.has(task.key)) missing.push(task.label);
+    }
+  }
+
   return missing;
+}
+
+function legacySocialTasks(raffleId: number, requirements: unknown) {
+  const tasks = parseRequirements(requirements).tasks ?? [];
+  return tasks.flatMap((task, index) => {
+    if (!task.label.trim()) return [];
+    const url = task.url?.trim() || null;
+    const hash = createHash("sha1").update(`${task.label.trim()}\n${url ?? ""}`).digest("hex").slice(0, 12);
+    return [{ label: task.label.trim(), key: `legacy:${raffleId}:${index}:${hash}` }];
+  });
 }

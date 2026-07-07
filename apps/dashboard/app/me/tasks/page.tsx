@@ -22,6 +22,8 @@ interface TaskRow {
   actionUrl: string | null;
   status: string;
   verifiable?: boolean;
+  requiresClick?: boolean;
+  clicked?: boolean;
 }
 interface RaffleSummary {
   id: number;
@@ -53,6 +55,7 @@ const STATUS_CHIP: Record<string, { label: string; cls: string }> = {
   REJECTED: { label: "Rejected", cls: "border-red-500/30 text-red-400" },
   NOT_STARTED: { label: "To do", cls: "border-kos-border text-kos-muted" },
   ACTION_REQUIRED: { label: "Open step", cls: "border-sky-400/30 text-sky-400" },
+  CLICKED: { label: "Ready to verify", cls: "border-amber-400/30 text-amber-400" },
 };
 
 export default function MeTasksPage() {
@@ -89,6 +92,21 @@ function TasksInner() {
     if (raffleIdForRefresh) void mutateKey(`/api/me/raffles/${raffleIdForRefresh}`);
   }
 
+  async function openTask(task: TaskRow, raffleIdForRefresh?: number) {
+    if (task.actionUrl) window.open(task.actionUrl, "_blank", "noopener,noreferrer");
+    if (!task.requiresClick || task.status === "VERIFIED") return;
+
+    const res = await fetch(`/api/me/tasks/${task.id}/click`, { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setNotes((n) => ({ ...n, [task.id]: "" }));
+      await mutate();
+      if (raffleIdForRefresh) void mutateKey(`/api/me/raffles/${raffleIdForRefresh}`);
+    } else {
+      setNotes((n) => ({ ...n, [task.id]: body.error ?? "Couldn't record that click. Try again." }));
+    }
+  }
+
   if (!raffleId) {
     return (
       <TasksHub
@@ -96,6 +114,7 @@ function TasksInner() {
         busy={busy}
         notes={notes}
         onComplete={complete}
+        onOpen={openTask}
       />
     );
   }
@@ -139,7 +158,7 @@ function TasksInner() {
             </div>
             {summary.requiredLeft === 0 ? (
               <span className="kos-badge border-emerald-400/30 text-emerald-400">
-                {summary.social > 0 ? "Open each step, then enter below" : "All required tasks done — enter below 🎉"}
+                {summary.social > 0 ? "All raffle steps verified — enter below 🎉" : "All required tasks done — enter below 🎉"}
               </span>
             ) : (
               <span className="kos-badge border-amber-400/30 text-amber-400">
@@ -168,6 +187,7 @@ function TasksInner() {
           notes={notes}
           raffleId={data.raffle?.id}
           onComplete={complete}
+          onOpen={openTask}
         />
       )}
 
@@ -185,11 +205,13 @@ function TasksHub({
   busy,
   notes,
   onComplete,
+  onOpen,
 }: {
   data?: Data;
   busy: string | null;
   notes: Record<string, string>;
   onComplete: (id: string, raffleIdForRefresh?: number) => void;
+  onOpen: (task: TaskRow, raffleIdForRefresh?: number) => void;
 }) {
   if (data?.error) {
     return (
@@ -241,6 +263,7 @@ function TasksHub({
                   busy={busy}
                   notes={notes}
                   onComplete={onComplete}
+                  onOpen={onOpen}
                 />
               ))}
             </div>
@@ -256,11 +279,13 @@ function RaffleTaskCard({
   busy,
   notes,
   onComplete,
+  onOpen,
 }: {
   raffle: RaffleSummary;
   busy: string | null;
   notes: Record<string, string>;
   onComplete: (id: string, raffleIdForRefresh?: number) => void;
+  onOpen: (task: TaskRow, raffleIdForRefresh?: number) => void;
 }) {
   const summary = taskSummary(raffle.tasks);
   const publicHref = raffle.org ? `/c/${raffle.org.slug}/raffles/${raffle.id}` : "#";
@@ -338,6 +363,7 @@ function RaffleTaskCard({
               raffleId={raffle.id}
               compact
               onComplete={onComplete}
+              onOpen={onOpen}
             />
           )}
         </div>
@@ -365,6 +391,7 @@ function TaskList({
   raffleId,
   compact = false,
   onComplete,
+  onOpen,
 }: {
   tasks: TaskRow[];
   busy: string | null;
@@ -372,11 +399,13 @@ function TaskList({
   raffleId?: number;
   compact?: boolean;
   onComplete: (id: string, raffleIdForRefresh?: number) => void;
+  onOpen: (task: TaskRow, raffleIdForRefresh?: number) => void;
 }) {
   return (
     <div className="space-y-2">
       {tasks.map((t) => {
         const chip = STATUS_CHIP[t.status] ?? STATUS_CHIP.NOT_STARTED;
+        const locked = Boolean(t.requiresClick && !t.clicked && t.status !== "VERIFIED");
         return (
           <div
             key={t.id}
@@ -408,17 +437,17 @@ function TaskList({
               </div>
               <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
                 {t.actionUrl ? (
-                  <a href={t.actionUrl} target="_blank" rel="noreferrer" className="kos-btn text-center">
+                  <button type="button" onClick={() => onOpen(t, raffleId)} className="kos-btn text-center">
                     Open ↗
-                  </a>
+                  </button>
                 ) : null}
                 {t.verifiable !== false && t.status !== "VERIFIED" && t.status !== "NEEDS_REVIEW" ? (
                   <button
                     onClick={() => onComplete(t.id, raffleId)}
-                    disabled={busy === t.id}
-                    className="kos-btn-primary"
+                    disabled={busy === t.id || locked}
+                    className="kos-btn-primary disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {busy === t.id ? "Checking…" : "Verify"}
+                    {busy === t.id ? "Checking…" : locked ? "Open first" : "Verify"}
                   </button>
                 ) : null}
               </div>
@@ -447,7 +476,7 @@ function taskSummary(tasks: TaskRow[]) {
     verifiable: verifiable.length,
     verified: verifiable.filter((t) => t.status === "VERIFIED").length,
     requiredLeft: verifiable.filter((t) => t.required && t.status !== "VERIFIED").length,
-    social: tasks.length - verifiable.length,
+    social: tasks.filter((t) => t.kind === "SOCIAL").length,
   };
 }
 

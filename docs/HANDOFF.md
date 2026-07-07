@@ -26,7 +26,8 @@ have been committed and pushed to `main`:
 - the member Tasks area now acts as an active-raffle workspace, and the org
   raffle detail page renders entry requirements as clean cards instead of raw
   requirements JSON. A follow-up also renders legacy raffle social/link tasks
-  (Follow/Like/Retweet/etc.) in the member Tasks cards.
+  (Follow/Like/Retweet/etc.) in the member Tasks cards. Those legacy tasks now
+  require Open → Verify before web or Discord entry is allowed.
 
 Claude reported the production database migrated, the bot online in two
 guilds, and the Vercel dashboard deployed. This audit verified the repository
@@ -47,6 +48,8 @@ Neon.
   TypeScript and a fresh Next.js production build.
 - The legacy social-task rendering and responsive banner/card follow-up passes
   dashboard TypeScript and a fresh Next.js production build.
+- The legacy social-task click/verify gate passes dashboard and bot TypeScript
+  checks plus dashboard and bot production builds.
 - No automated test files exist.
 
 ## Handoff reconciliation
@@ -67,7 +70,8 @@ precision points:
 6. `/me/tasks` is no longer only a deep-link target. It now lists live raffles
    from public KOS communities, shows attached verification tasks and legacy
    raffle social/link tasks inline, and embeds the same web entry panel used by
-   public raffle pages.
+   public raffle pages. Legacy social/link tasks are click-and-attest steps:
+   users must open the link, then verify the step before entry.
 
 ## Known technical debt and risks
 
@@ -174,8 +178,14 @@ has no automated test harness.
   entry panel and no longer tells users to enter in Discord after completing
   tasks.
 - Legacy social/link tasks render as "Open step" actions, not fake verified
-  checks, because they are honor-system links rather than `TaskCompletion`
-  records.
+  checks, because they are honor-system links rather than X API checks.
+- Legacy social/link tasks now persist click and verify attestations as guild
+  `Log` rows (`SOCIAL_TASK_CLICK` and `SOCIAL_TASK_VERIFY`) with a stable
+  `taskKey` in metadata. This avoided a production database migration but means
+  these attestations are state stored in the audit log table.
+- Web entry gates and Discord bot entry gates both require those legacy
+  social/link tasks to be verified. The bot reuses its existing
+  `tasks_incomplete` response and points users to `/me/tasks?raffle=N`.
 - Active raffle cards use a responsive banner frame that contains unusual image
   sizes with a blurred backdrop instead of fixed-cropping every banner.
 - The org raffle detail page now renders an `Entry Requirements` card for
@@ -184,10 +194,11 @@ has no automated test harness.
 - The org raffle detail winners empty state is now a designed "Winners pending"
   card instead of plain text.
 
-Verification: `pnpm --filter @kos/dashboard typecheck` and
-`pnpm --filter @kos/dashboard build` pass with a placeholder `DATABASE_URL`.
-Changes were pushed to GitHub `main` for Vercel deployment. No authenticated
-browser smoke test or live Discord gate check was run.
+Verification: `pnpm --filter @kos/dashboard typecheck`,
+`pnpm --filter @kos/bot typecheck`, `pnpm --filter @kos/dashboard build`, and
+`pnpm --filter @kos/bot build` pass with a placeholder `DATABASE_URL` for the
+dashboard build. Changes were pushed to GitHub `main` for Vercel deployment.
+No authenticated browser smoke test or live Discord gate check was run.
 
 ## Assumptions
 
@@ -196,6 +207,8 @@ browser smoke test or live Discord gate check was run.
   Claude's final commit.
 - "Active raffles" for the profile Tasks hub means `Raffle.status = LIVE`
   within non-suspended organizations that have connected guilds.
+- Legacy social/link task verification is intentionally click-and-attest, not
+  paid X API verification.
 - Claude's production-status statements are historical context until verified
   directly against production.
 - The attached “KOS Phase 3” specification is the intended roadmap, while the
