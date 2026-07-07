@@ -25,7 +25,7 @@ interface Status {
 }
 
 /** Web Enter/Leave with the live gate checklist — parity with the bot's button. */
-export function EntryPanel({ raffleId }: { raffleId: number }) {
+export function EntryPanel({ raffleId, compact = false }: { raffleId: number; compact?: boolean }) {
   const { data, mutate } = useSWR<Status>(`/api/me/raffles/${raffleId}`, fetcher, {
     refreshInterval: 15000,
   });
@@ -50,11 +50,11 @@ export function EntryPanel({ raffleId }: { raffleId: number }) {
   }
 
   if (!data) {
-    return <div className="kos-card p-5 text-sm text-kos-muted">Checking your eligibility…</div>;
+    return <div className={`${compact ? "rounded-xl border border-kos-border bg-kos-panel/50 p-4" : "kos-card p-5"} text-sm text-kos-muted`}>Checking your eligibility…</div>;
   }
   if (data.error === "unauthorized") {
     return (
-      <div className="kos-card p-5 text-center">
+      <div className={`${compact ? "rounded-xl border border-kos-border bg-kos-panel/50 p-4" : "kos-card p-5"} text-center`}>
         <p className="text-sm text-kos-muted">Sign in with Discord to enter this raffle.</p>
         <a href="/api/auth/discord/login" className="kos-btn-primary mt-3 inline-block">
           Continue with Discord
@@ -65,10 +65,11 @@ export function EntryPanel({ raffleId }: { raffleId: number }) {
 
   const live = data.status === "LIVE";
   const showGates = live && !data.entered && data.gates.length > 0;
+  const shell = compact ? "rounded-xl border border-kos-border bg-kos-panel/50 p-4" : "kos-card p-5";
 
   return (
-    <div className="kos-card p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className={shell}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-semibold">
             {data.entered
@@ -85,18 +86,18 @@ export function EntryPanel({ raffleId }: { raffleId: number }) {
             </div>
           ) : null}
         </div>
-        <div className="flex gap-2">
+        <div className="flex w-full gap-2 sm:w-auto">
           {live && !data.entered ? (
             <button
               onClick={() => act("enter")}
               disabled={busy || !data.canEnter}
-              className="kos-btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+              className="kos-btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               {busy ? "Entering…" : "Enter raffle"}
             </button>
           ) : null}
           {live && data.entered ? (
-            <button onClick={() => act("leave")} disabled={busy} className="kos-btn">
+            <button onClick={() => act("leave")} disabled={busy} className="kos-btn ml-auto">
               {busy ? "…" : "Leave"}
             </button>
           ) : null}

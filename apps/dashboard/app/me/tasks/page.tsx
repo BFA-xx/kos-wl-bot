@@ -291,11 +291,7 @@ function RaffleTaskCard({
   const publicHref = raffle.org ? `/c/${raffle.org.slug}/raffles/${raffle.id}` : "#";
 
   return (
-    <div
-      className={`overflow-hidden rounded-2xl border border-kos-border bg-kos-card shadow-sm ${
-        raffle.bannerUrl ? "lg:grid lg:grid-cols-[minmax(220px,36%)_1fr]" : ""
-      }`}
-    >
+    <div className="overflow-hidden rounded-2xl border border-kos-border bg-kos-card shadow-sm">
       {raffle.bannerUrl ? <BannerFrame src={raffle.bannerUrl} /> : null}
       <div className="p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -333,7 +329,7 @@ function RaffleTaskCard({
           <MiniStat label="Spots" value={raffle.spots} />
         </div>
 
-        <div className="mt-4 rounded-xl border border-kos-border bg-kos-bg/35 p-3">
+        <div className="mt-4 rounded-2xl border border-kos-border bg-kos-bg/35 p-3 sm:p-4">
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-sm font-semibold">Raffle tasks</div>
@@ -369,7 +365,7 @@ function RaffleTaskCard({
         </div>
 
         <div className="mt-4">
-          <EntryPanel raffleId={raffle.id} />
+          <EntryPanel raffleId={raffle.id} compact />
         </div>
 
         {raffle.org ? (
@@ -406,48 +402,84 @@ function TaskList({
       {tasks.map((t) => {
         const chip = STATUS_CHIP[t.status] ?? STATUS_CHIP.NOT_STARTED;
         const locked = Boolean(t.requiresClick && !t.clicked && t.status !== "VERIFIED");
+        const isDone = t.status === "VERIFIED";
+        const primaryLabel =
+          isDone
+            ? "Verified"
+            : t.kind === "SOCIAL" && locked
+              ? "Open task"
+              : t.kind === "SOCIAL" && t.clicked
+                ? "Verify"
+                : "Verify";
+        const helper =
+          isDone
+            ? "Done — this step is verified."
+            : locked
+              ? "Open the link first. Then come back and verify."
+              : t.kind === "SOCIAL" && t.clicked
+                ? "Link opened — verify once you've completed it."
+                : t.description;
         return (
           <div
             key={t.id}
             className={
               compact
-                ? "rounded-xl border border-kos-border bg-kos-panel/60 p-3"
+                ? "rounded-xl border border-kos-border bg-kos-panel/60 p-3 transition-colors hover:border-kos-fg/20"
                 : "kos-card p-4"
             }
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 flex-1 gap-3">
+                <span
+                  className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
+                    isDone
+                      ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-400"
+                      : t.status === "CLICKED"
+                        ? "border-amber-400/30 bg-amber-500/10 text-amber-400"
+                        : "border-kos-border bg-kos-bg text-kos-muted"
+                  }`}
+                >
+                  {isDone ? "✓" : t.status === "CLICKED" ? "2" : "1"}
+                </span>
+                <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{t.title}</span>
-                  <span className={`kos-badge ${chip.cls}`}>{chip.label}</span>
                   {t.required ? (
                     <span className="kos-badge border-kos-border text-kos-muted">required</span>
                   ) : null}
+                  <span className={`kos-badge ${chip.cls}`}>{chip.label}</span>
                   {t.points > 0 ? (
                     <span className="kos-badge border-kos-border text-kos-muted">+{t.points} pts</span>
                   ) : null}
                 </div>
-                <div className="mt-0.5 text-xs text-kos-muted">
+                <div className="mt-1 text-xs text-kos-muted">
                   {t.typeLabel}
-                  {t.description ? ` · ${t.description}` : ""}
+                  {helper ? ` · ${helper}` : ""}
                 </div>
                 {notes[t.id] ? (
                   <div className="mt-1 text-xs text-amber-400">{notes[t.id]}</div>
                 ) : null}
+                </div>
               </div>
-              <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
-                {t.actionUrl ? (
-                  <button type="button" onClick={() => onOpen(t, raffleId)} className="kos-btn text-center">
-                    Open ↗
+              <div className="flex w-full shrink-0 flex-col gap-2 sm:w-36">
+                {isDone ? (
+                  <span className="kos-btn cursor-default text-center text-emerald-400">Verified ✓</span>
+                ) : t.kind === "SOCIAL" && locked && t.actionUrl ? (
+                  <button type="button" onClick={() => onOpen(t, raffleId)} className="kos-btn-primary text-center">
+                    {primaryLabel}
                   </button>
-                ) : null}
-                {t.verifiable !== false && t.status !== "VERIFIED" && t.status !== "NEEDS_REVIEW" ? (
+                ) : t.verifiable !== false && t.status !== "NEEDS_REVIEW" ? (
                   <button
                     onClick={() => onComplete(t.id, raffleId)}
                     disabled={busy === t.id || locked}
                     className="kos-btn-primary disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {busy === t.id ? "Checking…" : locked ? "Open first" : "Verify"}
+                    {busy === t.id ? "Checking…" : primaryLabel}
+                  </button>
+                ) : null}
+                {t.kind !== "SOCIAL" && t.actionUrl && !isDone ? (
+                  <button type="button" onClick={() => onOpen(t, raffleId)} className="kos-btn text-center">
+                    Open ↗
                   </button>
                 ) : null}
               </div>
@@ -461,11 +493,13 @@ function TaskList({
 
 function BannerFrame({ src }: { src: string }) {
   return (
-    <div className="relative aspect-[16/9] overflow-hidden bg-kos-panel lg:aspect-auto lg:h-full lg:min-h-[360px]">
+    <div className="border-b border-kos-border bg-kos-panel/70 px-3 py-3 sm:px-4">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-xl" />
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="" className="relative h-full w-full object-contain p-1" />
+      <img
+        src={src}
+        alt=""
+        className="mx-auto block max-h-[240px] w-auto max-w-full rounded-xl object-contain"
+      />
     </div>
   );
 }

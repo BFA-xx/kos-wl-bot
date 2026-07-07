@@ -50,6 +50,8 @@ Neon.
   dashboard TypeScript and a fresh Next.js production build.
 - The legacy social-task click/verify gate passes dashboard and bot TypeScript
   checks plus dashboard and bot production builds.
+- The member task-card visual cleanup passes dashboard TypeScript and a fresh
+  Next.js production build.
 - No automated test files exist.
 
 ## Handoff reconciliation
@@ -186,8 +188,10 @@ has no automated test harness.
 - Web entry gates and Discord bot entry gates both require those legacy
   social/link tasks to be verified. The bot reuses its existing
   `tasks_incomplete` response and points users to `/me/tasks?raffle=N`.
-- Active raffle cards use a responsive banner frame that contains unusual image
-  sizes with a blurred backdrop instead of fixed-cropping every banner.
+- Active raffle cards now use a compact natural-aspect banner strip, not a
+  large side column or forced 16:9/vertical frame. The task rows are now a
+  cleaner one-CTA checklist (`Open task` -> `Verify` -> `Verified`), and the
+  embedded entry panel uses a compact style inside the profile Tasks hub.
 - The org raffle detail page now renders an `Entry Requirements` card for
   wallet, account-age, server-age, reaction, Task Engine, and legacy social
   requirements instead of dumping `requirements` JSON.
@@ -197,8 +201,11 @@ has no automated test harness.
 Verification: `pnpm --filter @kos/dashboard typecheck`,
 `pnpm --filter @kos/bot typecheck`, `pnpm --filter @kos/dashboard build`, and
 `pnpm --filter @kos/bot build` pass with a placeholder `DATABASE_URL` for the
-dashboard build. Changes were pushed to GitHub `main` for Vercel deployment.
-No authenticated browser smoke test or live Discord gate check was run.
+dashboard build. The latest UI cleanup was verified with
+`pnpm --filter @kos/dashboard typecheck` and
+`pnpm --filter @kos/dashboard build`. Changes were pushed to GitHub `main` for
+Vercel deployment. No authenticated browser smoke test or live Discord gate
+check was run.
 
 ## Assumptions
 

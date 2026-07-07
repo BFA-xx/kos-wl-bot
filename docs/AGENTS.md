@@ -106,6 +106,9 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   raffles, renders attached Task Engine checks and legacy social/link raffle
   steps inline, and embeds the web entry panel. `/me/tasks?raffle=N` remains
   the focused one-raffle view.
+- Keep member task cards compact and mobile-first: banners should render as
+  natural-aspect media strips, not forced side columns or fixed crops; social
+  tasks should use the one-CTA flow `Open task` -> `Verify` -> `Verified`.
 - Legacy social/link raffle steps are click-and-attest gates, not paid X API
   checks. They persist `SOCIAL_TASK_CLICK` / `SOCIAL_TASK_VERIFY` guild `Log`
   rows with a stable metadata `taskKey`; both web entry and bot entry check for
