@@ -357,7 +357,7 @@ Deployment verification:
   `/api/me/points` → `401`, `/api/kos/points` → `401`,
   `/me/points` → `307 /login?next=%2Fme%2Fpoints`.
 
-### Profile layout and footer follow-up — complete locally
+### Profile layout and footer follow-up — committed/pushed/deployed
 
 - Removed decorative bottom footers from the member shell and org dashboard
   shell so `Powered by KOS` no longer appears as a stuck bottom bar while
@@ -373,6 +373,10 @@ Verification:
 
 - `corepack pnpm --filter @kos/dashboard typecheck`
 - `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
+- Code committed as `eea9273` (`Fix profile layout footer spacing`) and
+  pushed to `origin/main`.
+- Vercel production build changed from `7_xpqp9WPfMPaNH-RVtNU` to
+  `M9DVZBMCojLuMapfxppx1`, confirming the web deployment rolled over.
 
 Operational note: invoking the Codex-bundled `pnpm` currently resolves to
 pnpm 11, while this repository is pinned to `pnpm@9.12.0`. Use
