@@ -3,7 +3,7 @@
 Last updated: 2026-07-07
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited commit: `b4485ea`
+Audited application commit: `6a6a5d2`
 
 ## Current state
 
@@ -24,7 +24,7 @@ Phase 3 is implemented through S2.5:
   configurable Discord points channels, web reward store/management, and
   Discord commands for points, tasks, and rewards.
 
-The approved development workstream is **S2.5 hardening**. Two hardening slices
+The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
 
 - raffle verification task gates can now be edited, relation replacement is
@@ -146,16 +146,19 @@ precision points:
 
 ## Recommended next task
 
-Continue the focused S2.5 hardening pass before S3:
+The next workstream should harden the shipped S3/S4 points, rewards, and
+weighted-draw foundations:
 
-1. persist and expose reroll proof data;
-2. correct upload authorization;
-3. add focused tests for tenant isolation, eligibility parity, and draw/reroll
-   reproducibility;
-4. then refresh the public setup/deployment documentation and `.env.example`.
-
-After that, S3 can add `PointsLedger`, campaigns, rewards, redemptions, and the
-participant hub without building on ambiguous S2 behavior.
+1. run an authenticated end-to-end smoke test with a real Discord user:
+   configure points channel, verify a task from web and Discord, earn points,
+   redeem a limited-stock reward, then fulfill/refund it;
+2. add focused automated tests for points idempotency, reward stock concurrency,
+   ledger refunds, role-weight snapshots, and weighted draws/rerolls;
+3. decide whether rewards need automated delivery actions (role grants,
+   allowlist exports, wallet claims) or remain manual fulfillment;
+4. persist and expose reroll proof data, correct upload authorization, and
+   refresh setup/deployment documentation before adding the full campaigns
+   layer.
 
 ## Changes in this takeover task
 
@@ -443,15 +446,19 @@ Verification:
 - `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
 - `git diff --check`
 - Code committed as `b4485ea` (`Launch points rewards and Discord parity`) and
-  pushed to `origin/main`.
+  pushed to `origin/main`; the follow-up atomic stock-claim fix was committed
+  as `6a6a5d2` (`Make reward stock claims atomic`) and pushed to `origin/main`.
 - Production Neon migration `20260707230000_rewards_points_channel` applied
   successfully via `corepack pnpm --filter @kos/db migrate:deploy`.
-- EC2 bot deployed via `./scripts/deploy-ec2.sh`; Discord slash command count
-  increased to 7, PM2 reported `kos-bot` online, and the local internal health
-  endpoint returned `{"ok":true,"ready":true}`.
-- Vercel production build `Jr_Wxg-Qzj-R2pRNvvNWc` serves the rewards routes:
-  `/api/me/rewards` returns `401` and `/me/rewards` redirects to
-  `/login?next=%2Fme%2Frewards`.
+- A fresh production migration check after `6a6a5d2` reported 18 migrations
+  and "No pending migrations to apply."
+- EC2 bot deployed again via `./scripts/deploy-ec2.sh` after `6a6a5d2`;
+  Discord slash command count remained 7, PM2 reported `kos-bot` online, and
+  the local internal health endpoint returned `{"ok":true,"ready":true}`.
+- Vercel production serves the rewards routes: `/api/me/rewards` returns `401`
+  and `/me/rewards` redirects to `/login?next=%2Fme%2Frewards`. The Vercel
+  project is assumed to auto-deploy `main`; this shell has no Vercel CLI/API
+  credential to inspect the deployment record directly.
 
 ## Assumptions
 
@@ -463,9 +470,15 @@ Verification:
 - Legacy social/link task verification is intentionally click-and-attest, not
   paid X API verification.
 - Vercel is configured to auto-deploy pushes to `main`; the route-canary checks
-  confirm the new points routes are present in production, but no Vercel CLI or
-  authenticated GitHub status tooling was available in this local environment
-  to inspect the deployment record directly.
+  confirm the new points/rewards routes are present in production, but no
+  Vercel CLI/API credential is available in this local environment to inspect
+  the deployment record directly.
+- "Points channel" means a Discord channel per connected guild where KOS posts
+  points/rewards activity and where managers can host `/points panel`.
+- Reward fulfillment is manual for now; points spend/refund and stock changes
+  are handled automatically.
+- X OAuth linking remains web-first; Discord `/tasks verify` can attest X tasks
+  after the member has linked X on the web.
 - For the UI refresh, preserving existing behavior took priority over replacing
   every manager form/table in one pass. Some lower-traffic setup/admin/support
   surfaces still need deeper product-design passes.
