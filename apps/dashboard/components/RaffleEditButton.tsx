@@ -31,6 +31,8 @@ export interface EditableRaffle {
   announceChannelId: string | null;
   proofChannelId: string | null;
   tasks: { label: string; url?: string }[];
+  verificationTasks: { id: string; title: string; type: string }[];
+  verificationTaskIds: string[];
   roles: { roleId: string; roleName: string }[];
 }
 
@@ -76,6 +78,9 @@ function EditModal({ raffle, onClose }: { raffle: EditableRaffle; onClose: () =>
   const [tasks, setTasks] = useState<{ label: string; url: string }[]>(
     raffle.tasks.map((t) => ({ label: t.label, url: t.url ?? "" })),
   );
+  const [verificationTaskIds, setVerificationTaskIds] = useState<string[]>(
+    raffle.verificationTaskIds,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -118,6 +123,7 @@ function EditModal({ raffle, onClose }: { raffle: EditableRaffle; onClose: () =>
         proofChannelId,
         roles: roleIds.map((id) => ({ roleId: id, roleName: meta?.roles.find((r) => r.id === id)?.name ?? id })),
         tasks: tasks.filter((t) => t.label.trim()),
+        verificationTaskIds,
       }),
     });
     const body = await res.json().catch(() => ({}));
@@ -192,6 +198,29 @@ function EditModal({ raffle, onClose }: { raffle: EditableRaffle; onClose: () =>
                   <option value="ANY">Any of the roles</option>
                   <option value="ALL">Must hold all roles</option>
                 </select>
+              </F>
+            ) : null}
+
+            {raffle.verificationTasks.length > 0 ? (
+              <F label="Verified tasks (gate entry)">
+                <div className="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-kos-border bg-kos-panel/50 p-2">
+                  {raffle.verificationTasks.map((t) => (
+                    <label key={t.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={verificationTaskIds.includes(t.id)}
+                        onChange={() =>
+                          toggle(verificationTaskIds, t.id, setVerificationTaskIds)
+                        }
+                      />
+                      <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                      <span className="text-[10px] text-kos-muted">{t.type}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-1 text-[11px] text-kos-muted/70">
+                  Members must verify every selected task before entering.
+                </p>
               </F>
             ) : null}
 

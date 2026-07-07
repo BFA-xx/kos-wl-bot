@@ -22,6 +22,14 @@ export async function GET(
       where: { id, guildId: { in: guildIds } },
       include: {
         eligibleRoles: true,
+        RaffleTask: {
+          orderBy: { id: "asc" },
+          select: {
+            taskId: true,
+            required: true,
+            task: { select: { title: true, type: true, active: true } },
+          },
+        },
         winners: { where: { replaced: false }, orderBy: { position: "asc" } },
         proof: true,
         _count: { select: { participants: true } },
@@ -49,7 +57,13 @@ export async function PATCH(
     const id = Number(params.id);
     const existing = await prisma.raffle.findFirst({
       where: { id, guildId: { in: guildIds } },
-      select: { id: true, status: true, messageId: true, startAt: true },
+      select: {
+        id: true,
+        status: true,
+        messageId: true,
+        startAt: true,
+        requirements: true,
+      },
     });
     if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
     if (existing.status === "ENDED" || existing.status === "CANCELLED") {
@@ -87,7 +101,14 @@ export async function PATCH(
           label: String(t.label).trim().slice(0, 80),
           ...(t.url && /^https?:\/\//i.test(t.url) ? { url: String(t.url) } : {}),
         }));
-      data.requirements = tasks.length ? { tasks } : Prisma.JsonNull;
+      const requirements = {
+        ...((existing.requirements ?? {}) as Record<string, unknown>),
+      };
+      if (tasks.length) requirements.tasks = tasks;
+      else delete requirements.tasks;
+      data.requirements = Object.keys(requirements).length
+        ? (requirements as Prisma.InputJsonValue)
+        : Prisma.JsonNull;
     }
 
     if (b.startAt && existing.status === "UPCOMING") {
@@ -102,39 +123,60 @@ export async function PATCH(
       data.endAt = e;
     }
 
-    // Replace eligible roles if provided.
-    if (Array.isArray(b.roles)) {
-      const roles = b.roles
-        .filter((r: { roleId?: string }) => /^\d{5,25}$/.test(String(r?.roleId)))
-        .map((r: { roleId: string; roleName?: string }) => ({
+    // Prepare relation replacements. They are applied in the same transaction
+    // as the raffle update so a failed edit cannot leave partial gate changes.
+    const roles: { roleId: string; roleName: string }[] | null = Array.isArray(b.roles)
+      ? (b.roles as { roleId?: unknown; roleName?: unknown }[])
+        .filter((r) => /^\d{5,25}$/.test(String(r?.roleId)))
+        .map((r) => ({
           roleId: String(r.roleId),
           roleName: String(r.roleName ?? r.roleId),
-        }));
-      await prisma.raffleRole.deleteMany({ where: { raffleId: id } });
-      data.eligibleRoles = { create: roles };
-    }
+        }))
+      : null;
 
-    // Replace verification-task gate if provided.
-    if (Array.isArray(b.verificationTaskIds)) {
-      const ids = b.verificationTaskIds.filter((x: unknown) => typeof x === "string").slice(0, 20);
-      const valid = ids.length
-        ? await prisma.taskDefinition.findMany({
-            where: { id: { in: ids }, organizationId: org.id, active: true },
-            select: { id: true },
-          })
-        : [];
-      await prisma.raffleTask.deleteMany({ where: { raffleId: id } });
-      if (valid.length) {
-        await prisma.raffleTask.createMany({
-          data: valid.map((t) => ({ raffleId: id, taskId: t.id, required: true })),
-        });
-      }
-    }
+    const verificationTaskIds: string[] | null = Array.isArray(b.verificationTaskIds)
+      ? [...new Set<string>(
+          (b.verificationTaskIds as unknown[]).filter(
+            (x: unknown): x is string => typeof x === "string",
+          ),
+        )].slice(0, 20)
+      : null;
 
     // If already posted, ask the bot to re-render the embed.
     if (existing.messageId) data.editRequestedAt = new Date();
 
-    await prisma.raffle.update({ where: { id }, data });
+    await prisma.$transaction(async (tx) => {
+      await tx.raffle.update({ where: { id }, data });
+
+      if (roles) {
+        const uniqueRoles = [...new Map(roles.map((r) => [r.roleId, r])).values()];
+        await tx.raffleRole.deleteMany({ where: { raffleId: id } });
+        if (uniqueRoles.length) {
+          await tx.raffleRole.createMany({
+            data: uniqueRoles.map((r) => ({ raffleId: id, ...r })),
+          });
+        }
+      }
+
+      if (verificationTaskIds) {
+        const valid = verificationTaskIds.length
+          ? await tx.taskDefinition.findMany({
+              where: {
+                id: { in: verificationTaskIds },
+                organizationId: org.id,
+                active: true,
+              },
+              select: { id: true },
+            })
+          : [];
+        await tx.raffleTask.deleteMany({ where: { raffleId: id } });
+        if (valid.length) {
+          await tx.raffleTask.createMany({
+            data: valid.map((t) => ({ raffleId: id, taskId: t.id, required: true })),
+          });
+        }
+      }
+    });
     await logAudit(org.id, user.id, "RAFFLE_EDIT", { targetType: "raffle", targetId: String(id) });
     return NextResponse.json({ ok: true, willRefresh: Boolean(existing.messageId) });
   } catch (err) {

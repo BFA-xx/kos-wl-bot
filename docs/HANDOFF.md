@@ -1,6 +1,6 @@
 # Engineering Handoff
 
-Last updated: 2026-07-06
+Last updated: 2026-07-07
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
 Audited commit: `2542f6c`
@@ -17,9 +17,15 @@ Phase 3 is implemented through S2.5:
   login routing.
 - Follow-up: database-backed bot heartbeat and Billing hidden from org nav.
 
-The next approved development workstream is **S2.5 hardening**. No hardening
-application changes have started yet; the current worktree contains only the
-takeover documentation listed below.
+The approved development workstream is **S2.5 hardening**. Two local hardening
+slices are complete but not committed or deployed:
+
+- raffle verification task gates can now be edited, relation replacement is
+  atomic, and editing legacy social tasks preserves the other anti-alt
+  requirements;
+- the member Tasks area now acts as an active-raffle workspace, and the org
+  raffle detail page renders entry requirements as clean cards instead of raw
+  requirements JSON.
 
 Claude reported the production database migrated, the bot online in two
 guilds, and the Vercel dashboard deployed. This audit verified the repository
@@ -34,6 +40,10 @@ Neon.
 - `@kos/db`, `@kos/bot`, and `@kos/dashboard` build successfully when invoked
   individually.
 - Next.js production build compiles all pages and API routes successfully.
+- The first S2.5 hardening slice passes the dashboard TypeScript check and a
+  fresh Next.js production build.
+- The profile Tasks hub and org raffle detail UI hardening also pass dashboard
+  TypeScript and a fresh Next.js production build.
 - No automated test files exist.
 
 ## Handoff reconciliation
@@ -43,15 +53,17 @@ precision points:
 
 1. Community pages under `/c/:slug` do not require organization membership,
    but middleware still requires a signed session. They are not anonymous.
-2. The new-raffle modal can select verification tasks. The edit API supports
-   replacement via `verificationTaskIds`, but the edit page/modal neither loads
-   nor sends those IDs, so hosts cannot edit task gates through the UI.
+2. The new-raffle and edit modals can both select verification tasks. The
+   raffle detail API now returns attached task-gate metadata.
 3. X and visit-link tasks are attestations. They prove linked identity/click
    intent, not the underlying follow/like/repost/comment/visit action.
 4. Rerolls are deterministic for their generated seed, but that seed is not
    persisted and the refreshed proof still exposes the original raffle draw
    commitment. Reroll reproducibility is therefore incomplete.
 5. Billing is hidden from navigation only; `/:org/billing` remains reachable.
+6. `/me/tasks` is no longer only a deep-link target. It now lists live raffles
+   from public KOS communities, shows attached verification tasks inline, and
+   embeds the same web entry panel used by public raffle pages.
 
 ## Known technical debt and risks
 
@@ -70,11 +82,6 @@ precision points:
 
 ### Correctness / product gaps
 
-- Raffle edit replaces roles and raffle-task links in separate operations
-  before the final raffle update, not one transaction; a later failure can
-  leave partial changes.
-- Verification task selections are absent from the raffle detail payload and
-  edit modal.
 - `minMessages` is only a non-blocking bot flag and is ignored on web.
 - Discord reaction lookup fetches at most 100 reaction users, so valid reactors
   beyond that page can be rejected.
@@ -101,15 +108,13 @@ precision points:
 
 ## Recommended next task
 
-Before S3, do a focused S2.5 hardening pass:
+Continue the focused S2.5 hardening pass before S3:
 
-1. add raffle task-gate editing to the detail/edit UI;
-2. make role/task replacement transactional;
-3. persist and expose reroll proof data;
-4. correct upload authorization;
-5. add focused tests for tenant isolation, eligibility parity, and draw/reroll
+1. persist and expose reroll proof data;
+2. correct upload authorization;
+3. add focused tests for tenant isolation, eligibility parity, and draw/reroll
    reproducibility;
-6. then refresh the public setup/deployment documentation and `.env.example`.
+4. then refresh the public setup/deployment documentation and `.env.example`.
 
 After that, S3 can add `PointsLedger`, campaigns, rewards, redemptions, and the
 participant hub without building on ambiguous S2 behavior.
@@ -127,14 +132,61 @@ Documentation only:
 - `docs/PROJECT_RULES.md` — created.
 
 No application logic, schema, migration, environment variable, secret,
-deployment, or production state was changed. These documentation changes are
-being committed as the final pre-hardening checkpoint.
+deployment, or production state was changed in that initial takeover
+checkpoint. The documentation was committed as `e0acedf` before hardening
+began.
+
+## S2.5 hardening progress
+
+### Raffle task-gate editing and atomic updates — complete locally
+
+- Raffle detail data now includes current active `RaffleTask` links and the
+  organization's available active task definitions.
+- The edit modal renders the verified-task checklist and sends
+  `verificationTaskIds` with saves.
+- The raffle detail API includes attached task metadata.
+- Raffle scalar changes, eligible-role replacement, and task-gate replacement
+  now run in one Prisma transaction.
+- Duplicate role/task IDs are normalized before insertion.
+- Updating legacy social tasks merges them into the existing requirements JSON
+  instead of erasing account-age, server-age, reaction, or extra-role gates.
+
+Verification: dashboard typecheck and production build pass. No database,
+Discord, or browser integration smoke test was run, and the repository still
+has no automated test harness.
+
+### Profile task hub and org raffle detail cleanup — complete locally
+
+- `/api/me/tasks` now supports two modes:
+  - no `raffle` query param: returns up to 50 live raffles from non-suspended
+    public KOS communities, plus the signed-in user's attached task completion
+    states;
+  - `?raffle=N`: preserves the existing one-raffle task detail response.
+- `/me/tasks` now shows active raffle cards with inline verification tasks,
+  X-link prompting, task verification buttons, a focus view link, and the
+  existing `EntryPanel` so members can complete tasks and enter from the Tasks
+  tab.
+- `/me/tasks?raffle=N` now keeps the focused task list but also embeds the web
+  entry panel and no longer tells users to enter in Discord after completing
+  tasks.
+- The org raffle detail page now renders an `Entry Requirements` card for
+  wallet, account-age, server-age, reaction, Task Engine, and legacy social
+  requirements instead of dumping `requirements` JSON.
+- The org raffle detail winners empty state is now a designed "Winners pending"
+  card instead of plain text.
+
+Verification: `pnpm --filter @kos/dashboard typecheck` and
+`pnpm --filter @kos/dashboard build` pass with a placeholder `DATABASE_URL`.
+No authenticated browser smoke test, live Discord gate check, or production
+deploy was run.
 
 ## Assumptions
 
 - `/Users/adebayodaniel/KOS RAF` is the intended repository because it is the
   only local Git repository matching the handoff and its HEAD exactly matches
   Claude's final commit.
+- "Active raffles" for the profile Tasks hub means `Raffle.status = LIVE`
+  within non-suspended organizations that have connected guilds.
 - Claude's production-status statements are historical context until verified
   directly against production.
 - The attached “KOS Phase 3” specification is the intended roadmap, while the

@@ -7,16 +7,130 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Tasks for the signed-in participant, scoped to one raffle (?raffle=N).
+ * Tasks for the signed-in participant.
+ *
+ * - Without a query param, this returns the profile Tasks hub: every live
+ *   raffle from public KOS communities plus the caller's task completion state.
+ * - With ?raffle=N, it returns the task list for one raffle.
+ *
  * Participants aren't org members, so this is user-auth only — it exposes just
- * the task list of that raffle plus the caller's own completion status.
+ * public raffle/task metadata plus the caller's own completion status.
  */
 export async function GET(req: NextRequest) {
   try {
     const user = await requireUser();
-    const raffleId = Number(req.nextUrl.searchParams.get("raffle"));
+    const raffleParam = req.nextUrl.searchParams.get("raffle");
+
+    if (!raffleParam) {
+      const orgs = await prisma.organization.findMany({
+        where: { suspendedAt: null },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          logoUrl: true,
+          guildConnections: { select: { guildId: true } },
+        },
+      });
+
+      const orgByGuild = new Map<
+        string,
+        { id: string; slug: string; name: string; logoUrl: string | null }
+      >();
+      for (const org of orgs) {
+        for (const g of org.guildConnections) {
+          orgByGuild.set(g.guildId, {
+            id: org.id,
+            slug: org.slug,
+            name: org.name,
+            logoUrl: org.logoUrl,
+          });
+        }
+      }
+
+      const guildIds = [...orgByGuild.keys()];
+      const raffles = guildIds.length
+        ? await prisma.raffle.findMany({
+            where: { guildId: { in: guildIds }, status: "LIVE" },
+            orderBy: { endAt: "asc" },
+            take: 50,
+            select: {
+              id: true,
+              guildId: true,
+              projectName: true,
+              title: true,
+              description: true,
+              status: true,
+              endAt: true,
+              spots: true,
+              entryCount: true,
+              hideEntries: true,
+              bannerUrl: true,
+              participants: {
+                where: { userId: user.id },
+                select: { enteredAt: true },
+                take: 1,
+              },
+              RaffleTask: {
+                where: { task: { active: true } },
+                include: { task: true },
+                orderBy: { id: "asc" },
+              },
+            },
+          })
+        : [];
+
+      const taskIds = raffles.flatMap((r) => r.RaffleTask.map((rt) => rt.taskId));
+      const completions = taskIds.length
+        ? await prisma.taskCompletion.findMany({
+            where: { userId: user.id, taskId: { in: taskIds } },
+            select: { taskId: true, status: true },
+          })
+        : [];
+      const byTask = new Map(completions.map((c) => [c.taskId, c.status]));
+
+      const xLinked = Boolean(
+        await prisma.connectedAccount.findUnique({
+          where: { userId_provider: { userId: user.id, provider: "X" } },
+          select: { id: true },
+        }),
+      );
+
+      return NextResponse.json({
+        xLinked,
+        raffles: raffles.map((raffle) => ({
+          id: raffle.id,
+          org: orgByGuild.get(raffle.guildId) ?? null,
+          projectName: raffle.projectName,
+          title: raffle.title,
+          description: raffle.description,
+          status: raffle.status,
+          endAt: raffle.endAt,
+          spots: raffle.spots,
+          entryCount: raffle.hideEntries ? null : raffle.entryCount,
+          bannerUrl: raffle.bannerUrl,
+          entered: raffle.participants.length > 0,
+          enteredAt: raffle.participants[0]?.enteredAt ?? null,
+          tasks: raffle.RaffleTask.map((rt) => ({
+            id: rt.task.id,
+            type: rt.task.type,
+            typeLabel: TASK_TYPE_LABELS[rt.task.type],
+            title: rt.task.title,
+            description: rt.task.description,
+            required: rt.required,
+            points: rt.task.points,
+            active: rt.task.active,
+            actionUrl: taskActionUrl(rt.task.type, (rt.task.config ?? {}) as TaskConfig),
+            status: byTask.get(rt.taskId) ?? "NOT_STARTED",
+          })),
+        })),
+      });
+    }
+
+    const raffleId = Number(raffleParam);
     if (!Number.isFinite(raffleId)) {
-      return NextResponse.json({ error: "raffle query param required" }, { status: 400 });
+      return NextResponse.json({ error: "raffle query param must be a number" }, { status: 400 });
     }
 
     const raffle = await prisma.raffle.findUnique({
