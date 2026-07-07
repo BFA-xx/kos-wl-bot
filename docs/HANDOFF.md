@@ -3,7 +3,7 @@
 Last updated: 2026-07-07
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited commit: `449e28d`
+Audited commit: `e0bd4c8`
 
 ## Current state
 
@@ -16,12 +16,10 @@ Phase 3 is implemented through S2.5:
   community directory/pages, winner/result/announcement notifications, member
   login routing.
 - Follow-up: database-backed bot heartbeat and Billing hidden from org nav.
-- Product UI refresh slice 1 is committed and pushed. Product UI refresh slice
-  2 is complete locally and verified.
-- S3/S4 first slice is complete locally and the production database migration
-  has been applied: task points ledger, org/member points pages, role-weight
-  manager, weighted raffle toggles, entry weight snapshots, and deterministic
-  weighted draws.
+- Product UI refresh slices 1 and 2 are committed, pushed, and deployed.
+- S3/S4 first slice is committed, pushed, migrated, and deployed: task points
+  ledger, org/member points pages, role-weight manager, weighted raffle
+  toggles, entry weight snapshots, and deterministic weighted draws.
 
 The approved development workstream is **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -35,10 +33,10 @@ have been committed and pushed to `main`:
   (Follow/Like/Retweet/etc.) in the member Tasks cards. Those legacy tasks now
   require Open → Verify before web or Discord entry is allowed.
 
-Claude reported the production database migrated, the bot online in two
-guilds, and the Vercel dashboard deployed. This audit verified the repository
-and local builds only; it did not query production, Vercel, EC2, Discord, or
-Neon.
+Claude reported the earlier S2.5 production database migration, bot online in
+two guilds, and Vercel dashboard deployment. This takeover has now directly
+verified the points/weighted migration, EC2 bot deployment, and Vercel route
+availability described below.
 
 ## Verified locally
 
@@ -67,6 +65,16 @@ Neon.
   `@kos/dashboard` production build.
 - Production migration `20260707170000_points_role_weights` has been applied
   to Neon via `pnpm --filter @kos/db migrate:deploy`.
+- Commit `e0bd4c8` has been pushed to `origin/main`.
+- EC2 bot deploy was run with `./scripts/deploy-ec2.sh`; it synced code,
+  rebuilt `@kos/db` and `@kos/bot`, re-registered Discord slash commands,
+  restarted PM2 process `kos-bot`, and returned
+  `{"ok":true,"ready":true}` from `http://127.0.0.1:4000/internal/health`.
+- Vercel production domain `https://kos-wl-bot-dashboard-3a8x.vercel.app`
+  responds. `/me` redirects unauthenticated users to `/login?next=%2Fme`,
+  `/me/points` redirects to `/login?next=%2Fme%2Fpoints`, and the new
+  `/api/me/points` and `/api/kos/points` endpoints return `401` instead of
+  `404`, confirming the points routes are live on the web deployment.
 - No automated test files exist.
 
 ## Handoff reconciliation
@@ -245,7 +253,7 @@ Verification: `pnpm --filter @kos/dashboard typecheck` and
 `pnpm --filter @kos/dashboard build` pass with a placeholder `DATABASE_URL`.
 No authenticated visual/browser QA was run.
 
-### Product UI refresh slice 2 — complete locally
+### Product UI refresh slice 2 — committed/pushed/deployed
 
 - Shared design system was expanded with premium SaaS surfaces:
   - stronger Inter/Geist/SF-style font stack;
@@ -286,7 +294,7 @@ Verification:
 
 No authenticated browser visual QA was run.
 
-### Points and weighted role raffles — complete locally, migration applied
+### Points and weighted role raffles — committed/pushed/deployed, migration applied
 
 - Migration `20260707170000_points_role_weights` adds:
   - `Raffle.useRoleWeights`;
@@ -334,6 +342,19 @@ non-standard `NODE_ENV` and can cause Next/React prerender failures. Use the
 dashboard's normal Vercel environment or set only the needed variables for
 local build verification.
 
+Deployment verification:
+
+- Code committed as `e0bd4c8` (`Ship points, weighted raffles, and UI refresh`)
+  and pushed to `origin/main`.
+- Production Neon migration `20260707170000_points_role_weights` applied.
+- EC2 bot deployed via `./scripts/deploy-ec2.sh`; PM2 reported `kos-bot`
+  online and the local internal health endpoint returned
+  `{"ok":true,"ready":true}`.
+- Vercel production route canaries for the new points slice returned expected
+  auth responses rather than not-found responses:
+  `/api/me/points` → `401`, `/api/kos/points` → `401`,
+  `/me/points` → `307 /login?next=%2Fme%2Fpoints`.
+
 ## Assumptions
 
 - `/Users/adebayodaniel/KOS RAF` is the intended repository because it is the
@@ -343,10 +364,12 @@ local build verification.
   within non-suspended organizations that have connected guilds.
 - Legacy social/link task verification is intentionally click-and-attest, not
   paid X API verification.
+- Vercel is configured to auto-deploy pushes to `main`; the route-canary checks
+  confirm the new points routes are present in production, but no Vercel CLI or
+  authenticated GitHub status tooling was available in this local environment
+  to inspect the deployment record directly.
 - For the UI refresh, preserving existing behavior took priority over replacing
   every manager form/table in one pass. Some lower-traffic setup/admin/support
   surfaces still need deeper product-design passes.
-- Claude's production-status statements are historical context until verified
-  directly against production.
 - The attached “KOS Phase 3” specification is the intended roadmap, while the
   code and migrations define what is actually shipped.
