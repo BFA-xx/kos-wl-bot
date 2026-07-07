@@ -3,7 +3,7 @@
 Last updated: 2026-07-07
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited commit: `e0bd4c8`
+Audited commit: `b4485ea`
 
 ## Current state
 
@@ -20,9 +20,9 @@ Phase 3 is implemented through S2.5:
 - S3/S4 first slice is committed, pushed, migrated, and deployed: task points
   ledger, org/member points pages, role-weight manager, weighted raffle
   toggles, entry weight snapshots, and deterministic weighted draws.
-- S3 rewards/points-channel slice is complete locally: configurable Discord
-  points channels, web reward store/management, and Discord commands for
-  points, tasks, and rewards.
+- S3 rewards/points-channel slice is committed, pushed, migrated, and deployed:
+  configurable Discord points channels, web reward store/management, and
+  Discord commands for points, tasks, and rewards.
 
 The approved development workstream is **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -404,7 +404,7 @@ Verification:
   contains both `--font-kos-sans` and `@font-face`, confirming the self-hosted
   Inter font is active in production.
 
-### Points channel, rewards, and Discord parity slice — complete locally
+### Points channel, rewards, and Discord parity slice — committed/pushed/deployed
 
 - Migration `20260707230000_rewards_points_channel` adds:
   - `Guild.defaultPointsChannelId`;
@@ -440,6 +440,16 @@ Verification:
 - `corepack pnpm --filter @kos/bot build`
 - `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
 - `git diff --check`
+- Code committed as `b4485ea` (`Launch points rewards and Discord parity`) and
+  pushed to `origin/main`.
+- Production Neon migration `20260707230000_rewards_points_channel` applied
+  successfully via `corepack pnpm --filter @kos/db migrate:deploy`.
+- EC2 bot deployed via `./scripts/deploy-ec2.sh`; Discord slash command count
+  increased to 7, PM2 reported `kos-bot` online, and the local internal health
+  endpoint returned `{"ok":true,"ready":true}`.
+- Vercel production build `Jr_Wxg-Qzj-R2pRNvvNWc` serves the rewards routes:
+  `/api/me/rewards` returns `401` and `/me/rewards` redirects to
+  `/login?next=%2Fme%2Frewards`.
 
 ## Assumptions
 
