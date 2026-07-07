@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Light theme (default) */
+/* Light theme (fallback) */
 :root {
   --kos-bg: 250 250 250; /* page background */
   --kos-panel: 255 255 255; /* inputs / soft surfaces */
@@ -12,18 +12,22 @@
   --kos-fg: 12 12 12; /* primary text */
   --kos-muted: 113 113 122; /* secondary text */
   --kos-silver: 82 82 91;
+  --kos-blue: 59 130 246;
+  --kos-purple: 139 92 246;
 }
 
-/* Dark theme (KOS) */
+/* Dark theme (KOS premium) */
 .dark {
-  --kos-bg: 0 0 0;
-  --kos-panel: 20 20 20;
-  --kos-card: 18 18 18;
+  --kos-bg: 10 10 10;
+  --kos-panel: 17 17 17;
+  --kos-card: 24 24 24;
   --kos-line: 38 38 38;
-  --kos-border: 42 42 42;
+  --kos-border: 43 43 43;
   --kos-fg: 255 255 255;
-  --kos-muted: 138 138 138;
-  --kos-silver: 192 192 192;
+  --kos-muted: 161 161 170;
+  --kos-silver: 212 212 216;
+  --kos-blue: 59 130 246;
+  --kos-purple: 139 92 246;
 }
 
 html {
@@ -38,14 +42,20 @@ body {
   background-color: rgb(var(--kos-bg));
   color: rgb(var(--kos-fg));
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Subtle depth — only in dark mode for the premium KOS glow. */
 .dark body {
   background-image:
-    radial-gradient(1200px 600px at 70% -10%, rgba(255, 255, 255, 0.05), transparent 60%),
-    radial-gradient(900px 500px at 0% 0%, rgba(255, 255, 255, 0.03), transparent 55%);
+    radial-gradient(900px 500px at 18% -10%, rgba(59, 130, 246, 0.16), transparent 60%),
+    radial-gradient(800px 520px at 90% 0%, rgba(139, 92, 246, 0.12), transparent 58%),
+    linear-gradient(180deg, rgba(255,255,255,0.025), transparent 22rem);
   background-attachment: fixed;
+}
+
+::selection {
+  background: rgb(var(--kos-blue) / 0.35);
+  color: white;
 }
 
 ::-webkit-scrollbar {
@@ -62,38 +72,44 @@ body {
 
 @layer components {
   .kos-card {
-    @apply rounded-2xl border border-kos-border bg-kos-card shadow-sm;
+    @apply rounded-2xl border border-white/[0.08] bg-kos-card/90 shadow-sm backdrop-blur-xl;
   }
   .dark .kos-card {
-    @apply shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_10px_30px_-15px_rgba(0,0,0,0.7)];
+    @apply shadow-[0_1px_0_0_rgba(255,255,255,0.05)_inset,0_20px_70px_-45px_rgba(0,0,0,0.9)];
   }
   .kos-card-hover {
-    @apply transition-all duration-200 hover:border-kos-fg/25 hover:shadow-md;
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.16] hover:bg-kos-card hover:shadow-[0_18px_60px_-35px_rgba(59,130,246,0.35)];
   }
   .kos-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-kos-border bg-kos-panel px-4 py-2 text-sm font-medium text-kos-fg transition-all hover:border-kos-fg/30 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/[0.10] bg-white/[0.04] px-4 py-2 text-sm font-medium text-kos-fg shadow-[0_1px_0_0_rgba(255,255,255,0.05)_inset] transition-all hover:border-white/[0.18] hover:bg-white/[0.07] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
   }
   .kos-btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-kos-fg px-4 py-2 text-sm font-semibold text-kos-bg transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-blue-400/30 bg-gradient-to-b from-blue-500 to-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_14px_40px_-20px_rgba(59,130,246,0.85),0_1px_0_rgba(255,255,255,0.2)_inset] transition-all hover:from-blue-400 hover:to-blue-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
   }
   .kos-input {
-    @apply w-full rounded-xl border border-kos-border bg-kos-panel px-3.5 py-2 text-sm text-kos-fg placeholder:text-kos-muted/70 transition-colors focus:border-kos-fg/30 focus:outline-none;
+    @apply w-full rounded-xl border border-white/[0.09] bg-black/20 px-3.5 py-2 text-sm text-kos-fg placeholder:text-kos-muted/65 shadow-[0_1px_0_0_rgba(255,255,255,0.03)_inset] transition-all focus:border-blue-400/60 focus:bg-black/30 focus:outline-none focus:ring-4 focus:ring-blue-500/10;
   }
   .kos-badge {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-kos-border px-2.5 py-0.5 text-xs font-medium;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/[0.10] bg-white/[0.03] px-2.5 py-0.5 text-xs font-medium;
   }
   .kos-seg {
-    @apply rounded-full px-3.5 py-1.5 text-sm font-medium text-kos-muted transition-colors hover:text-kos-fg;
+    @apply rounded-full px-3.5 py-1.5 text-sm font-medium text-kos-muted transition-all hover:bg-white/[0.04] hover:text-kos-fg;
   }
   .kos-seg-active {
-    @apply bg-kos-fg text-kos-bg hover:text-kos-bg;
+    @apply bg-white text-kos-bg shadow-sm hover:text-kos-bg;
+  }
+  .kos-panel {
+    @apply rounded-2xl border border-white/[0.08] bg-white/[0.035] backdrop-blur-xl;
+  }
+  .kos-focus {
+    @apply focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-500/25;
   }
 }
 
 @keyframes kos-fade-up {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .kos-fade {
-  animation: kos-fade-up 0.35s ease both;
+  animation: kos-fade-up 0.28s ease both;
 }

@@ -27,12 +27,31 @@ export default function LoginPage() {
   }`;
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-5">
-      {/* ambient glow */}
-      <div className="pointer-events-none absolute -top-40 right-0 h-[36rem] w-[36rem] rounded-full bg-kos-fg/[0.04] blur-3xl" />
-      <div className="relative w-full max-w-sm rounded-2xl border border-kos-border bg-kos-panel/60 p-8 backdrop-blur-xl">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-5 py-12">
+      <div className="pointer-events-none absolute -top-40 right-0 h-[36rem] w-[36rem] rounded-full bg-blue-500/15 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-0 h-[30rem] w-[30rem] rounded-full bg-violet-500/10 blur-3xl" />
+      <div className="relative grid w-full max-w-5xl overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.035] shadow-2xl backdrop-blur-2xl lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="hidden border-r border-white/[0.08] p-10 lg:block">
+          <div className="inline-flex rounded-full border border-blue-400/20 bg-blue-500/10 px-3 py-1 text-xs text-blue-200">
+            Built for Web3 communities
+          </div>
+          <h1 className="mt-8 max-w-lg text-4xl font-semibold tracking-tight text-white">
+            Raffles, tasks, wallets, and community engagement in one premium control room.
+          </h1>
+          <p className="mt-4 max-w-md text-sm leading-6 text-kos-muted">
+            KOS helps founders run fair whitelist raffles, verify member actions, collect wallets, and keep every draw auditable.
+          </p>
+          <div className="mt-10 grid max-w-md gap-3">
+            {["Verifiable draws", "Discord + web parity", "Reusable task engine"].map((item) => (
+              <div key={item} className="rounded-2xl border border-white/[0.08] bg-black/20 px-4 py-3 text-sm text-kos-fg">
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="p-8 sm:p-10">
         <div className="mb-7 flex flex-col items-center text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-kos-fg text-base font-black tracking-tight text-kos-bg">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-violet-500 text-base font-black tracking-tight text-white shadow-[0_18px_60px_-25px_rgba(59,130,246,0.9)]">
             KOS
           </div>
           <h1 className="mt-4 text-lg font-semibold">Welcome to KOS</h1>
@@ -61,6 +80,7 @@ export default function LoginPage() {
           By continuing you agree to KOS's terms. New here? Signing in creates
           your account.
         </p>
+        </div>
       </div>
     </div>
   );

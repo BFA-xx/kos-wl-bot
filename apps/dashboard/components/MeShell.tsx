@@ -30,24 +30,27 @@ export function MeShell({
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-kos-border bg-kos-bg/60 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-3 sm:px-6">
+      <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#0A0A0A]/70 backdrop-blur-2xl">
+        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3 sm:px-6">
           <Link href="/me" className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-kos-fg text-xs font-black tracking-tight text-kos-bg">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 text-xs font-black tracking-tight text-white shadow-[0_14px_40px_-22px_rgba(59,130,246,0.9)]">
               KOS
             </div>
-            <span className="hidden text-sm font-semibold sm:block">My KOS</span>
+            <div className="hidden leading-tight sm:block">
+              <div className="text-sm font-semibold">My KOS</div>
+              <div className="text-[10px] uppercase tracking-[0.22em] text-kos-muted">Member Hub</div>
+            </div>
           </Link>
 
-          <nav className="flex items-center gap-1 overflow-x-auto">
+          <nav className="flex items-center gap-1 overflow-x-auto rounded-full border border-white/[0.08] bg-white/[0.035] p-1">
             {NAV.map((n) => (
               <Link
                 key={n.href}
                 href={n.href}
-                className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                className={`whitespace-nowrap rounded-full px-3 py-1.5 text-sm transition-all ${
                   active(n.href, n.exact)
-                    ? "bg-kos-fg/10 text-kos-fg"
-                    : "text-kos-muted hover:text-kos-fg"
+                    ? "bg-white text-kos-bg shadow-sm"
+                    : "text-kos-muted hover:bg-white/[0.05] hover:text-kos-fg"
                 }`}
               >
                 {n.label}
@@ -67,10 +70,10 @@ export function MeShell({
           <div className="ml-auto flex items-center gap-2">
             <NotificationsBell />
             <ThemeToggle />
-            <Link href="/" className="kos-btn hidden text-xs sm:block" title="Organization dashboards">
+            <Link href="/" className="kos-btn hidden text-xs md:inline-flex" title="Organization dashboards">
               Dashboard
             </Link>
-            <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-kos-panel text-[10px] font-bold">
+            <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-white/[0.08] bg-white/[0.04] text-[10px] font-bold">
               {user.avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
@@ -87,11 +90,11 @@ export function MeShell({
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <div className="kos-fade">{children}</div>
       </main>
 
-      <footer className="mx-auto max-w-5xl px-4 pb-8 pt-4 text-center text-xs text-kos-muted sm:px-6">
+      <footer className="mx-auto max-w-6xl px-4 pb-8 pt-4 text-center text-xs text-kos-muted sm:px-6">
         Powered by KOS
       </footer>
     </div>

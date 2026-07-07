@@ -73,7 +73,7 @@ export default function OverviewPage() {
     <>
       <PageTitle
         title="Dashboard"
-        subtitle="Live raffle activity for your organization."
+        subtitle="Your command center for raffle performance, community activity, and what needs attention."
         action={
           <>
             <Segmented options={RANGES as any} value={range} onChange={setRange} />
@@ -84,39 +84,46 @@ export default function OverviewPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard accent label="Entries" value={s?.rangeEntries ?? "—"} trend={t?.entries} hint={`last ${label.toLowerCase()}`} />
         <StatCard label="Raffles" value={s?.rangeRaffles ?? "—"} trend={t?.raffles} hint={`last ${label.toLowerCase()}`} />
         <StatCard label="Unique Players" value={s?.uniqueParticipants ?? "—"} hint="distinct entrants" />
         <StatCard label="Winners" value={s?.rangeWinners ?? "—"} trend={t?.winners} hint={`last ${label.toLowerCase()}`} />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+      <div className="mt-5 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <SectionTitle>Entry Activity</SectionTitle>
+          <SectionTitle
+            action={<span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[11px] text-kos-muted">Live refresh</span>}
+          >
+            Entry Activity
+          </SectionTitle>
           <AreaChart data={data?.series ?? []} />
         </Card>
 
         <Card>
           <SectionTitle>At a glance</SectionTitle>
           <div className="space-y-3">
-            <div className="flex items-end justify-between rounded-xl border border-kos-border bg-kos-panel p-4">
+            <div className="flex items-end justify-between rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.04] p-4">
               <div>
-                <div className="text-xs uppercase tracking-wide text-kos-muted">Live now</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-kos-muted">Live now</div>
                 <div className="mt-1 text-3xl font-semibold">{s?.liveRaffles ?? "—"}</div>
               </div>
               <span className="kos-badge border-emerald-400/30 text-emerald-500 dark:text-emerald-300/90">running</span>
             </div>
-            <div className="flex items-center justify-between rounded-xl border border-kos-border bg-kos-panel px-4 py-3">
+            <div className="flex items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.035] px-4 py-3">
               <span className="text-sm text-kos-muted">Total raffles</span>
               <span className="text-lg font-semibold">{s?.totalRaffles ?? "—"}</span>
             </div>
-            <Link href={`/${org}/raffles`} className="kos-btn w-full">View all raffles</Link>
+            <div className="grid grid-cols-2 gap-2">
+              <Link href={`/${org}/raffles`} className="kos-btn w-full">Raffles</Link>
+              <Link href={`/${org}/tasks`} className="kos-btn-primary w-full">Tasks</Link>
+            </div>
           </div>
         </Card>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-8">
         <SectionTitle>Live &amp; Upcoming</SectionTitle>
         {!data ? (
           <Empty>Loading…</Empty>

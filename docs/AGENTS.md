@@ -109,6 +109,11 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Keep member task cards compact and mobile-first: banners should render as
   natural-aspect media strips, not forced side columns or fixed crops; social
   tasks should use the one-CTA flow `Open task` -> `Verify` -> `Verified`.
+- Current UI refresh direction is dark-mode premium SaaS: `#0A0A0A` background,
+  `#111111` panels, `#181818` cards, subtle borders, blue/purple accents,
+  generous spacing, visible focus states, and collapsible command-center
+  navigation. Preserve that direction when adding points, rewards, campaigns,
+  and weighted-role controls.
 - Legacy social/link raffle steps are click-and-attest gates, not paid X API
   checks. They persist `SOCIAL_TASK_CLICK` / `SOCIAL_TASK_VERIFY` guild `Log`
   rows with a stable metadata `taskKey`; both web entry and bot entry check for

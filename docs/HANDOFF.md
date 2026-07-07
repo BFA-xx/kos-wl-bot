@@ -52,6 +52,8 @@ Neon.
   checks plus dashboard and bot production builds.
 - The member task-card visual cleanup passes dashboard TypeScript and a fresh
   Next.js production build.
+- The first product-wide UI refresh slice passes dashboard TypeScript and a
+  fresh Next.js production build.
 - No automated test files exist.
 
 ## Handoff reconciliation
@@ -206,6 +208,29 @@ dashboard build. The latest UI cleanup was verified with
 `pnpm --filter @kos/dashboard build`. Changes were pushed to GitHub `main` for
 Vercel deployment. No authenticated browser smoke test or live Discord gate
 check was run.
+
+### Product UI refresh slice 1 — committed/pushed
+
+- Dark-mode design tokens now follow the premium KOS palette more closely:
+  `#0A0A0A` background, `#111111` panels, `#181818` cards, subtle borders,
+  electric-blue primary accents, purple secondary accents, stronger focus
+  states, and more polished card/button depth.
+- Shared primitives were refreshed: stat cards, page titles, segmented tabs,
+  cards, empty states, inputs, badges, and primary buttons now establish the
+  new SaaS baseline across existing pages.
+- Org manager shell now has a collapsible desktop sidebar, premium command
+  center header, stronger current-page state, command/search bar treatment, and
+  visible disabled Points/Rewards IA placeholders.
+- Member `/me` shell now shares the new dark premium header, gradient KOS mark,
+  segmented navigation, and wider content frame.
+- The org dashboard overview was refreshed with clearer hierarchy, improved
+  stats, chart framing, live refresh affordance, and sharper quick actions.
+- Login was redesigned as a premium split hero/auth panel instead of a simple
+  centered card.
+
+Verification: `pnpm --filter @kos/dashboard typecheck` and
+`pnpm --filter @kos/dashboard build` pass with a placeholder `DATABASE_URL`.
+No authenticated visual/browser QA was run.
 
 ## Assumptions
 

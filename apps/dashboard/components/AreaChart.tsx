@@ -35,15 +35,15 @@ export function AreaChart({ data }: { data: AreaPoint[] }) {
   const lastValue = data[n - 1]?.value ?? 0;
 
   return (
-    <div className="text-kos-fg">
+    <div className="text-blue-300">
       <div className="mb-2 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold">{total}</span>
+        <span className="text-2xl font-semibold text-kos-fg">{total}</span>
         <span className="text-xs text-kos-muted">entries · {lastValue} latest</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-40 w-full">
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="currentColor" stopOpacity="0.28" />
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.32" />
             <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
           </linearGradient>
         </defs>
