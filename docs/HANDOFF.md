@@ -500,7 +500,7 @@ Verification:
 No database migration is required; the implementation reuses
 `TaskDefinition`, `TaskCompletion`, `PointsLedger`, and `Log` for click state.
 
-### Discord raffle task verification parity — complete locally
+### Discord raffle task verification parity — committed/pushed/deployed
 
 - Discord raffle entry no longer pushes members to the website when raffle
   social/link tasks are incomplete.
@@ -525,6 +525,11 @@ Verification:
 - `corepack pnpm --filter @kos/dashboard typecheck`
 - `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
 - `git diff --check`
+- Code committed as `3a51112` (`Restore Discord raffle task entry`) and pushed
+  to `origin/main`.
+- EC2 bot deployed via `./scripts/deploy-ec2.sh`; Discord slash command count
+  remained 7, PM2 reported `kos-bot` online, and the local internal health
+  endpoint returned `{"ok":true,"ready":true}`.
 
 ## Assumptions
 
