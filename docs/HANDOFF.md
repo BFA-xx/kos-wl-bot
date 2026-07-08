@@ -531,7 +531,7 @@ Verification:
   remained 7, PM2 reported `kos-bot` online, and the local internal health
   endpoint returned `{"ok":true,"ready":true}`.
 
-### Member profile IA cleanup — complete locally
+### Member profile IA cleanup — committed/pushed/deployed
 
 - Member navigation now exposes a dedicated `/me/raffles` panel and removes the
   visible Tasks tab.
@@ -557,6 +557,14 @@ Verification:
 - `git diff --check`
 - `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
 - `corepack pnpm --filter @kos/bot build`
+- Code committed as `aea02b2` (`Split member raffles and points panels`) and
+  pushed to `origin/main`.
+- EC2 bot deployed via `./scripts/deploy-ec2.sh`; Discord slash command count
+  remained 7, PM2 reported `kos-bot` online, and the local internal health
+  endpoint returned `{"ok":true,"ready":true}`.
+- Vercel production route canaries for the new member IA returned expected auth
+  redirects instead of not-found responses: `/me/raffles` →
+  `307 /login?next=%2Fme%2Fraffles` and `/me/points?raffle=1` → `307`.
 
 No database migration is required; this is a dashboard/bot-copy IA cleanup.
 
