@@ -543,6 +543,9 @@ Verification:
 - `/me/tasks` remains available as a hidden compatibility route for old links,
   but new UI links and gate "Fix it" links point to `/me/points` or
   `/me/points?raffle=N`.
+- Auth middleware now preserves the full path and query in `next`, so
+  unauthenticated focus links such as `/me/points?raffle=N` return to the same
+  focused view after login.
 - Profile and Rewards CTAs now route users to `/me/raffles` for entry and
   `/me/points` for earning.
 - Org task-builder and raffle-builder copy now says member tasks appear in the
@@ -565,6 +568,10 @@ Verification:
 - Vercel production route canaries for the new member IA returned expected auth
   redirects instead of not-found responses: `/me/raffles` →
   `307 /login?next=%2Fme%2Fraffles` and `/me/points?raffle=1` → `307`.
+- Follow-up middleware fix verified with
+  `corepack pnpm --filter @kos/dashboard typecheck`,
+  `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`,
+  and `git diff --check`.
 
 No database migration is required; this is a dashboard/bot-copy IA cleanup.
 
