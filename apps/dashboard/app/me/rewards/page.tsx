@@ -62,11 +62,11 @@ export default function MeRewardsPage() {
         subtitle="Spend the points you earn from community tasks."
         action={
           <>
-            <Link href="/me/tasks" className="kos-btn-primary">
+            <Link href="/me/points" className="kos-btn-primary">
               Earn points
             </Link>
-            <Link href="/me/points" className="kos-btn">
-              My points
+            <Link href="/me/raffles" className="kos-btn">
+              Raffles
             </Link>
           </>
         }

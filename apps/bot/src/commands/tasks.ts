@@ -138,7 +138,7 @@ async function verify(interaction: ChatInputCommandInteraction, organizationId: 
     member,
     evidenceNote: interaction.options.getString("evidence"),
   });
-  const webLink = config.DASHBOARD_URL ? `\n\nWeb profile: ${config.DASHBOARD_URL}/me/tasks` : "";
+  const webLink = config.DASHBOARD_URL ? `\n\nWeb profile: ${config.DASHBOARD_URL}/me/points` : "";
   if (result.status === "VERIFIED") {
     return interaction.editReply(
       `${KOS.emoji.check} **${task.title}** verified.${task.points > 0 ? ` You earned **+${task.points} points**.` : ""}`,

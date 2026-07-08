@@ -248,7 +248,7 @@ export async function evaluateWebGates(
         label: rt.task.title,
         ok,
         reason: ok ? undefined : "Complete and verify this task.",
-        url: `/me/tasks?raffle=${raffle.id}`,
+        url: `/me/points?raffle=${raffle.id}`,
       });
     }
   }
@@ -277,7 +277,7 @@ export async function evaluateWebGates(
         label: task.label,
         ok,
         reason: ok ? undefined : "Open and verify this raffle step.",
-        url: `/me/tasks?raffle=${raffle.id}`,
+        url: `/me/points?raffle=${raffle.id}`,
       });
     }
   }

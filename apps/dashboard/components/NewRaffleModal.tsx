@@ -362,7 +362,7 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
             ) : null}
 
             {orgTasks.length > 0 ? (
-              <Field label="Verified tasks (gate entry — from your Tasks page)">
+              <Field label="Verified tasks (gate entry — from your Points panel)">
                 <div className="max-h-36 space-y-1 overflow-y-auto rounded-2xl border border-white/[0.08] bg-white/[0.025] p-2">
                   {orgTasks.map((t) => (
                     <label

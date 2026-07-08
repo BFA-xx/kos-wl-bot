@@ -146,9 +146,9 @@ export function TasksManager() {
       <div className="kos-card p-4">
         <SectionTitle>Create a task</SectionTitle>
         <p className="mb-4 text-sm text-kos-muted">
-          Active tasks appear on members&apos; `/me/tasks` page as standalone
-          ways to earn points. Attach a task to a raffle only when it should
-          also gate raffle entry.
+          Active tasks appear in the member Points panel as standalone ways to
+          earn points. Attach a task to a raffle only when it should also gate
+          raffle entry.
         </p>
         <form onSubmit={create} className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -228,7 +228,7 @@ export function TasksManager() {
         ) : data.tasks.length === 0 ? (
           <Empty>
             No tasks yet — create one above and members will see it in their
-            profile Tasks page.
+            profile Points panel.
           </Empty>
         ) : (
           <div className="space-y-2">

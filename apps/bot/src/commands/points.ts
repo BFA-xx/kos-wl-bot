@@ -116,7 +116,7 @@ async function panel(interaction: ChatInputCommandInteraction, orgName: string) 
         .setDescription(
           [
             "Earn points by completing verification tasks.",
-            "Standalone tasks are available with `/tasks list` and on the web profile Tasks page.",
+            "Standalone tasks are available with `/tasks list` and in the web profile Points panel.",
             "Spend points in the reward store.",
             "",
             "`/tasks list` — see ways to earn",

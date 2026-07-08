@@ -531,6 +531,35 @@ Verification:
   remained 7, PM2 reported `kos-bot` online, and the local internal health
   endpoint returned `{"ok":true,"ready":true}`.
 
+### Member profile IA cleanup — complete locally
+
+- Member navigation now exposes a dedicated `/me/raffles` panel and removes the
+  visible Tasks tab.
+- `/me/raffles` is intentionally entry-focused: live raffle cards, stats, and
+  `EntryPanel` controls only. Task completion is linked back to Points when a
+  raffle gate needs it.
+- `/me/points` now owns earning: it keeps balances/recent activity and embeds
+  the reusable standalone + raffle task workspace below the points summary.
+- `/me/tasks` remains available as a hidden compatibility route for old links,
+  but new UI links and gate "Fix it" links point to `/me/points` or
+  `/me/points?raffle=N`.
+- Profile and Rewards CTAs now route users to `/me/raffles` for entry and
+  `/me/points` for earning.
+- Org task-builder and raffle-builder copy now says member tasks appear in the
+  Points panel, not a Tasks tab.
+- Discord `/tasks verify` fallback link and `/points panel` copy now point to
+  the web Points panel.
+
+Verification:
+
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `corepack pnpm --filter @kos/bot typecheck`
+- `git diff --check`
+- `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
+- `corepack pnpm --filter @kos/bot build`
+
+No database migration is required; this is a dashboard/bot-copy IA cleanup.
+
 ## Assumptions
 
 - `/Users/adebayodaniel/KOS RAF` is the intended repository because it is the

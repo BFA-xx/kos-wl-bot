@@ -4,6 +4,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import { Empty, PageTitle, SectionTitle, StatCard } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
+import { MemberTasksWorkspace } from "@/components/MemberTasksWorkspace";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -33,15 +34,15 @@ export default function MePointsPage() {
   return (
     <>
       <PageTitle
-        title="My points"
-        subtitle="Your earned points across KOS communities. Complete standalone tasks on the Tasks page to earn more."
+        title="Points"
+        subtitle="Earn points by completing community tasks below, then spend them on rewards."
         action={
           <>
-            <Link href="/me/tasks" className="kos-btn-primary">
-              Earn more
-            </Link>
             <Link href="/me/rewards" className="kos-btn">
               Spend points
+            </Link>
+            <Link href="/me/raffles" className="kos-btn-primary">
+              Enter raffles
             </Link>
           </>
         }
@@ -71,8 +72,7 @@ export default function MePointsPage() {
                 <Empty>Loading points…</Empty>
               ) : data.balances.length === 0 ? (
                 <Empty>
-                  No points yet. Open Tasks to complete standalone community
-                  tasks and start earning.
+                  No points yet. Complete the tasks below to start earning.
                 </Empty>
               ) : (
                 <div className="grid gap-3">
@@ -142,6 +142,10 @@ export default function MePointsPage() {
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="mt-8">
+            <MemberTasksWorkspace embedded />
           </div>
         </>
       )}

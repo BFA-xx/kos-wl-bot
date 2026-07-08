@@ -33,8 +33,11 @@ export default async function MeProfilePage() {
         subtitle="Your KOS account — one identity across every community."
         action={
           <>
-            <Link href="/me/tasks" className="kos-btn-primary">
-              View tasks
+            <Link href="/me/raffles" className="kos-btn-primary">
+              Enter raffles
+            </Link>
+            <Link href="/me/points" className="kos-btn">
+              Earn points
             </Link>
             <Link href="/me/wallets" className="kos-btn">
               Wallets

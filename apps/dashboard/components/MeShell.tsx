@@ -9,7 +9,7 @@ import { IconLogout } from "./icons";
 
 const NAV = [
   { href: "/me", label: "Profile", exact: true },
-  { href: "/me/tasks", label: "Tasks" },
+  { href: "/me/raffles", label: "Raffles" },
   { href: "/me/points", label: "Points" },
   { href: "/me/rewards", label: "Rewards" },
   { href: "/me/wallets", label: "Wallets" },

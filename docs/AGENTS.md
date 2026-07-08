@@ -110,10 +110,12 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Billing is hidden from org navigation, but `/:org/billing` still exists.
 - Both the new-raffle and edit UIs support verification-task selection. Raffle
   scalar, role, and task-gate edits are committed atomically.
-- The member `/me/tasks` tab is the active-raffle workspace: it lists live
-  raffles, renders attached Task Engine checks and legacy social/link raffle
-  steps inline, and embeds the web entry panel. `/me/tasks?raffle=N` remains
-  the focused one-raffle view.
+- Member profile IA is split deliberately:
+  - `/me/raffles` is the raffle-entry-only panel with live raffle cards and
+    `EntryPanel` checklists;
+  - `/me/points` is the points/earning panel and embeds the standalone +
+    raffle task workspace;
+  - `/me/tasks` remains a hidden compatibility route for old deep links.
 - Keep member task cards compact and mobile-first: banners should render as
   natural-aspect media strips, not forced side columns or fixed crops; social
   tasks should use the one-CTA flow `Open task` -> `Verify` -> `Verified`.
@@ -125,7 +127,7 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Rewards and points must stay Discord + web parity features where technically
   possible. Current Discord commands are `/points`, `/tasks`, and `/rewards`;
   current web surfaces are `/:org/points`, `/:org/rewards`, `/me/points`,
-  `/me/tasks`, and `/me/rewards`.
+  `/me/raffles`, `/me/tasks` as a compatibility route, and `/me/rewards`.
 - Legacy social/link raffle steps are click-and-attest gates, not paid X API
   checks. They persist `SOCIAL_TASK_CLICK` / `SOCIAL_TASK_VERIFY` guild `Log`
   rows with a stable metadata `taskKey`; both web entry and bot entry check for
