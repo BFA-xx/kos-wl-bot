@@ -52,4 +52,7 @@ export const Actions = {
   // Self-serve wallet registry panel
   OpenWalletProfile: "wp_open",
   SubmitWalletProfile: "wp_submit",
+  // Member-side task verification from raffle prompts.
+  VerifyRaffleTask: "task_v",
+  VerifyLegacyTask: "legacy_v",
 } as const;

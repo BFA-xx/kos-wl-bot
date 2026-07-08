@@ -1,6 +1,6 @@
 # Engineering Handoff
 
-Last updated: 2026-07-07
+Last updated: 2026-07-08
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
 Audited application commit: `6a6a5d2`
@@ -499,6 +499,32 @@ Verification:
 
 No database migration is required; the implementation reuses
 `TaskDefinition`, `TaskCompletion`, `PointsLedger`, and `Log` for click state.
+
+### Discord raffle task verification parity — complete locally
+
+- Discord raffle entry no longer pushes members to the website when raffle
+  social/link tasks are incomplete.
+- Live raffle posts now render a Verify button row for legacy
+  `requirements.tasks` steps, alongside the existing task link buttons.
+- If a member clicks Enter before tasks are complete, the ephemeral Discord
+  response lists the missing tasks and includes Discord-native buttons:
+  task link buttons where a URL exists plus Verify buttons for each missing
+  step.
+- Pressing Verify for a legacy raffle task writes the same
+  `SOCIAL_TASK_VERIFY` audit/log state used by the web gate, then immediately
+  re-attempts entry. If all gates pass, the member is entered automatically.
+- Pressing Verify for a Task Engine raffle task runs the existing bot-side task
+  verifier, awards points when applicable, then immediately re-attempts entry.
+- No database migration is required; the implementation reuses the existing
+  raffle requirements JSON, `TaskCompletion`, `PointsLedger`, and `Log`.
+
+Verification:
+
+- `corepack pnpm --filter @kos/bot typecheck`
+- `corepack pnpm --filter @kos/bot build`
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
+- `git diff --check`
 
 ## Assumptions
 

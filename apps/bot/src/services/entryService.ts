@@ -14,7 +14,32 @@ import {
 import { upsertUser } from "./userService.js";
 import { audit } from "./auditService.js";
 import { logger } from "../logger.js";
-import { awardTaskPoints } from "./pointsService.js";
+import {
+  awardTaskPoints,
+  taskActionUrl,
+  type TaskConfig,
+} from "./pointsService.js";
+
+export type MissingTaskDefinition = {
+  kind: "task";
+  raffleId: number;
+  taskId: string;
+  label: string;
+  url: string | null;
+  points: number;
+};
+
+export type MissingLegacyTask = {
+  kind: "legacy";
+  raffleId: number;
+  index: number;
+  hash: string;
+  key: string;
+  label: string;
+  url: string | null;
+};
+
+export type MissingEntryTask = MissingTaskDefinition | MissingLegacyTask;
 
 export type EnterOutcome =
   | {
@@ -25,7 +50,7 @@ export type EnterOutcome =
   | { status: "duplicate" }
   | { status: "ineligible"; reasons: string[] }
   | { status: "no_wallet"; chains: WalletChain[] }
-  | { status: "tasks_incomplete"; missing: string[] }
+  | { status: "tasks_incomplete"; missing: MissingEntryTask[] }
   | { status: "closed" }
   | { status: "error" };
 
@@ -228,12 +253,12 @@ async function checkRequiredTasks(
   raffleId: number,
   member: GuildMember,
   requirements: unknown,
-): Promise<string[]> {
+): Promise<MissingEntryTask[]> {
   const links = await prisma.raffleTask.findMany({
     where: { raffleId, required: true, task: { active: true } },
     include: { task: true },
   });
-  const missing: string[] = [];
+  const missing: MissingEntryTask[] = [];
 
   if (links.length > 0) {
     const completions = await prisma.taskCompletion.findMany({
@@ -300,7 +325,14 @@ async function checkRequiredTasks(
         continue;
       }
 
-      missing.push(task.title);
+      missing.push({
+        kind: "task",
+        raffleId,
+        taskId: task.id,
+        label: task.title,
+        url: taskActionUrl(task.type, (task.config ?? {}) as TaskConfig),
+        points: task.points,
+      });
     }
   }
 
@@ -321,14 +353,77 @@ async function checkRequiredTasks(
       }),
     );
     for (const task of legacyTasks) {
-      if (!done.has(task.key)) missing.push(task.label);
+      if (!done.has(task.key)) missing.push(task);
     }
   }
 
   return missing;
 }
 
-function legacySocialTasks(raffleId: number, requirements: unknown) {
+export async function verifyLegacyRaffleTaskForMember({
+  raffleId,
+  index,
+  hash,
+  member,
+}: {
+  raffleId: number;
+  index: number;
+  hash: string;
+  member: GuildMember;
+}): Promise<{ ok: true; label: string } | { ok: false; error: string }> {
+  const raffle = await prisma.raffle.findUnique({
+    where: { id: raffleId },
+    select: { id: true, guildId: true, status: true, requirements: true },
+  });
+  if (!raffle || raffle.guildId !== member.guild.id) {
+    return { ok: false, error: "Task not found for this server." };
+  }
+  if (raffle.status !== RaffleStatus.LIVE) {
+    return { ok: false, error: "This raffle is not open for entries." };
+  }
+
+  const task = legacySocialTasks(raffle.id, raffle.requirements).find(
+    (t) => t.index === index && t.hash === hash,
+  );
+  if (!task) return { ok: false, error: "Task not found for this raffle." };
+
+  await upsertUser({
+    id: member.id,
+    username: member.user.username,
+    globalName: member.user.globalName,
+    avatarUrl: member.user.displayAvatarURL(),
+  });
+
+  const existing = await prisma.log.findFirst({
+    where: {
+      raffleId: raffle.id,
+      actorId: member.id,
+      action: "SOCIAL_TASK_VERIFY",
+      metadata: { path: ["taskKey"], equals: task.key },
+    },
+    select: { id: true },
+  });
+  if (existing) return { ok: true, label: task.label };
+
+  await audit({
+    guildId: raffle.guildId,
+    raffleId: raffle.id,
+    category: LogCategory.ENTRY,
+    action: "SOCIAL_TASK_VERIFY",
+    message: `${member.user.username} verified "${task.label}" for raffle #${raffle.id}`,
+    actorId: member.id,
+    metadata: {
+      taskKey: task.key,
+      label: task.label,
+      url: task.url,
+      method: "discord_click_attest",
+    },
+  });
+
+  return { ok: true, label: task.label };
+}
+
+export function legacySocialTasks(raffleId: number, requirements: unknown): MissingLegacyTask[] {
   const tasks = parseRequirements(requirements).tasks ?? [];
   return tasks.flatMap((task, index) => {
     if (!task.label.trim()) return [];
@@ -338,7 +433,15 @@ function legacySocialTasks(raffleId: number, requirements: unknown) {
       .digest("hex")
       .slice(0, 12);
     return [
-      { label: task.label.trim(), key: `legacy:${raffleId}:${index}:${hash}` },
+      {
+        kind: "legacy" as const,
+        raffleId,
+        index,
+        hash,
+        key: `legacy:${raffleId}:${index}:${hash}`,
+        label: task.label.trim(),
+        url,
+      },
     ];
   });
 }

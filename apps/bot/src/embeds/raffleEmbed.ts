@@ -4,6 +4,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from "discord.js";
+import { createHash } from "node:crypto";
 import { RaffleStatus, RoleMatchMode } from "@kos/db";
 import { KOS, statusColor, statusBadge } from "../theme.js";
 import { buildId, Actions } from "../utils/ids.js";
@@ -193,6 +194,34 @@ export function buildRaffleComponents(
       );
     }
     rows.push(taskRow);
+  }
+
+  const verifyTasks = (parseRequirements(raffle.requirements).tasks ?? [])
+    .map((task, index) => {
+      const label = task.label.trim();
+      if (!label) return null;
+      const url = task.url?.trim() || null;
+      const hash = createHash("sha1")
+        .update(`${label}\n${url ?? ""}`)
+        .digest("hex")
+        .slice(0, 12);
+      return { label, index, hash };
+    })
+    .filter((task): task is { label: string; index: number; hash: string } =>
+      Boolean(task),
+    )
+    .slice(0, 5);
+  if (live && verifyTasks.length > 0) {
+    const verifyRow = new ActionRowBuilder<ButtonBuilder>();
+    for (const task of verifyTasks) {
+      verifyRow.addComponents(
+        new ButtonBuilder()
+          .setCustomId(buildId(Actions.VerifyLegacyTask, raffle.id, task.index, task.hash))
+          .setStyle(ButtonStyle.Primary)
+          .setLabel(`Verify ${task.label}`.slice(0, 80)),
+      );
+    }
+    rows.push(verifyRow);
   }
 
   return rows;
