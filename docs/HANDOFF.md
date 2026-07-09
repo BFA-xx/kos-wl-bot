@@ -628,7 +628,7 @@ Verification:
 No database migration is required; this is a dashboard UI/API routing update
 plus a Discord interaction/rendering fix.
 
-### Default raffle channels — complete locally
+### Default raffle channels — committed/pushed/deployed
 
 - Added `Guild.defaultRaffleChannelId` with migration
   `20260709090000_default_raffle_channel`.
@@ -661,13 +661,17 @@ Verification:
 - `corepack pnpm --filter @kos/bot typecheck`
 - `corepack pnpm --filter @kos/bot build`
 - `git diff --check`
-
-Deployment still required:
-
-- Apply the new production DB migration with
-  `corepack pnpm --filter @kos/db migrate:deploy`.
-- Deploy/push the dashboard and redeploy the EC2 bot so `/config channels` and
-  Discord raffle creation use the new default.
+- Code committed as `bfb09c9` (`Add default raffle channel settings`) and
+  pushed to `origin/main`.
+- Migration `20260709090000_default_raffle_channel` applied locally using
+  `apps/dashboard/.env.local` and applied to production Neon using
+  `apps/dashboard/.env.vercel`.
+- EC2 bot deployed via `./scripts/deploy-ec2.sh`; Discord slash command count
+  remained 7, PM2 reported `kos-bot` online, and the local internal health
+  endpoint returned `{"ok":true,"ready":true}`.
+- Vercel is expected to auto-deploy the dashboard from the `main` push; no
+  Vercel CLI/API credential is available in this local shell to inspect the
+  deployment record directly.
 
 ## Assumptions
 
