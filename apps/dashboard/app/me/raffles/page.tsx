@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import useSWR from "swr";
-import { Suspense } from "react";
+import useSWR, { mutate as mutateKey } from "swr";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { EntryPanel } from "@/components/EntryPanel";
-import { MemberTasksWorkspace } from "@/components/MemberTasksWorkspace";
+import {
+  MemberTasksWorkspace,
+  TaskList,
+  type TaskRow,
+} from "@/components/MemberTasksWorkspace";
 import { Empty, PageTitle, SectionTitle, StatCard } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
 
@@ -23,6 +27,7 @@ interface RaffleSummary {
   entryCount: number | null;
   bannerUrl: string | null;
   entered: boolean;
+  tasks: TaskRow[];
 }
 
 interface RafflesData {
@@ -41,11 +46,59 @@ export default function MeRafflesPage() {
 function MeRafflesInner() {
   const params = useSearchParams();
   const focusedRaffleId = params.get("raffle");
-  const { data } = useSWR<RafflesData>("/api/me/tasks", fetcher, {
+  const { data, mutate } = useSWR<RafflesData>("/api/me/tasks", fetcher, {
     refreshInterval: 15000,
   });
   const raffles = data?.raffles ?? [];
   const entered = raffles.filter((r) => r.entered).length;
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+
+  function refreshEntryPanels() {
+    for (const raffle of raffles) {
+      void mutateKey(`/api/me/raffles/${raffle.id}`);
+    }
+  }
+
+  async function completeTask(id: string) {
+    setBusy(id);
+    const res = await fetch(`/api/me/tasks/${id}/complete`, { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    setBusy(null);
+    if (body.action === "link_x") {
+      setNotes((n) => ({
+        ...n,
+        [id]: body.reason ?? "Link your X account first.",
+      }));
+    } else if (body.reason) {
+      setNotes((n) => ({ ...n, [id]: body.reason }));
+    } else {
+      setNotes((n) => ({ ...n, [id]: "" }));
+    }
+    await mutate();
+    refreshEntryPanels();
+  }
+
+  async function openTask(task: TaskRow) {
+    if (task.actionUrl)
+      window.open(task.actionUrl, "_blank", "noopener,noreferrer");
+    if (!task.requiresClick || task.status === "VERIFIED") return;
+
+    const res = await fetch(`/api/me/tasks/${task.id}/click`, {
+      method: "POST",
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setNotes((n) => ({ ...n, [task.id]: "" }));
+      await mutate();
+      refreshEntryPanels();
+    } else {
+      setNotes((n) => ({
+        ...n,
+        [task.id]: body.error ?? "Couldn't record that click. Try again.",
+      }));
+    }
+  }
 
   if (focusedRaffleId) {
     return (
@@ -105,7 +158,14 @@ function MeRafflesInner() {
           ) : (
             <div className="grid gap-4 xl:grid-cols-2">
               {raffles.map((raffle) => (
-                <RaffleEntryCard key={raffle.id} raffle={raffle} />
+                <RaffleEntryCard
+                  key={raffle.id}
+                  raffle={raffle}
+                  busy={busy}
+                  notes={notes}
+                  onComplete={completeTask}
+                  onOpen={openTask}
+                />
               ))}
             </div>
           )}
@@ -115,7 +175,20 @@ function MeRafflesInner() {
   );
 }
 
-function RaffleEntryCard({ raffle }: { raffle: RaffleSummary }) {
+function RaffleEntryCard({
+  raffle,
+  busy,
+  notes,
+  onComplete,
+  onOpen,
+}: {
+  raffle: RaffleSummary;
+  busy: string | null;
+  notes: Record<string, string>;
+  onComplete: (id: string, raffleIdForRefresh?: number) => void;
+  onOpen: (task: TaskRow, raffleIdForRefresh?: number) => void;
+}) {
+  const verifiedTasks = raffle.tasks.filter((t) => t.status === "VERIFIED").length;
   return (
     <div className="kos-card overflow-hidden">
       {raffle.bannerUrl ? (
@@ -168,7 +241,30 @@ function RaffleEntryCard({ raffle }: { raffle: RaffleSummary }) {
           <MiniStat label="Spots" value={raffle.spots} />
         </div>
 
-        <EntryPanel raffleId={raffle.id} compact />
+        {raffle.tasks.length > 0 ? (
+          <div className="mb-4 rounded-3xl border border-white/[0.08] bg-white/[0.025] p-3 sm:p-4">
+            <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-semibold">Raffle steps</div>
+                <div className="text-xs text-kos-muted">
+                  {verifiedTasks}/{raffle.tasks.length} verified · complete
+                  them here, then enter below.
+                </div>
+              </div>
+            </div>
+            <TaskList
+              tasks={raffle.tasks}
+              busy={busy}
+              notes={notes}
+              raffleId={raffle.id}
+              compact
+              onComplete={onComplete}
+              onOpen={onOpen}
+            />
+          </div>
+        ) : null}
+
+        <EntryPanel raffleId={raffle.id} compact taskControlsInline />
 
         {raffle.org ? (
           <div className="mt-3 text-right">

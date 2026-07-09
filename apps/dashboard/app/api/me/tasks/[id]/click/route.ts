@@ -32,10 +32,14 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
 
     const verified = await prisma.log.findFirst({
       where: {
-        raffleId: raffle.id,
         actorId: user.id,
         action: LEGACY_TASK_VERIFY,
-        metadata: { path: ["taskKey"], equals: task.key },
+        OR: [
+          { raffleId: raffle.id, metadata: { path: ["taskKey"], equals: task.key } },
+          ...(task.sharedKey
+            ? [{ metadata: { path: ["sharedTaskKey"], equals: task.sharedKey } }]
+            : []),
+        ],
       },
       select: { id: true },
     });
@@ -52,6 +56,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
         metadata: {
           taskId: task.id,
           taskKey: task.key,
+          sharedTaskKey: task.sharedKey,
           label: task.label,
           url: task.url,
           method: "link_open",

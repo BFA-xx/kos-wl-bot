@@ -28,13 +28,52 @@ export async function POST(
       if (!resolved)
         return NextResponse.json({ error: "Task not found." }, { status: 404 });
 
+      const verified = await prisma.log.findFirst({
+        where: {
+          actorId: user.id,
+          action: LEGACY_TASK_VERIFY,
+          OR: [
+            {
+              raffleId: resolved.raffle.id,
+              metadata: { path: ["taskKey"], equals: resolved.task.key },
+            },
+            ...(resolved.task.sharedKey
+              ? [
+                  {
+                    metadata: {
+                      path: ["sharedTaskKey"],
+                      equals: resolved.task.sharedKey,
+                    },
+                  },
+                ]
+              : []),
+          ],
+        },
+        select: { id: true },
+      });
+      if (verified) return NextResponse.json({ status: "VERIFIED" });
+
       if (resolved.task.url) {
         const clicked = await prisma.log.findFirst({
           where: {
-            raffleId: resolved.raffle.id,
             actorId: user.id,
             action: LEGACY_TASK_CLICK,
-            metadata: { path: ["taskKey"], equals: resolved.task.key },
+            OR: [
+              {
+                raffleId: resolved.raffle.id,
+                metadata: { path: ["taskKey"], equals: resolved.task.key },
+              },
+              ...(resolved.task.sharedKey
+                ? [
+                    {
+                      metadata: {
+                        path: ["sharedTaskKey"],
+                        equals: resolved.task.sharedKey,
+                      },
+                    },
+                  ]
+                : []),
+            ],
           },
           select: { id: true },
         });
@@ -60,6 +99,7 @@ export async function POST(
           metadata: {
             taskId: resolved.task.id,
             taskKey: resolved.task.key,
+            sharedTaskKey: resolved.task.sharedKey,
             label: resolved.task.label,
             url: resolved.task.url,
             method: "click_attest",

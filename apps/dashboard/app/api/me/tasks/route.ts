@@ -144,10 +144,9 @@ export async function GET(req: NextRequest) {
         ? await prisma.log.findMany({
             where: {
               actorId: user.id,
-              raffleId: { in: raffles.map((r) => r.id) },
               action: { in: [LEGACY_TASK_CLICK, LEGACY_TASK_VERIFY] },
             },
-            select: { raffleId: true, action: true, metadata: true },
+            select: { action: true, metadata: true },
           })
         : [];
       const socialByTask = socialStatusMap(socialLogs);
@@ -199,7 +198,11 @@ export async function GET(req: NextRequest) {
               source: "RAFFLE",
             })),
             ...getLegacyRaffleTasks(raffle.id, raffle.requirements).map((task) =>
-              legacyTaskRow(task, socialByTask.get(task.key)),
+              legacyTaskRow(
+                task,
+                socialByTask.get(task.key) ??
+                  (task.sharedKey ? socialByTask.get(task.sharedKey) : undefined),
+              ),
             ),
           ],
         })),
@@ -263,10 +266,9 @@ export async function GET(req: NextRequest) {
       ? await prisma.log.findMany({
           where: {
             actorId: user.id,
-            raffleId: raffle.id,
             action: { in: [LEGACY_TASK_CLICK, LEGACY_TASK_VERIFY] },
           },
-          select: { raffleId: true, action: true, metadata: true },
+          select: { action: true, metadata: true },
         })
       : [];
     const socialByTask = socialStatusMap(socialLogs);
@@ -287,7 +289,13 @@ export async function GET(req: NextRequest) {
             source: "RAFFLE",
           };
         }),
-        ...socialTasks.map((task) => legacyTaskRow(task, socialByTask.get(task.key))),
+        ...socialTasks.map((task) =>
+          legacyTaskRow(
+            task,
+            socialByTask.get(task.key) ??
+              (task.sharedKey ? socialByTask.get(task.sharedKey) : undefined),
+          ),
+        ),
       ],
     });
   } catch (err) {
@@ -352,7 +360,13 @@ function requiresOpenBeforeVerify(task: TaskDefinition, actionUrl: string | null
 }
 
 function legacyTaskRow(
-  task: { id: string; key: string; label: string; url: string | null },
+  task: {
+    id: string;
+    key: string;
+    sharedKey: string | null;
+    label: string;
+    url: string | null;
+  },
   status?: { clicked: boolean; verified: boolean },
 ) {
   return {
@@ -378,15 +392,22 @@ function legacyTaskRow(
 function socialStatusMap(logs: { action: string; metadata: unknown }[]) {
   const map = new Map<string, { clicked: boolean; verified: boolean }>();
   for (const log of logs) {
-    const key = ((log.metadata ?? {}) as { taskKey?: unknown }).taskKey;
-    if (typeof key !== "string") continue;
-    const current = map.get(key) ?? { clicked: false, verified: false };
-    if (log.action === LEGACY_TASK_CLICK) current.clicked = true;
-    if (log.action === LEGACY_TASK_VERIFY) {
-      current.clicked = true;
-      current.verified = true;
+    const metadata = (log.metadata ?? {}) as {
+      taskKey?: unknown;
+      sharedTaskKey?: unknown;
+    };
+    const keys = [metadata.taskKey, metadata.sharedTaskKey].filter(
+      (key): key is string => typeof key === "string",
+    );
+    for (const key of keys) {
+      const current = map.get(key) ?? { clicked: false, verified: false };
+      if (log.action === LEGACY_TASK_CLICK) current.clicked = true;
+      if (log.action === LEGACY_TASK_VERIFY) {
+        current.clicked = true;
+        current.verified = true;
+      }
+      map.set(key, current);
     }
-    map.set(key, current);
   }
   return map;
 }

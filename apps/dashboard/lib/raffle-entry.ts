@@ -258,7 +258,6 @@ export async function evaluateWebGates(
   if (legacyTasks.length > 0) {
     const logs = await prisma.log.findMany({
       where: {
-        raffleId: raffle.id,
         actorId: user.id,
         action: LEGACY_TASK_VERIFY,
       },
@@ -267,11 +266,16 @@ export async function evaluateWebGates(
     const done = new Set(
       logs.flatMap((log) => {
         const key = ((log.metadata ?? {}) as { taskKey?: unknown }).taskKey;
-        return typeof key === "string" ? [key] : [];
+        const sharedKey = ((log.metadata ?? {}) as { sharedTaskKey?: unknown })
+          .sharedTaskKey;
+        return [
+          ...(typeof key === "string" ? [key] : []),
+          ...(typeof sharedKey === "string" ? [sharedKey] : []),
+        ];
       }),
     );
     for (const task of legacyTasks) {
-      const ok = done.has(task.key);
+      const ok = done.has(task.key) || Boolean(task.sharedKey && done.has(task.sharedKey));
       gates.push({
         key: `legacy-task-${task.key}`,
         label: task.label,

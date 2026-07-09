@@ -28,9 +28,11 @@ interface Status {
 export function EntryPanel({
   raffleId,
   compact = false,
+  taskControlsInline = false,
 }: {
   raffleId: number;
   compact?: boolean;
+  taskControlsInline?: boolean;
 }) {
   const { data, mutate } = useSWR<Status>(
     `/api/me/raffles/${raffleId}`,
@@ -160,7 +162,13 @@ export function EntryPanel({
                 {!g.ok && g.reason ? (
                   <div className="text-xs text-kos-muted/80">
                     {g.reason}{" "}
-                    {g.url ? (
+                    {taskControlsInline &&
+                    (g.key.startsWith("task-") ||
+                      g.key.startsWith("legacy-task-")) ? (
+                      <span className="text-kos-fg">
+                        Use the raffle steps above.
+                      </span>
+                    ) : g.url ? (
                       <Link
                         href={g.url}
                         className="text-kos-fg underline-offset-2 hover:underline"

@@ -673,6 +673,36 @@ Verification:
   Vercel CLI/API credential is available in this local shell to inspect the
   deployment record directly.
 
+### Inline raffle tasks and shared same-link verification — complete locally
+
+- `/me/raffles` now renders each live raffle's task controls directly inside
+  the raffle card above the entry checklist, so members can open/verify tasks
+  without clicking "Fix it" into a separate focused view.
+- The entry checklist still shows unmet task gates, but when inline task
+  controls are present it tells members to use the raffle steps above instead
+  of linking away.
+- Verifying/opening a legacy social/link raffle task now refreshes all live
+  raffle cards and entry panels in the member Raffles tab.
+- Legacy social/link task logs now include a URL-derived `sharedTaskKey` in
+  addition to the existing per-raffle `taskKey`.
+- Web task status, web entry gates, and Discord bot entry gates now accept
+  either the per-raffle key or the shared URL key. This means once a member
+  opens/verifies a specific link, other raffles with that exact same link show
+  the matching clicked/verified state and can unlock entry without repeating
+  the same task.
+- Existing historical logs remain valid because the old `taskKey` path is still
+  checked first.
+
+Verification:
+
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `corepack pnpm --filter @kos/dashboard build`
+- `corepack pnpm --filter @kos/bot typecheck`
+- `corepack pnpm --filter @kos/bot build`
+- `git diff --check`
+
+No database migration is required; this uses existing `Log.metadata`.
+
 ## Assumptions
 
 - `/Users/adebayodaniel/KOS RAF` is the intended repository because it is the

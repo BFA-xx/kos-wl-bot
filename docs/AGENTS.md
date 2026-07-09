@@ -144,8 +144,10 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   `/me/raffles`, `/me/tasks` as a compatibility route, and `/me/rewards`.
 - Legacy social/link raffle steps are click-and-attest gates, not paid X API
   checks. They persist `SOCIAL_TASK_CLICK` / `SOCIAL_TASK_VERIFY` guild `Log`
-  rows with a stable metadata `taskKey`; both web entry and bot entry check for
-  verification before allowing entry.
+  rows with a stable metadata `taskKey` and, when the task has a URL,
+  `sharedTaskKey`; both web entry and bot entry check for verification before
+  allowing entry. Same-link legacy tasks should satisfy each other across live
+  raffles once opened/verified.
 - Discord raffle task verification feedback should name the exact raffle/project
   and retry entry for that same raffle, so members are never pushed into a
   generic multi-raffle task context.

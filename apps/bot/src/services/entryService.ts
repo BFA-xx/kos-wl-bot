@@ -35,6 +35,7 @@ export type MissingLegacyTask = {
   index: number;
   hash: string;
   key: string;
+  sharedKey: string | null;
   label: string;
   url: string | null;
 };
@@ -340,7 +341,6 @@ async function checkRequiredTasks(
   if (legacyTasks.length > 0) {
     const logs = await prisma.log.findMany({
       where: {
-        raffleId,
         actorId: member.id,
         action: "SOCIAL_TASK_VERIFY",
       },
@@ -349,11 +349,17 @@ async function checkRequiredTasks(
     const done = new Set(
       logs.flatMap((log) => {
         const key = ((log.metadata ?? {}) as { taskKey?: unknown }).taskKey;
-        return typeof key === "string" ? [key] : [];
+        const sharedKey = ((log.metadata ?? {}) as { sharedTaskKey?: unknown })
+          .sharedTaskKey;
+        return [
+          ...(typeof key === "string" ? [key] : []),
+          ...(typeof sharedKey === "string" ? [sharedKey] : []),
+        ];
       }),
     );
     for (const task of legacyTasks) {
-      if (!done.has(task.key)) missing.push(task);
+      if (!done.has(task.key) && !(task.sharedKey && done.has(task.sharedKey)))
+        missing.push(task);
     }
   }
 
@@ -396,10 +402,14 @@ export async function verifyLegacyRaffleTaskForMember({
 
   const existing = await prisma.log.findFirst({
     where: {
-      raffleId: raffle.id,
       actorId: member.id,
       action: "SOCIAL_TASK_VERIFY",
-      metadata: { path: ["taskKey"], equals: task.key },
+      OR: [
+        { raffleId: raffle.id, metadata: { path: ["taskKey"], equals: task.key } },
+        ...(task.sharedKey
+          ? [{ metadata: { path: ["sharedTaskKey"], equals: task.sharedKey } }]
+          : []),
+      ],
     },
     select: { id: true },
   });
@@ -414,6 +424,7 @@ export async function verifyLegacyRaffleTaskForMember({
     actorId: member.id,
     metadata: {
       taskKey: task.key,
+      sharedTaskKey: task.sharedKey,
       label: task.label,
       url: task.url,
       method: "discord_click_attest",
@@ -439,9 +450,14 @@ export function legacySocialTasks(raffleId: number, requirements: unknown): Miss
         index,
         hash,
         key: `legacy:${raffleId}:${index}:${hash}`,
+        sharedKey: url ? legacyTaskSharedKey(url) : null,
         label: task.label.trim(),
         url,
       },
     ];
   });
+}
+
+function legacyTaskSharedKey(url: string): string {
+  return `legacy-url:${createHash("sha1").update(url.trim()).digest("hex").slice(0, 16)}`;
 }

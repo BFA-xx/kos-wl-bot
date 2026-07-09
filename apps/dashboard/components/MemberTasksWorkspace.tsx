@@ -10,7 +10,7 @@ import { fmtDate } from "@/lib/format";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-interface TaskRow {
+export interface TaskRow {
   id: string;
   kind?: "VERIFICATION" | "SOCIAL";
   source?: "STANDALONE" | "RAFFLE";
@@ -638,7 +638,7 @@ function CommunityAvatar({ org }: { org: TaskOrg }) {
   );
 }
 
-function TaskList({
+export function TaskList({
   tasks,
   busy,
   notes,

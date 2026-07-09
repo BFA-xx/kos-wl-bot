@@ -7,6 +7,7 @@ export const TASK_DEFINITION_CLICK = "TASK_DEFINITION_CLICK";
 export interface LegacyRaffleTask {
   id: string;
   key: string;
+  sharedKey: string | null;
   label: string;
   url: string | null;
 }
@@ -28,6 +29,7 @@ export function getLegacyRaffleTasks(raffleId: number, requirements: unknown): L
       {
         id: `social-${raffleId}-${index}-${hash}`,
         key: legacyTaskKey(raffleId, index, hash),
+        sharedKey: url ? legacyTaskSharedKey(url) : null,
         label,
         url,
       },
@@ -43,6 +45,14 @@ export function parseLegacyTaskId(id: string): { raffleId: number; index: number
 
 export function legacyTaskKey(raffleId: number, index: number, hash: string): string {
   return `legacy:${raffleId}:${index}:${hash}`;
+}
+
+export function legacyTaskSharedKey(url: string): string {
+  return `legacy-url:${createHash("sha1").update(normalizeTaskUrl(url)).digest("hex").slice(0, 16)}`;
+}
+
+function normalizeTaskUrl(url: string): string {
+  return url.trim();
 }
 
 function legacyTaskHash(label: string, url: string | null): string {
