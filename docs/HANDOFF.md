@@ -673,7 +673,7 @@ Verification:
   Vercel CLI/API credential is available in this local shell to inspect the
   deployment record directly.
 
-### Inline raffle tasks and shared same-link verification — complete locally
+### Inline raffle tasks and shared same-link verification — committed/pushed/deployed
 
 - `/me/raffles` now renders each live raffle's task controls directly inside
   the raffle card above the entry checklist, so members can open/verify tasks
@@ -700,6 +700,14 @@ Verification:
 - `corepack pnpm --filter @kos/bot typecheck`
 - `corepack pnpm --filter @kos/bot build`
 - `git diff --check`
+- Code committed as `72c3347` (`Inline raffle tasks and share link
+  verification`) and pushed to `origin/main`.
+- EC2 bot deployed via `./scripts/deploy-ec2.sh`; Discord slash command count
+  remained 7, PM2 reported `kos-bot` online, and the local internal health
+  endpoint returned `{"ok":true,"ready":true}`.
+- Vercel is expected to auto-deploy the dashboard from the `main` push; no
+  Vercel CLI/API credential is available in this local shell to inspect the
+  deployment record directly.
 
 No database migration is required; this uses existing `Log.metadata`.
 
