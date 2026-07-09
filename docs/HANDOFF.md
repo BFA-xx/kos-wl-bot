@@ -577,7 +577,7 @@ Verification:
 
 No database migration is required; this is a dashboard/bot-copy IA cleanup.
 
-### Dashboard search, mobile member sidebar, raffle/points IA correction, and Discord entry feedback — complete locally
+### Dashboard search, mobile member sidebar, raffle/points IA correction, and Discord entry feedback — committed/pushed/deployed
 
 - Org dashboard search now performs real work instead of silently falling back
   to the unfiltered raffle list:
@@ -616,6 +616,14 @@ Verification:
 - `corepack pnpm --filter @kos/bot typecheck`
 - `corepack pnpm --filter @kos/bot build`
 - `git diff --check`
+- Code committed as `52157fd` (`Fix dashboard search and raffle entry UX`) and
+  pushed to `origin/main`.
+- EC2 bot deployed via `./scripts/deploy-ec2.sh`; Discord slash command count
+  remained 7, PM2 reported `kos-bot` online, and the local internal health
+  endpoint returned `{"ok":true,"ready":true}`.
+- Vercel is expected to auto-deploy the dashboard from the `main` push; no
+  Vercel CLI/API credential is available in this local shell to inspect the
+  deployment record directly.
 
 No database migration is required; this is a dashboard UI/API routing update
 plus a Discord interaction/rendering fix.
