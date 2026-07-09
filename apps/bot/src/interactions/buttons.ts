@@ -104,17 +104,26 @@ async function editEnterOutcome(
       void refreshRaffleMessage(interaction.client, raffleId).catch((err) =>
         logger.warn({ err, raffleId }, "refresh after entry failed"),
       );
-      let msg = `${prefix}${KOS.emoji.check} Entered ${raffleLabel}. You're in — good luck!`;
+      let msg = `${prefix}${KOS.emoji.check} **Raffle entered** for ${raffleLabel}. You're in — good luck!`;
       if (result.missingWalletChains.length > 0) {
         const chains = result.missingWalletChains.map(chainLabel).join(", ");
         msg +=
           `\n\n⚠️ You haven't added a **${chains}** wallet yet. If you win, we'll need it — ` +
           `run **/wallet register** to add it now (you can still win without it, but add it to be safe).`;
       }
-      return interaction.editReply(msg);
+      return interaction.editReply({
+        content: msg,
+        components: buildEnteredStatusComponents(raffleId),
+      });
     }
     case "duplicate":
-      return interaction.editReply(`${prefix}You're already entered in ${raffleLabel}.`);
+      void refreshRaffleMessage(interaction.client, raffleId).catch((err) =>
+        logger.warn({ err, raffleId }, "refresh after duplicate entry failed"),
+      );
+      return interaction.editReply({
+        content: `${prefix}${KOS.emoji.check} **Raffle entered** — you're already in ${raffleLabel}.`,
+        components: buildEnteredStatusComponents(raffleId),
+      });
     case "ineligible":
       return interaction.editReply(
         `${prefix}${KOS.emoji.cross} You do not meet the requirements for ${raffleLabel}.\n${result.reasons
@@ -157,6 +166,20 @@ async function raffleContextLabel(raffleId: number): Promise<string> {
       ? ` · ${raffle.title}`
       : "";
   return `**${raffle.projectName}${title}** (#${raffleId})`;
+}
+
+function buildEnteredStatusComponents(
+  raffleId: number,
+): ActionRowBuilder<ButtonBuilder>[] {
+  return [
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(buildId(Actions.EnterRaffle, raffleId, "entered"))
+        .setStyle(ButtonStyle.Success)
+        .setLabel("Raffle entered ✓")
+        .setDisabled(true),
+    ),
+  ];
 }
 
 function buildMissingTaskComponents(

@@ -24,7 +24,10 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
 
   await prisma.$transaction([
     prisma.participant.delete({ where: { id: existing.id } }),
-    prisma.raffle.update({ where: { id }, data: { entryCount: { decrement: 1 } } }),
+    prisma.raffle.update({
+      where: { id },
+      data: { entryCount: { decrement: 1 }, editRequestedAt: new Date() },
+    }),
   ]);
   await prisma.log
     .create({

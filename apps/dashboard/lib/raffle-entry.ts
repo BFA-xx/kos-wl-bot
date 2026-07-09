@@ -313,7 +313,7 @@ export async function recordWebEntry(
     });
     const updated = await tx.raffle.update({
       where: { id: raffle.id },
-      data: { entryCount: { increment: 1 } },
+      data: { entryCount: { increment: 1 }, editRequestedAt: new Date() },
       select: { entryCount: true },
     });
     return updated.entryCount;

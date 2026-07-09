@@ -86,7 +86,9 @@ raffle tasks. Reactions remain Discord-only. The bot can auto-verify same-guild
 Discord tasks inline; the web uses Discord REST with the bot token. Live
 Discord raffle posts should refresh after actual enter/leave changes so entry
 counts stay visible, but should not be edited on a timer just to tick
-countdowns. Connected guilds can store default channels for raffle posts,
+countdowns. Dashboard/web enter and leave flows should set `editRequestedAt` so
+the bot scheduler can re-render the Discord post. Connected guilds can store
+default channels for raffle posts,
 winner announcements, proof delivery, and points/rewards activity; new raffle
 builders should prefill from those defaults while still allowing per-raffle
 overrides.
@@ -151,6 +153,10 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Discord raffle task verification feedback should name the exact raffle/project
   and retry entry for that same raffle, so members are never pushed into a
   generic multi-raffle task context.
+- Successful Discord raffle entry feedback must be shown in the member's
+  ephemeral interaction response, not by changing the public raffle button to a
+  per-user state. The public Discord message is shared by all members; use
+  disabled per-user components such as `Raffle entered ✓` for confirmation.
 - Org raffle detail pages should render entry requirements as user-friendly
   cards, not raw `requirements` JSON.
 - Community, raffle, and notification features shipped in S2.5.

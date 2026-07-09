@@ -711,6 +711,31 @@ Verification:
 
 No database migration is required; this uses existing `Log.metadata`.
 
+### Discord raffle-enter confirmation hardening — complete locally
+
+- Discord raffle entry success replies now explicitly say
+  `Raffle entered` and include a disabled per-user Discord button labeled
+  `Raffle entered ✓`.
+- Duplicate enter clicks also return the same entered state instead of a plain
+  text-only "already entered" response, and they trigger a best-effort raffle
+  post refresh to catch stale entry-count renders.
+- This intentionally does not mutate the public `Enter Giveaway` button into
+  `Entered`, because that Discord message is shared by every server member; the
+  entered state must be shown in the member's ephemeral interaction response.
+- Website enter/leave now sets `Raffle.editRequestedAt` while updating
+  `entryCount`, allowing the EC2 bot scheduler to refresh the Discord raffle
+  post after web entries and exits.
+- No database migration is required; this uses the existing
+  `editRequestedAt` dashboard-to-bot mediation flow.
+
+Verification:
+
+- `corepack pnpm --filter @kos/bot typecheck`
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `corepack pnpm --filter @kos/bot build`
+- `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
+- `git diff --check`
+
 ## Assumptions
 
 - `/Users/adebayodaniel/KOS RAF` is the intended repository because it is the
