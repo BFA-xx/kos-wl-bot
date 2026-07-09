@@ -40,7 +40,15 @@ export async function GET(_req: Request, { params }: { params: { org: string } }
     });
     const names = await prisma.guild.findMany({
       where: { id: { in: conns.map((c) => c.guildId) } },
-      select: { id: true, name: true, iconUrl: true },
+      select: {
+        id: true,
+        name: true,
+        iconUrl: true,
+        defaultRaffleChannelId: true,
+        defaultAnnounceChannelId: true,
+        defaultProofChannelId: true,
+        defaultPointsChannelId: true,
+      },
     });
     const nameMap = new Map(names.map((n) => [n.id, n]));
     const connected = conns.map((c) => ({
@@ -49,6 +57,14 @@ export async function GET(_req: Request, { params }: { params: { org: string } }
       name: nameMap.get(c.guildId)?.name ?? c.guildId,
       icon: nameMap.get(c.guildId)?.iconUrl ?? null,
       isPrimary: c.isPrimary,
+      defaultRaffleChannelId:
+        nameMap.get(c.guildId)?.defaultRaffleChannelId ?? null,
+      defaultAnnounceChannelId:
+        nameMap.get(c.guildId)?.defaultAnnounceChannelId ?? null,
+      defaultProofChannelId:
+        nameMap.get(c.guildId)?.defaultProofChannelId ?? null,
+      defaultPointsChannelId:
+        nameMap.get(c.guildId)?.defaultPointsChannelId ?? null,
     }));
 
     return NextResponse.json({ guilds: list, connected, inviteBase: botInviteUrl() });

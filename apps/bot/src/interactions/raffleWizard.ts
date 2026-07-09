@@ -72,7 +72,11 @@ export async function handleRaffleCreateModal(interaction: ModalSubmitInteractio
 
   const guild = await prisma.guild.findUnique({
     where: { id: interaction.guildId! },
-    select: { defaultAnnounceChannelId: true, defaultProofChannelId: true },
+    select: {
+      defaultRaffleChannelId: true,
+      defaultAnnounceChannelId: true,
+      defaultProofChannelId: true,
+    },
   });
 
   const nonce = stashPending({
@@ -86,7 +90,7 @@ export async function handleRaffleCreateModal(interaction: ModalSubmitInteractio
     spots,
     startAt,
     endAt,
-    postChannelId: interaction.channelId ?? null,
+    postChannelId: guild?.defaultRaffleChannelId ?? interaction.channelId ?? null,
     announceChannelId: guild?.defaultAnnounceChannelId ?? null,
     proofChannelId: guild?.defaultProofChannelId ?? null,
     roles: [],

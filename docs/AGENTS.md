@@ -86,7 +86,10 @@ raffle tasks. Reactions remain Discord-only. The bot can auto-verify same-guild
 Discord tasks inline; the web uses Discord REST with the bot token. Live
 Discord raffle posts should refresh after actual enter/leave changes so entry
 counts stay visible, but should not be edited on a timer just to tick
-countdowns.
+countdowns. Connected guilds can store default channels for raffle posts,
+winner announcements, proof delivery, and points/rewards activity; new raffle
+builders should prefill from those defaults while still allowing per-raffle
+overrides.
 
 Draws generate a random 32-byte seed, store its SHA-256 commitment, rank each
 candidate by `HMAC-SHA256(seed, userId)`, and persist the first N. The bot then
@@ -113,6 +116,10 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Billing is hidden from org navigation, but `/:org/billing` still exists.
 - Both the new-raffle and edit UIs support verification-task selection. Raffle
   scalar, role, and task-gate edits are committed atomically.
+- Org Settings includes default raffle channels per connected Discord server:
+  raffle post, winners, and proof. The bot `/config channels` command exposes
+  the same defaults, and Discord/web raffle creation should use them as
+  prefilled defaults.
 - Member profile IA is split deliberately:
   - `/me/raffles` is the raffle-entry panel with live raffle cards,
     `EntryPanel` checklists, and focused `/me/raffles?raffle=N` task/entry

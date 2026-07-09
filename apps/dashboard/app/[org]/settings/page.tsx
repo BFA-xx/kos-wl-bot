@@ -4,6 +4,7 @@ import { PageTitle, Card, SectionTitle } from "@/components/ui";
 import { BrandingForm } from "@/components/BrandingForm";
 import { ServersManager } from "@/components/ServersManager";
 import { RoleWeightsManager } from "@/components/RoleWeightsManager";
+import { RaffleChannelDefaults } from "@/components/RaffleChannelDefaults";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -44,6 +45,11 @@ export default async function SettingsPage({
         <Card>
           <SectionTitle>Discord servers</SectionTitle>
           <ServersManager />
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <SectionTitle>Default raffle channels</SectionTitle>
+          <RaffleChannelDefaults />
         </Card>
 
         <Card className="lg:col-span-2">

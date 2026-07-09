@@ -41,7 +41,13 @@ export const configCommand: Command = {
     .addSubcommand((s) =>
       s
         .setName("channels")
-        .setDescription("Set default announce / proof channels")
+        .setDescription("Set default raffle / winner / proof channels")
+        .addChannelOption((o) =>
+          o
+            .setName("raffle")
+            .setDescription("Default channel for new raffle posts")
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
+        )
         .addChannelOption((o) =>
           o
             .setName("announce")
@@ -145,15 +151,17 @@ async function listManagers(interaction: ChatInputCommandInteraction, guildId: s
 }
 
 async function setChannels(interaction: ChatInputCommandInteraction, guildId: string) {
+  const raffle = interaction.options.getChannel("raffle");
   const announce = interaction.options.getChannel("announce");
   const proof = interaction.options.getChannel("proof");
   const points = interaction.options.getChannel("points");
-  if (!announce && !proof && !points) {
-    return interaction.reply({ content: "Provide an announce, proof, and/or points channel.", flags: MessageFlags.Ephemeral });
+  if (!raffle && !announce && !proof && !points) {
+    return interaction.reply({ content: "Provide a raffle, announce, proof, and/or points channel.", flags: MessageFlags.Ephemeral });
   }
   await prisma.guild.update({
     where: { id: guildId },
     data: {
+      ...(raffle ? { defaultRaffleChannelId: raffle.id } : {}),
       ...(announce ? { defaultAnnounceChannelId: announce.id } : {}),
       ...(proof ? { defaultProofChannelId: proof.id } : {}),
       ...(points ? { defaultPointsChannelId: points.id } : {}),
@@ -176,6 +184,11 @@ async function showConfig(interaction: ChatInputCommandInteraction, guildId: str
         value: guild.managerRoleIds.length
           ? guild.managerRoleIds.map((r) => `<@&${r}>`).join(", ")
           : "Admins / Manage Server only",
+      },
+      {
+        name: "Default Raffle Channel",
+        value: guild.defaultRaffleChannelId ? `<#${guild.defaultRaffleChannelId}>` : "—",
+        inline: true,
       },
       {
         name: "Default Announce Channel",

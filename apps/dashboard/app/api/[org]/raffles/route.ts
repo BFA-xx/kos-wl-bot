@@ -81,13 +81,37 @@ export async function POST(
         { status: 403 },
       );
     }
-    const channelId = String(b.channelId ?? "").trim();
+    const guildDefaults = await prisma.guild.findUnique({
+      where: { id: guildId },
+      select: {
+        defaultRaffleChannelId: true,
+        defaultAnnounceChannelId: true,
+        defaultProofChannelId: true,
+      },
+    });
+    const requestedChannelId =
+      typeof b.channelId === "string" ? b.channelId.trim() : "";
+    const channelId =
+      requestedChannelId || guildDefaults?.defaultRaffleChannelId || "";
     if (!/^\d{5,25}$/.test(channelId)) {
       return NextResponse.json(
-        { error: "Pick a valid channel to post in." },
+        {
+          error:
+            "Pick a valid raffle post channel, or configure one in Settings.",
+        },
         { status: 400 },
       );
     }
+    const inScope = (id: unknown) =>
+      typeof id === "string" && /^\d{5,25}$/.test(id) ? id : null;
+    const announceChannelId =
+      "announceChannelId" in b
+        ? inScope(b.announceChannelId)
+        : guildDefaults?.defaultAnnounceChannelId ?? null;
+    const proofChannelId =
+      "proofChannelId" in b
+        ? inScope(b.proofChannelId)
+        : guildDefaults?.defaultProofChannelId ?? null;
     const projectName = String(b.projectName ?? "").trim();
     const title = String(b.title ?? "").trim();
     const spots = Number(b.spots);
@@ -139,9 +163,6 @@ export async function POST(
         ...(t.url && /^https?:\/\//i.test(t.url) ? { url: String(t.url) } : {}),
       }));
 
-    const inScope = (id: unknown) =>
-      typeof id === "string" && /^\d{5,25}$/.test(id) ? id : null;
-
     // Verification tasks (Task Engine) — must belong to this org.
     const taskIds: string[] = Array.isArray(b.verificationTaskIds)
       ? b.verificationTaskIds
@@ -159,8 +180,8 @@ export async function POST(
       data: {
         guildId,
         channelId,
-        announceChannelId: inScope(b.announceChannelId),
-        proofChannelId: inScope(b.proofChannelId),
+        announceChannelId,
+        proofChannelId,
         requirements: tasks.length ? { tasks } : undefined,
         projectName,
         title,

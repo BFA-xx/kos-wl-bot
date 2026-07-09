@@ -25,6 +25,11 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
     channels: Named[];
     roles: Named[];
     hasBotToken: boolean;
+    defaults?: {
+      raffleChannelId: string | null;
+      announceChannelId: string | null;
+      proofChannelId: string | null;
+    };
   } | null>(null);
 
   const [projectName, setProjectName] = useState("");
@@ -83,8 +88,15 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
     if (!guildId) return;
     setMeta(null);
     setChannelId("");
+    setAnnounceChannelId("");
+    setProofChannelId("");
     setRoleIds([]);
-    fetcher(`/api/${slug}/guilds/${guildId}/meta`).then(setMeta);
+    fetcher(`/api/${slug}/guilds/${guildId}/meta`).then((d) => {
+      setMeta(d);
+      setChannelId(d.defaults?.raffleChannelId ?? "");
+      setAnnounceChannelId(d.defaults?.announceChannelId ?? "");
+      setProofChannelId(d.defaults?.proofChannelId ?? "");
+    });
   }, [slug, guildId]);
 
   // Lock the page behind the modal so only the dialog scrolls.
@@ -249,7 +261,7 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
                   required
                 />
               </Field>
-              <Field label="Channel">
+              <Field label="Raffle post channel">
                 {meta?.hasBotToken ? (
                   <select
                     className="kos-input"
@@ -273,6 +285,11 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
                     required
                   />
                 )}
+                {meta?.defaults?.raffleChannelId ? (
+                  <p className="mt-1 text-[11px] text-kos-muted/70">
+                    Prefilled from Settings. You can change it for this raffle.
+                  </p>
+                ) : null}
               </Field>
             </div>
 

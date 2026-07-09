@@ -628,6 +628,47 @@ Verification:
 No database migration is required; this is a dashboard UI/API routing update
 plus a Discord interaction/rendering fix.
 
+### Default raffle channels — complete locally
+
+- Added `Guild.defaultRaffleChannelId` with migration
+  `20260709090000_default_raffle_channel`.
+- Org Settings now includes a "Default raffle channels" card per connected
+  Discord server:
+  - raffle post channel;
+  - winners announcement channel;
+  - proof delivery channel.
+- Settings saves through `PATCH /api/:org/guilds/:guildId/defaults`, gated by
+  `settings:edit`.
+- `/api/:org/guilds` and `/api/:org/guilds/:guildId/meta` now expose channel
+  defaults for the Settings card and raffle builder.
+- The dashboard New Raffle modal now prefills the selected server's default
+  raffle/winner/proof channels, but hosts can still override all three before
+  publishing.
+- Dashboard raffle creation falls back to the configured default raffle post
+  channel when no channel is provided; if neither exists, it returns a clear
+  "configure one in Settings" error.
+- Discord `/config channels` now accepts a `raffle` channel option and shows the
+  configured default raffle channel in `/config show`.
+- Discord `/raffle create` now starts from the configured default raffle post
+  channel when present, falling back to the current Discord channel otherwise.
+
+Verification:
+
+- `corepack pnpm --filter @kos/db generate`
+- `corepack pnpm --filter @kos/db build`
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `corepack pnpm --filter @kos/dashboard build`
+- `corepack pnpm --filter @kos/bot typecheck`
+- `corepack pnpm --filter @kos/bot build`
+- `git diff --check`
+
+Deployment still required:
+
+- Apply the new production DB migration with
+  `corepack pnpm --filter @kos/db migrate:deploy`.
+- Deploy/push the dashboard and redeploy the EC2 bot so `/config channels` and
+  Discord raffle creation use the new default.
+
 ## Assumptions
 
 - `/Users/adebayodaniel/KOS RAF` is the intended repository because it is the
