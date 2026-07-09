@@ -28,9 +28,43 @@ export function OrgShell({
     const t = q.trim();
     if (!t) return;
     const n = t.replace(/^#/, "");
-    router.push(
-      /^\d+$/.test(n) ? `/${ctx.slug}/raffles/${n}` : `/${ctx.slug}/raffles`,
-    );
+
+    const jumps: Record<string, string> = {
+      dashboard: "dashboard",
+      home: "dashboard",
+      campaign: "campaigns",
+      campaigns: "campaigns",
+      raffle: "raffles",
+      raffles: "raffles",
+      task: "tasks",
+      tasks: "tasks",
+      participant: "participants",
+      participants: "participants",
+      point: "points",
+      points: "points",
+      reward: "rewards",
+      rewards: "rewards",
+      wallet: "wallets",
+      wallets: "wallets",
+      analytic: "analytics",
+      analytics: "analytics",
+      report: "reports",
+      reports: "reports",
+      setting: "settings",
+      settings: "settings",
+      team: "team",
+      support: "support",
+    };
+    const jump = jumps[t.toLowerCase()];
+    if (jump) {
+      router.push(`/${ctx.slug}/${jump}`);
+    } else {
+      router.push(
+        /^\d+$/.test(n)
+          ? `/${ctx.slug}/raffles/${n}`
+          : `/${ctx.slug}/raffles?q=${encodeURIComponent(t)}`,
+      );
+    }
     setOpen(false);
   }
 

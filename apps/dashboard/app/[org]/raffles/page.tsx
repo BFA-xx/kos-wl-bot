@@ -2,8 +2,8 @@
 
 import useSWR from "swr";
 import Link from "next/link";
-import { useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   PageTitle,
   StatusBadge,
@@ -37,12 +37,29 @@ const FILTERS = [
 ];
 
 export default function RafflesPage() {
+  return (
+    <Suspense fallback={<Empty>Loading…</Empty>}>
+      <RafflesInner />
+    </Suspense>
+  );
+}
+
+function RafflesInner() {
   const { org } = useParams<{ org: string }>();
+  const searchParams = useSearchParams();
+  const q = searchParams.get("q")?.trim() ?? "";
   const [status, setStatus] = useState("");
   const [showNew, setShowNew] = useState(false);
   const canCreate = useCan(PERMISSIONS.RAFFLE_CREATE);
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (q) params.set("q", q);
+    const qs = params.toString();
+    return `/api/${org}/raffles${qs ? `?${qs}` : ""}`;
+  }, [org, q, status]);
   const { data } = useSWR<{ raffles: Raffle[] }>(
-    `/api/${org}/raffles${status ? `?status=${status}` : ""}`,
+    apiUrl,
     fetcher,
     { refreshInterval: 8000 },
   );
@@ -53,7 +70,11 @@ export default function RafflesPage() {
       {showNew ? <NewRaffleModal onClose={() => setShowNew(false)} /> : null}
       <PageTitle
         title="Raffles"
-        subtitle="Every whitelist raffle across your connected servers."
+        subtitle={
+          q
+            ? `Search results for “${q}” across your connected servers.`
+            : "Every whitelist raffle across your connected servers."
+        }
         action={
           <>
             <Segmented
@@ -61,6 +82,11 @@ export default function RafflesPage() {
               value={status}
               onChange={setStatus}
             />
+            {q ? (
+              <Link href={`/${org}/raffles`} className="kos-btn">
+                Clear search
+              </Link>
+            ) : null}
             {canCreate ? (
               <button
                 className="kos-btn-primary"
@@ -76,7 +102,11 @@ export default function RafflesPage() {
       {!data ? (
         <Empty>Loading…</Empty>
       ) : raffles.length === 0 ? (
-        <Empty>No raffles yet. Run one from Discord with /raffle.</Empty>
+        <Empty>
+          {q
+            ? "No raffles matched that search."
+            : "No raffles yet. Run one from Discord with /raffle."}
+        </Empty>
       ) : (
         <TableShell>
           <table className="kos-table">

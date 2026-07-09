@@ -82,10 +82,15 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
     value: `**${raffle.spots}**`,
     inline: true,
   });
-  // The live post is never edited (to keep the @everyone ping clean), so a
-  // running entry count can't tick here — show the final tally once it ends.
-  // Live entries are on the dashboard / `/raffle stats`.
-  if (!raffle.hideEntries && raffle.status === RaffleStatus.ENDED) {
+  // Show entries on live/ended posts. We do not refresh on a timer, but entry
+  // button handlers perform a targeted refresh after successful enter/leave so
+  // members get immediate Discord-side confirmation without noisy countdown
+  // edits.
+  if (
+    !raffle.hideEntries &&
+    (raffle.status === RaffleStatus.LIVE ||
+      raffle.status === RaffleStatus.ENDED)
+  ) {
     embed.addFields(
       { name: "Entries", value: `**${raffle.entryCount}**`, inline: true },
       {

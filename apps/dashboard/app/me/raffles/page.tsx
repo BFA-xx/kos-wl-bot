@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import useSWR from "swr";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { EntryPanel } from "@/components/EntryPanel";
+import { MemberTasksWorkspace } from "@/components/MemberTasksWorkspace";
 import { Empty, PageTitle, SectionTitle, StatCard } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
 
@@ -28,21 +31,48 @@ interface RafflesData {
 }
 
 export default function MeRafflesPage() {
+  return (
+    <Suspense fallback={<Empty>Loading raffles…</Empty>}>
+      <MeRafflesInner />
+    </Suspense>
+  );
+}
+
+function MeRafflesInner() {
+  const params = useSearchParams();
+  const focusedRaffleId = params.get("raffle");
   const { data } = useSWR<RafflesData>("/api/me/tasks", fetcher, {
     refreshInterval: 15000,
   });
   const raffles = data?.raffles ?? [];
   const entered = raffles.filter((r) => r.entered).length;
 
+  if (focusedRaffleId) {
+    return (
+      <>
+        <PageTitle
+          title="Raffle entry"
+          subtitle="Open each raffle step, verify it, then enter from this same tab."
+          action={
+            <Link href="/me/raffles" className="kos-btn">
+              All raffles
+            </Link>
+          }
+        />
+        <MemberTasksWorkspace embedded />
+      </>
+    );
+  }
+
   return (
     <>
       <PageTitle
         title="Raffles"
-        subtitle="Browse live raffles and enter from one clean panel. Complete earning tasks from Points when a raffle requires them."
+        subtitle="Browse live raffles, complete raffle-specific steps, and enter from one clean panel."
         action={
           <>
-            <Link href="/me/points" className="kos-btn-primary">
-              Complete tasks
+            <Link href="/me/points" className="kos-btn">
+              Earn points
             </Link>
             <Link href="/me/rewards" className="kos-btn">
               Rewards

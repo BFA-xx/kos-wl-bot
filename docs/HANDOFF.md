@@ -465,19 +465,21 @@ Verification:
 - `/api/me/tasks` now returns two explicit member lanes:
   - `taskGroups`: active standalone Task Engine tasks grouped by community,
     with each member's completion/click state and current org point balance;
-  - `raffles`: live raffle task workspaces with the existing entry panel.
-- `/me/tasks` now leads with "Standalone earning tasks" so members can
+  - `raffles`: live raffle task workspaces for the Raffles tab/focused
+    compatibility flows.
+- `/me/points` now leads with "Standalone earning tasks" so members can
   complete org-created tasks and earn points even when those tasks are not
   attached to a raffle.
-- Raffle task workspaces remain available below the standalone earning tasks,
-  preserving web raffle entry behavior.
+- Raffle task workspaces belong in `/me/raffles?raffle=N` (and the hidden
+  `/me/tasks` compatibility route), preserving web raffle entry behavior
+  without mixing raffle gates into the Points tab.
 - Web X/link/visit tasks now use the same Open → Verify flow as legacy raffle
   social steps: members must open the task link before the server accepts
   verification. Already-verified tasks remain backward-compatible.
-- Org task-builder copy now explains that active tasks appear immediately on
-  the member profile Tasks page, and should be attached to raffles only when
-  they also gate entry.
-- `/me/points` copy now points members to Tasks as the earning surface.
+- Org task-builder copy now explains that active tasks appear immediately in
+  the member points/tasks workspace, and should be attached to raffles only
+  when they also gate entry.
+- `/me/points` is the member earning surface for standalone point tasks.
 - Discord already exposes standalone org tasks through `/tasks list` and
   `/tasks verify`; `/points panel` copy now says that explicitly.
 
@@ -535,17 +537,17 @@ Verification:
 
 - Member navigation now exposes a dedicated `/me/raffles` panel and removes the
   visible Tasks tab.
-- `/me/raffles` is intentionally entry-focused: live raffle cards, stats, and
-  `EntryPanel` controls only. Task completion is linked back to Points when a
-  raffle gate needs it.
-- `/me/points` now owns earning: it keeps balances/recent activity and embeds
-  the reusable standalone + raffle task workspace below the points summary.
+- `/me/raffles` is intentionally entry-focused: live raffle cards, stats,
+  `EntryPanel` controls, and focused `/me/raffles?raffle=N` task/entry flows
+  when a raffle gate needs task verification.
+- `/me/points` owns earning: it keeps balances/recent activity and embeds the
+  reusable standalone task workspace below the points summary.
 - `/me/tasks` remains available as a hidden compatibility route for old links,
-  but new UI links and gate "Fix it" links point to `/me/points` or
-  `/me/points?raffle=N`.
+  but new UI links and gate "Fix it" links point to `/me/points` for earning
+  tasks or `/me/raffles?raffle=N` for raffle-specific gates.
 - Auth middleware now preserves the full path and query in `next`, so
-  unauthenticated focus links such as `/me/points?raffle=N` return to the same
-  focused view after login.
+  unauthenticated focus links such as `/me/raffles?raffle=N` return to the
+  same focused view after login.
 - Profile and Rewards CTAs now route users to `/me/raffles` for entry and
   `/me/points` for earning.
 - Org task-builder and raffle-builder copy now says member tasks appear in the
@@ -574,6 +576,49 @@ Verification:
   and `git diff --check`.
 
 No database migration is required; this is a dashboard/bot-copy IA cleanup.
+
+### Dashboard search, mobile member sidebar, raffle/points IA correction, and Discord entry feedback — complete locally
+
+- Org dashboard search now performs real work instead of silently falling back
+  to the unfiltered raffle list:
+  - section keywords such as `dashboard`, `raffles`, `points`, `wallets`,
+    `settings`, and `team` jump directly to that org section;
+  - `#123` / `123` still opens a raffle detail page;
+  - all other text searches the org raffle API by project name, title,
+    description, or exact numeric ID.
+- `/:org/raffles` now reads the `q` query string, shows search-result copy,
+  calls `/api/:org/raffles?q=...`, and exposes a clear-search action.
+- Member mobile navigation now opens a drawer/sidebar instead of relying on the
+  horizontal tab rail. The drawer includes the member tabs plus a prominent
+  `Team dashboards` switcher link so mobile users can get back to org
+  dashboards quickly.
+- `/me/points` now shows standalone point-earning tasks only. It no longer
+  renders live raffle task workspaces inside the Points tab.
+- Raffle-specific task gates now route to `/me/raffles?raffle=N`, where members
+  can open/verify raffle steps and enter from the same Raffles tab.
+- `/me/tasks` remains a hidden compatibility route for older deep links and can
+  still render the reusable standalone + raffle task workspace.
+- Org dashboard logos now prefer the configured org logo, then fall back to the
+  connected Discord guild icon for both the active dashboard and the org
+  switcher list, with initials as the final fallback.
+- Live Discord raffle embeds now show entries while the raffle is live when
+  entries are not hidden.
+- Successful Discord enter/leave actions now trigger a targeted refresh of that
+  raffle's Discord post so the live entry count catches up immediately.
+- Discord task verification feedback now names the exact raffle/project
+  (`Project · Title (#id)`) and retries entry for that same raffle, avoiding
+  generic feedback when multiple raffles are live in the server.
+
+Verification:
+
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `corepack pnpm --filter @kos/dashboard build`
+- `corepack pnpm --filter @kos/bot typecheck`
+- `corepack pnpm --filter @kos/bot build`
+- `git diff --check`
+
+No database migration is required; this is a dashboard UI/API routing update
+plus a Discord interaction/rendering fix.
 
 ## Assumptions
 

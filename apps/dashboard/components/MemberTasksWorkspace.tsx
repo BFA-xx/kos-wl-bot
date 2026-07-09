@@ -84,17 +84,37 @@ const STATUS_CHIP: Record<string, { label: string; cls: string }> = {
   },
 };
 
-export function MemberTasksWorkspace({ embedded = false }: { embedded?: boolean }) {
+export function MemberTasksWorkspace({
+  embedded = false,
+  showRaffleTasks = true,
+  allowRaffleFocus = true,
+}: {
+  embedded?: boolean;
+  showRaffleTasks?: boolean;
+  allowRaffleFocus?: boolean;
+}) {
   return (
     <Suspense fallback={<Empty>Loading…</Empty>}>
-      <TasksInner embedded={embedded} />
+      <TasksInner
+        embedded={embedded}
+        showRaffleTasks={showRaffleTasks}
+        allowRaffleFocus={allowRaffleFocus}
+      />
     </Suspense>
   );
 }
 
-function TasksInner({ embedded = false }: { embedded?: boolean }) {
+function TasksInner({
+  embedded = false,
+  showRaffleTasks,
+  allowRaffleFocus,
+}: {
+  embedded?: boolean;
+  showRaffleTasks: boolean;
+  allowRaffleFocus: boolean;
+}) {
   const params = useSearchParams();
-  const raffleId = params.get("raffle");
+  const raffleId = allowRaffleFocus ? params.get("raffle") : null;
   const { data, mutate } = useSWR<Data>(
     raffleId ? `/api/me/tasks?raffle=${raffleId}` : "/api/me/tasks",
     fetcher,
@@ -151,6 +171,7 @@ function TasksInner({ embedded = false }: { embedded?: boolean }) {
         busy={busy}
         notes={notes}
         embedded={embedded}
+        showRaffleTasks={showRaffleTasks}
         onComplete={complete}
         onOpen={openTask}
       />
@@ -259,6 +280,7 @@ function TasksHub({
   busy,
   notes,
   embedded,
+  showRaffleTasks,
   onComplete,
   onOpen,
 }: {
@@ -266,6 +288,7 @@ function TasksHub({
   busy: string | null;
   notes: Record<string, string>;
   embedded: boolean;
+  showRaffleTasks: boolean;
   onComplete: (id: string, raffleIdForRefresh?: number) => void;
   onOpen: (task: TaskRow, raffleIdForRefresh?: number) => void;
 }) {
@@ -286,7 +309,8 @@ function TasksHub({
   const taskGroups = data?.taskGroups ?? [];
   const raffles = data?.raffles ?? [];
   const standaloneTasks = taskGroups.flatMap((group) => group.tasks);
-  const hasXTasks = [...standaloneTasks, ...raffles.flatMap((r) => r.tasks)].some((t) =>
+  const raffleTasks = showRaffleTasks ? raffles.flatMap((r) => r.tasks) : [];
+  const hasXTasks = [...standaloneTasks, ...raffleTasks].some((t) =>
     t.type.startsWith("X_"),
   );
   const standaloneSummary = taskSummary(standaloneTasks);
@@ -325,8 +349,8 @@ function TasksHub({
               value={`${standaloneSummary.verified}/${standaloneSummary.verifiable}`}
             />
             <StatCard
-              label="Live raffle workspaces"
-              value={raffles.length}
+              label={showRaffleTasks ? "Live raffle workspaces" : "Communities"}
+              value={showRaffleTasks ? raffles.length : taskGroups.length}
             />
           </div>
 
@@ -348,7 +372,13 @@ function TasksHub({
             </Card>
           ) : null}
 
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_28rem]">
+          <div
+            className={
+              showRaffleTasks
+                ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_28rem]"
+                : "grid gap-6"
+            }
+          >
             <section>
               <SectionTitle>Standalone earning tasks</SectionTitle>
               {taskGroups.length === 0 ? (
@@ -372,28 +402,30 @@ function TasksHub({
               )}
             </section>
 
-            <section>
-              <SectionTitle>Raffle task workspaces</SectionTitle>
-              {raffles.length === 0 ? (
-                <Empty>
-                  No active raffles right now. When communities go live, their
-                  raffle entry tasks will show here.
-                </Empty>
-              ) : (
-                <div className="space-y-4">
-                  {raffles.map((raffle) => (
-                    <RaffleTaskCard
-                      key={raffle.id}
-                      raffle={raffle}
-                      busy={busy}
-                      notes={notes}
-                      onComplete={onComplete}
-                      onOpen={onOpen}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
+            {showRaffleTasks ? (
+              <section>
+                <SectionTitle>Raffle task workspaces</SectionTitle>
+                {raffles.length === 0 ? (
+                  <Empty>
+                    No active raffles right now. When communities go live, their
+                    raffle entry tasks will show here.
+                  </Empty>
+                ) : (
+                  <div className="space-y-4">
+                    {raffles.map((raffle) => (
+                      <RaffleTaskCard
+                        key={raffle.id}
+                        raffle={raffle}
+                        busy={busy}
+                        notes={notes}
+                        onComplete={onComplete}
+                        onOpen={onOpen}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : null}
           </div>
         </>
       )}
@@ -546,7 +578,7 @@ function RaffleTaskCard({
               </div>
             </div>
             <Link
-              href={`/me/points?raffle=${raffle.id}`}
+              href={`/me/raffles?raffle=${raffle.id}`}
               className="kos-btn text-center text-xs"
             >
               Focus view

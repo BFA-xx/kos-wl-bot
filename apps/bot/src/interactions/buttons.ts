@@ -25,6 +25,7 @@ import { chainLabel } from "../utils/wallets.js";
 import { KOS } from "../theme.js";
 import { logger } from "../logger.js";
 import { verifyTaskForMember } from "../services/pointsService.js";
+import { refreshRaffleMessage } from "../services/raffleService.js";
 
 /** Shared per-user enter/leave rate limiter (anti-spam). */
 export const entryLimiter = new RateLimiter(
@@ -97,9 +98,13 @@ async function editEnterOutcome(
   result: EnterOutcome,
   prefix = "",
 ) {
+  const raffleLabel = await raffleContextLabel(raffleId);
   switch (result.status) {
     case "entered": {
-      let msg = `${prefix}${KOS.emoji.check} Successfully entered the raffle.`;
+      void refreshRaffleMessage(interaction.client, raffleId).catch((err) =>
+        logger.warn({ err, raffleId }, "refresh after entry failed"),
+      );
+      let msg = `${prefix}${KOS.emoji.check} Entered ${raffleLabel}. You're in — good luck!`;
       if (result.missingWalletChains.length > 0) {
         const chains = result.missingWalletChains.map(chainLabel).join(", ");
         msg +=
@@ -109,17 +114,17 @@ async function editEnterOutcome(
       return interaction.editReply(msg);
     }
     case "duplicate":
-      return interaction.editReply(`${prefix}You are already participating.`);
+      return interaction.editReply(`${prefix}You're already entered in ${raffleLabel}.`);
     case "ineligible":
       return interaction.editReply(
-        `${prefix}${KOS.emoji.cross} You do not meet the requirements for this raffle.\n${result.reasons
+        `${prefix}${KOS.emoji.cross} You do not meet the requirements for ${raffleLabel}.\n${result.reasons
           .map((r) => `• ${r}`)
           .join("\n")}`,
       );
     case "no_wallet": {
       const chains = result.chains.map(chainLabel).join(" / ");
       return interaction.editReply(
-        `${prefix}${KOS.emoji.cross} This raffle requires a wallet to enter. Add your **${chains}** ` +
+        `${prefix}${KOS.emoji.cross} ${raffleLabel} requires a wallet to enter. Add your **${chains}** ` +
           `wallet with **/wallet register**, then click **Enter Giveaway** again.`,
       );
     }
@@ -127,16 +132,31 @@ async function editEnterOutcome(
       const list = result.missing.map((t) => `• ${t.label}`).join("\n");
       return interaction.editReply({
         content:
-          `${prefix}${KOS.emoji.cross} You still need to complete these tasks:\n${list}` +
+          `${prefix}${KOS.emoji.cross} For ${raffleLabel}, complete these tasks:\n${list}` +
           "\n\nOpen each task link, press **Verify**, then I’ll try to enter you again.",
         components: buildMissingTaskComponents(result.missing, raffleId),
       });
     }
     case "closed":
-      return interaction.editReply(`${prefix}This raffle is not currently open for entries.`);
+      return interaction.editReply(`${prefix}${raffleLabel} is not currently open for entries.`);
     default:
       return interaction.editReply(`${prefix}Something went wrong. Please try again.`);
   }
+}
+
+async function raffleContextLabel(raffleId: number): Promise<string> {
+  const raffle = await prisma.raffle
+    .findUnique({
+      where: { id: raffleId },
+      select: { projectName: true, title: true },
+    })
+    .catch(() => null);
+  if (!raffle) return `raffle #${raffleId}`;
+  const title =
+    raffle.title && raffle.title !== raffle.projectName
+      ? ` · ${raffle.title}`
+      : "";
+  return `**${raffle.projectName}${title}** (#${raffleId})`;
 }
 
 function buildMissingTaskComponents(
@@ -195,7 +215,10 @@ async function handleVerifyRaffleTask(
 
   const result = await verifyTaskForMember({ task: link.task, member });
   if (result.status !== "VERIFIED") {
-    return interaction.editReply(`${KOS.emoji.cross} ${result.reason}`);
+    const raffleLabel = await raffleContextLabel(raffleId);
+    return interaction.editReply(
+      `${KOS.emoji.cross} Could not verify **${link.task.title}** for ${raffleLabel}: ${result.reason}`,
+    );
   }
 
   const entered = await enterRaffle(raffleId, member);
@@ -249,12 +272,21 @@ async function handleLeave(interaction: ButtonInteraction, raffleId: number) {
 
   const result = await leaveRaffle(raffleId, member);
   switch (result.status) {
-    case "left":
-      return interaction.editReply("You have left the raffle.");
+    case "left": {
+      void refreshRaffleMessage(interaction.client, raffleId).catch((err) =>
+        logger.warn({ err, raffleId }, "refresh after leave failed"),
+      );
+      const raffleLabel = await raffleContextLabel(raffleId);
+      return interaction.editReply(`You have left ${raffleLabel}.`);
+    }
     case "not_entered":
-      return interaction.editReply("You are not entered in this raffle.");
+      return interaction.editReply(
+        `You are not entered in ${await raffleContextLabel(raffleId)}.`,
+      );
     case "closed":
-      return interaction.editReply("This raffle is closed — entries are locked.");
+      return interaction.editReply(
+        `${await raffleContextLabel(raffleId)} is closed — entries are locked.`,
+      );
     default:
       return interaction.editReply("Something went wrong. Please try again.");
   }

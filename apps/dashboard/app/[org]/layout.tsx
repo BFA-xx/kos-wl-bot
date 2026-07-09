@@ -50,6 +50,32 @@ export default async function OrgLayout({
   }
 
   const orgs = await getUserOrgs(user.id);
+  const missingLogoOrgIds = orgs.filter((o) => !o.logoUrl).map((o) => o.id);
+  const fallbackLogoByOrgId = new Map<string, string>();
+  if (missingLogoOrgIds.length) {
+    const connections = await prisma.guildConnection.findMany({
+      where: { organizationId: { in: missingLogoOrgIds } },
+      select: { organizationId: true, guildId: true, isPrimary: true },
+      orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+    });
+    const guilds = await prisma.guild.findMany({
+      where: {
+        id: { in: connections.map((c) => c.guildId) },
+        iconUrl: { not: null },
+      },
+      select: { id: true, iconUrl: true },
+    });
+    const guildIconById = new Map<string, string>();
+    for (const guild of guilds) {
+      if (guild.iconUrl) guildIconById.set(guild.id, guild.iconUrl);
+    }
+    for (const connection of connections) {
+      const iconUrl = guildIconById.get(connection.guildId);
+      if (iconUrl && !fallbackLogoByOrgId.has(connection.organizationId)) {
+        fallbackLogoByOrgId.set(connection.organizationId, iconUrl);
+      }
+    }
+  }
 
   // Active announcements: platform-wide (null) or targeted at this org.
   const announcements = await prisma.announcement.findMany({
@@ -81,7 +107,11 @@ export default async function OrgLayout({
       name: user.globalName ?? user.username,
       avatarUrl: user.avatarUrl,
     },
-    orgs: orgs.map((o) => ({ slug: o.slug, name: o.name, logoUrl: o.logoUrl })),
+    orgs: orgs.map((o) => ({
+      slug: o.slug,
+      name: o.name,
+      logoUrl: o.logoUrl ?? fallbackLogoByOrgId.get(o.id) ?? null,
+    })),
   };
 
   return (

@@ -145,7 +145,11 @@ export default function MePointsPage() {
           </div>
 
           <div className="mt-8">
-            <MemberTasksWorkspace embedded />
+            <MemberTasksWorkspace
+              embedded
+              showRaffleTasks={false}
+              allowRaffleFocus={false}
+            />
           </div>
         </>
       )}

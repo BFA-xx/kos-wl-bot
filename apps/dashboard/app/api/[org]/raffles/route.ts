@@ -7,7 +7,7 @@ import {
   logAudit,
 } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
-import type { RaffleStatus, WalletChain } from "@prisma/client";
+import type { Prisma, RaffleStatus, WalletChain } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,10 +21,31 @@ export async function GET(
   try {
     const { guildIds } = await requireOrgAccess(params.org);
     const status = req.nextUrl.searchParams.get("status");
+    const q = req.nextUrl.searchParams.get("q")?.trim();
+    const parsedId =
+      q && /^#?\d+$/.test(q) ? Number(q.replace(/^#/, "")) : null;
+    const numericId =
+      parsedId &&
+      Number.isSafeInteger(parsedId) &&
+      parsedId > 0 &&
+      parsedId <= 2147483647
+        ? parsedId
+        : null;
+    const search: Prisma.RaffleWhereInput | undefined = q
+      ? {
+          OR: [
+            ...(numericId ? [{ id: numericId }] : []),
+            { projectName: { contains: q, mode: "insensitive" } },
+            { title: { contains: q, mode: "insensitive" } },
+            { description: { contains: q, mode: "insensitive" } },
+          ],
+        }
+      : undefined;
     const raffles = await prisma.raffle.findMany({
       where: {
         ...guildScope(guildIds),
         ...(status ? { status: status as RaffleStatus } : {}),
+        ...(search ?? {}),
       },
       orderBy: { createdAt: "desc" },
       take: 100,

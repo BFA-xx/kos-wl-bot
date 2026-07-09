@@ -83,7 +83,10 @@ Discord and web entry converge on unique `(raffleId, userId)` participants and
 transactional `entryCount` updates. Gates cover blacklist, guild membership,
 ANY/ALL eligible roles, extra roles, account/server age, wallets, and verified
 raffle tasks. Reactions remain Discord-only. The bot can auto-verify same-guild
-Discord tasks inline; the web uses Discord REST with the bot token.
+Discord tasks inline; the web uses Discord REST with the bot token. Live
+Discord raffle posts should refresh after actual enter/leave changes so entry
+counts stay visible, but should not be edited on a timer just to tick
+countdowns.
 
 Draws generate a random 32-byte seed, store its SHA-256 commitment, rank each
 candidate by `HMAC-SHA256(seed, userId)`, and persist the first N. The bot then
@@ -111,11 +114,15 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Both the new-raffle and edit UIs support verification-task selection. Raffle
   scalar, role, and task-gate edits are committed atomically.
 - Member profile IA is split deliberately:
-  - `/me/raffles` is the raffle-entry-only panel with live raffle cards and
-    `EntryPanel` checklists;
-  - `/me/points` is the points/earning panel and embeds the standalone +
-    raffle task workspace;
+  - `/me/raffles` is the raffle-entry panel with live raffle cards,
+    `EntryPanel` checklists, and focused `/me/raffles?raffle=N` task/entry
+    flows for raffle-specific requirements;
+  - `/me/points` is the points/earning panel and embeds standalone point
+    tasks only; raffle-specific tasks should not be shown there;
   - `/me/tasks` remains a hidden compatibility route for old deep links.
+- Member mobile navigation should use the sidebar/drawer, not a cramped
+  horizontal tab rail. The drawer must include a clear jump back to team/org
+  dashboards.
 - Keep member task cards compact and mobile-first: banners should render as
   natural-aspect media strips, not forced side columns or fixed crops; social
   tasks should use the one-CTA flow `Open task` -> `Verify` -> `Verified`.
@@ -132,6 +139,9 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   checks. They persist `SOCIAL_TASK_CLICK` / `SOCIAL_TASK_VERIFY` guild `Log`
   rows with a stable metadata `taskKey`; both web entry and bot entry check for
   verification before allowing entry.
+- Discord raffle task verification feedback should name the exact raffle/project
+  and retry entry for that same raffle, so members are never pushed into a
+  generic multi-raffle task context.
 - Org raffle detail pages should render entry requirements as user-friendly
   cards, not raw `requirements` JSON.
 - Community, raffle, and notification features shipped in S2.5.
@@ -170,6 +180,9 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Use the existing AES-256-GCM format for secrets and wallets.
 - Preserve tenant isolation: every org API must scope by `organizationId` or
   `ctx.guildIds`; never trust a raw client ID.
+- `/api/me/tasks` returns both standalone `taskGroups` and live raffle
+  workspaces. Route standalone earning tasks to `/me/points`; route
+  raffle-specific entry tasks to `/me/raffles?raffle=N`.
 - Preserve the Discord/web parity rule for member-facing functionality.
 - Keep bot-bound dashboard actions database-mediated; Vercel cannot call EC2
   localhost.
