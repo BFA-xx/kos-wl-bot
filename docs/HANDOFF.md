@@ -711,7 +711,7 @@ Verification:
 
 No database migration is required; this uses existing `Log.metadata`.
 
-### Discord raffle-enter confirmation hardening — complete locally
+### Discord raffle-enter confirmation hardening — committed/pushed/deployed
 
 - Discord raffle entry success replies now explicitly say
   `Raffle entered` and include a disabled per-user Discord button labeled
@@ -735,6 +735,14 @@ Verification:
 - `corepack pnpm --filter @kos/bot build`
 - `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
 - `git diff --check`
+- Code committed as `0102cc9` (`Clarify Discord raffle entry confirmation`)
+  and pushed to `origin/main`.
+- EC2 bot deployed via `./scripts/deploy-ec2.sh`; Discord slash command count
+  remained 7, PM2 reported `kos-bot` online, and the local internal health
+  endpoint returned `{"ok":true,"ready":true}`.
+- Vercel is expected to auto-deploy the dashboard API update from the `main`
+  push; no Vercel CLI/API credential is available in this local shell to
+  inspect the deployment record directly.
 
 ## Assumptions
 
