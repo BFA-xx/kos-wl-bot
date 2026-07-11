@@ -55,5 +55,6 @@
 - Wallet verification is format-only; no signature or on-chain ownership check.
 - Paid billing and campaigns are not live. Points, rewards, and weighted draws
   have first production slices and must remain Discord + web parity features.
-- `/c/*` community pages require sign-in under current middleware despite the
-  “public page” product wording.
+- `/c/*` community pages require sign-in. `/r/:id` is the only anonymous raffle
+  surface and must never expose organization controls, entrant identities, or
+  hidden entry counts.

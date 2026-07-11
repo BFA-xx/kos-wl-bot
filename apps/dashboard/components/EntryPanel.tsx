@@ -29,10 +29,12 @@ export function EntryPanel({
   raffleId,
   compact = false,
   taskControlsInline = false,
+  loginHref,
 }: {
   raffleId: number;
   compact?: boolean;
   taskControlsInline?: boolean;
+  loginHref?: string;
 }) {
   const { data, mutate } = useSWR<Status>(
     `/api/me/raffles/${raffleId}`,
@@ -85,10 +87,10 @@ export function EntryPanel({
           Sign in with Discord to enter this raffle.
         </p>
         <a
-          href="/api/auth/discord/login"
+          href={loginHref ?? "/api/auth/discord/login"}
           className="kos-btn-primary mt-3 inline-block"
         >
-          Continue with Discord
+          Login with Discord to join this raffle
         </a>
       </div>
     );

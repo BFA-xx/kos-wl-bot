@@ -784,6 +784,50 @@ Verification:
   the cancelled-raffle failure panel, trimmed task links, and **Repost raffle**
   button are live. No raffle was requeued during verification.
 
+### Public raffle sharing and configuration-only duplication — implemented locally
+
+- Added canonical anonymous SSR raffle pages at `/r/:id`. Middleware explicitly
+  allows this route while `/c/:slug` remains session-gated.
+- Public pages show natural-aspect banners, project/community identity, inferred
+  GTD/FCFS type, status, spots, visible entry count, schedule, live countdown,
+  Discord roles, tasks, rules, winners, and verifiable draw commitment without
+  exposing any organization controls or entrant identities.
+- Signed-out visitors receive a prominent Discord login CTA that returns to the
+  same raffle. Signed-in visitors reuse the existing web gate evaluator and
+  enter/leave APIs, so Discord roles and all current eligibility semantics stay
+  consistent.
+- Added canonical, Open Graph, and Twitter metadata with the banner as the share
+  image. Public links use `https://raffle.koslabs.app/r/:id` by default and can
+  be overridden at build time with `NEXT_PUBLIC_RAFFLE_ORIGIN`.
+- Added accessible Actions menus to live/upcoming dashboard cards, raffle table
+  rows, and raffle details. Copy Share Link uses the Clipboard API, a legacy
+  copy fallback, and a selectable manual-copy field if both fail.
+- Added **Duplicate**, **Duplicate as GTD**, and **Duplicate as FCFS**. Actions
+  open the existing raffle builder with source configuration prefilled and a
+  fresh duration-preserving schedule. Successful creation redirects to the new
+  raffle in edit mode and shows `Raffle duplicated successfully.`
+- Duplication preserves banner/project/external links, description, channels,
+  roles/match mode, raw custom requirements, legacy tasks, reusable task gates,
+  wallet settings, role weighting, visibility, and ping behavior.
+- Duplication explicitly does not copy status, participants, winners, entry
+  count, message ID, proof, draw seeds/commitments, timestamps, join history, or
+  analytics. The new row starts `DRAFT` and uses the existing bot scheduler.
+- Existing community/member links and future result notifications now point to
+  `/r/:id`.
+- No database migration is required; stable existing raffle IDs are canonical.
+
+Verification:
+
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `corepack pnpm --filter @kos/bot typecheck`
+- `corepack pnpm --filter @kos/bot build`
+- `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
+- Anonymous local production-build QA rendered real raffle #57 without a login
+  redirect, confirmed the Discord CTA returns to `/r/57`, and verified canonical,
+  Open Graph, Twitter card, and banner metadata.
+- `git diff --check`
+- Not committed, pushed, or deployed yet.
+
 ## Assumptions
 
 - `/Users/adebayodaniel/KOS RAF` is the intended repository because it is the

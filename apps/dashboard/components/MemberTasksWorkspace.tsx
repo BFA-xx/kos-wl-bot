@@ -504,7 +504,7 @@ function RaffleTaskCard({
 }) {
   const summary = taskSummary(raffle.tasks);
   const publicHref = raffle.org
-    ? `/c/${raffle.org.slug}/raffles/${raffle.id}`
+    ? `/r/${raffle.id}`
     : "#";
 
   return (

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useOrg } from "@/lib/org-context";
+import type { DuplicateVariant } from "@/lib/raffle-share";
 import { ImageDrop } from "./ImageDrop";
 import { IconClose } from "./icons";
 
@@ -15,7 +16,52 @@ interface Named {
   name: string;
 }
 
-export function NewRaffleModal({ onClose }: { onClose: () => void }) {
+export interface DuplicateRaffleRequest {
+  raffleId: number;
+  variant: DuplicateVariant;
+}
+
+interface DuplicateBlueprint {
+  sourceRaffleId: number;
+  guildId: string;
+  channelId: string;
+  announceChannelId: string;
+  proofChannelId: string;
+  projectName: string;
+  title: string;
+  description: string;
+  spots: number;
+  roleMatchMode: string;
+  startAt: string;
+  endAt: string;
+  scheduled: boolean;
+  startPing: string;
+  hideEntries: boolean;
+  collectWallets: boolean;
+  requireWallet: boolean;
+  useRoleWeights: boolean;
+  walletChains: string[];
+  bannerUrl: string;
+  externalUrl: string;
+  tasks: { label: string; url: string }[];
+  roles: { roleId: string; roleName: string }[];
+  verificationTaskIds: string[];
+}
+
+function toLocal(iso: string): string {
+  const date = new Date(iso);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+
+export function NewRaffleModal({
+  onClose,
+  duplicate,
+}: {
+  onClose: () => void;
+  duplicate?: DuplicateRaffleRequest;
+}) {
   const { slug } = useOrg();
   const router = useRouter();
 
@@ -52,6 +98,7 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
   const [useRoleWeights, setUseRoleWeights] = useState(false);
   const [chains, setChains] = useState<string[]>(["ETHEREUM"]);
   const [bannerUrl, setBannerUrl] = useState("");
+  const [externalUrl, setExternalUrl] = useState("");
   const [roleWeights, setRoleWeights] = useState<
     { guildId: string; roleId: string }[]
   >([]);
@@ -60,6 +107,9 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
   >([]);
   const [verificationTaskIds, setVerificationTaskIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [duplicateBlueprint, setDuplicateBlueprint] =
+    useState<DuplicateBlueprint | null>(null);
+  const [loadingDuplicate, setLoadingDuplicate] = useState(Boolean(duplicate));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -85,19 +135,63 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
   }, [slug]);
 
   useEffect(() => {
+    if (!duplicate) return;
+    setLoadingDuplicate(true);
+    fetcher(
+      `/api/${slug}/raffles/${duplicate.raffleId}/duplicate?variant=${duplicate.variant}`,
+    )
+      .then((data) => {
+        if (!data.blueprint) {
+          setError(data.error ?? "Couldn't load that raffle.");
+          return;
+        }
+        const blueprint = data.blueprint as DuplicateBlueprint;
+        setDuplicateBlueprint(blueprint);
+        setGuildId(blueprint.guildId);
+        setProjectName(blueprint.projectName);
+        setTitle(blueprint.title);
+        setDescription(blueprint.description);
+        setSpots(blueprint.spots);
+        setRoleMatchMode(blueprint.roleMatchMode);
+        setScheduled(blueprint.scheduled);
+        setStartAt(toLocal(blueprint.startAt));
+        setEndAt(toLocal(blueprint.endAt));
+        setStartPing(blueprint.startPing);
+        setHideEntries(blueprint.hideEntries);
+        setCollectWallets(blueprint.collectWallets);
+        setRequireWallet(blueprint.requireWallet);
+        setUseRoleWeights(blueprint.useRoleWeights);
+        setChains(blueprint.walletChains);
+        setBannerUrl(blueprint.bannerUrl);
+        setExternalUrl(blueprint.externalUrl);
+        setTasks(blueprint.tasks);
+        setRoleIds(blueprint.roles.map((role) => role.roleId));
+        setVerificationTaskIds(blueprint.verificationTaskIds);
+      })
+      .catch(() => setError("Couldn't load that raffle."))
+      .finally(() => setLoadingDuplicate(false));
+  }, [duplicate, slug]);
+
+  useEffect(() => {
     if (!guildId) return;
     setMeta(null);
-    setChannelId("");
-    setAnnounceChannelId("");
-    setProofChannelId("");
-    setRoleIds([]);
+    const blueprint =
+      duplicateBlueprint?.guildId === guildId ? duplicateBlueprint : null;
+    setChannelId(blueprint?.channelId ?? "");
+    setAnnounceChannelId(blueprint?.announceChannelId ?? "");
+    setProofChannelId(blueprint?.proofChannelId ?? "");
+    setRoleIds(blueprint?.roles.map((role) => role.roleId) ?? []);
     fetcher(`/api/${slug}/guilds/${guildId}/meta`).then((d) => {
       setMeta(d);
-      setChannelId(d.defaults?.raffleChannelId ?? "");
-      setAnnounceChannelId(d.defaults?.announceChannelId ?? "");
-      setProofChannelId(d.defaults?.proofChannelId ?? "");
+      setChannelId(blueprint?.channelId ?? d.defaults?.raffleChannelId ?? "");
+      setAnnounceChannelId(
+        blueprint?.announceChannelId ?? d.defaults?.announceChannelId ?? "",
+      );
+      setProofChannelId(
+        blueprint?.proofChannelId ?? d.defaults?.proofChannelId ?? "",
+      );
     });
-  }, [slug, guildId]);
+  }, [slug, guildId, duplicateBlueprint]);
 
   // Lock the page behind the modal so only the dialog scrolls.
   useEffect(() => {
@@ -117,7 +211,10 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
     setError(null);
     if (!endAt) return setError("Pick an end time.");
     setBusy(true);
-    const res = await fetch(`/api/${slug}/raffles`, {
+    const endpoint = duplicate
+      ? `/api/${slug}/raffles/${duplicate.raffleId}/duplicate?variant=${duplicate.variant}`
+      : `/api/${slug}/raffles`;
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -144,6 +241,7 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
         useRoleWeights,
         walletChains: chains,
         bannerUrl,
+        externalUrl,
         announceChannelId,
         proofChannelId,
         tasks: tasks.filter((t) => t.label.trim()),
@@ -153,7 +251,9 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
     const body = await res.json().catch(() => ({}));
     setBusy(false);
     if (res.ok) {
-      router.push(`/${slug}/raffles/${body.id}`);
+      router.push(
+        `/${slug}/raffles/${body.id}${duplicate ? "?duplicated=1&edit=1" : ""}`,
+      );
       router.refresh();
     } else {
       setError(body.error ?? "Couldn't create the raffle.");
@@ -178,11 +278,14 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
                 Raffle builder
               </div>
               <h2 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
-                New raffle
+                {duplicate
+                  ? `Duplicate raffle #${duplicate.raffleId}`
+                  : "New raffle"}
               </h2>
               <p className="mt-1 text-sm text-kos-muted">
-                Set the public page, Discord post, gates, and wallet rules in
-                one flow.
+                {duplicate
+                  ? "Everything is prefilled. Review spots and timing, then publish the fresh raffle."
+                  : "Set the public page, Discord post, gates, and wallet rules in one flow."}
               </p>
             </div>
             <button
@@ -206,6 +309,7 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
                 className="kos-input"
                 value={guildId}
                 onChange={(e) => setGuildId(e.target.value)}
+                disabled={Boolean(duplicate)}
               >
                 {guilds.map((g) => (
                   <option key={g.guildId} value={g.guildId}>
@@ -213,6 +317,12 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
                   </option>
                 ))}
               </select>
+              {duplicate ? (
+                <p className="mt-1 text-[11px] text-kos-muted/70">
+                  This copy stays in the source community. Cross-community
+                  duplication can reuse the same clone engine later.
+                </p>
+              ) : null}
             </Field>
 
             <div className="grid grid-cols-2 gap-3">
@@ -241,6 +351,16 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
                 className="kos-input min-h-[60px]"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+              />
+            </Field>
+
+            <Field label="Project link (optional)">
+              <input
+                type="url"
+                className="kos-input"
+                value={externalUrl}
+                onChange={(e) => setExternalUrl(e.target.value)}
+                placeholder="https://project.example"
               />
             </Field>
 
@@ -568,8 +688,20 @@ export function NewRaffleModal({ onClose }: { onClose: () => void }) {
             <button type="button" onClick={onClose} className="kos-btn">
               Cancel
             </button>
-            <button type="submit" disabled={busy} className="kos-btn-primary">
-              {busy ? "Creating…" : "Create raffle"}
+            <button
+              type="submit"
+              disabled={busy || loadingDuplicate}
+              className="kos-btn-primary"
+            >
+              {loadingDuplicate
+                ? "Loading copy…"
+                : busy
+                  ? duplicate
+                    ? "Duplicating…"
+                    : "Creating…"
+                  : duplicate
+                    ? "Duplicate & publish"
+                    : "Create raffle"}
             </button>
           </div>
           <p className="mt-2 text-right text-[11px] text-kos-muted/70">

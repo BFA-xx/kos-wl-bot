@@ -6,6 +6,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { PageTitle, StatusBadge, StatCard } from "@/components/ui";
 import { RaffleActions } from "@/components/RaffleActions";
 import { RaffleEditButton } from "@/components/RaffleEditButton";
+import { RaffleQuickActions } from "@/components/RaffleQuickActions";
 import { ParticipantsLive } from "@/components/ParticipantsLive";
 import { fmtDate } from "@/lib/format";
 
@@ -14,8 +15,10 @@ export const runtime = "nodejs";
 
 export default async function RaffleDetailPage({
   params,
+  searchParams,
 }: {
   params: { org: string; id: string };
+  searchParams?: { edit?: string; duplicated?: string };
 }) {
   let access;
   try {
@@ -73,6 +76,10 @@ export default async function RaffleDetailPage({
     { isOwner, permissions },
     PERMISSIONS.RAFFLE_EDIT,
   );
+  const canCreate = hasPermission(
+    { isOwner, permissions },
+    PERMISSIONS.RAFFLE_CREATE,
+  );
   const verificationTasks = canEdit
     ? await prisma.taskDefinition.findMany({
         where: { organizationId: org.id, active: true },
@@ -114,6 +121,7 @@ export default async function RaffleDetailPage({
         action={
           <div className="flex items-center gap-2">
             <RaffleEditButton
+              initialOpen={searchParams?.edit === "1"}
               raffle={{
                 id: raffle.id,
                 guildId: raffle.guildId,
@@ -125,6 +133,7 @@ export default async function RaffleDetailPage({
                 startAt: raffle.startAt.toISOString(),
                 endAt: raffle.endAt.toISOString(),
                 bannerUrl: raffle.bannerUrl,
+                externalUrl: raffle.externalUrl,
                 hideEntries: raffle.hideEntries,
                 requireWallet: raffle.requireWallet,
                 useRoleWeights: raffle.useRoleWeights,
@@ -147,6 +156,22 @@ export default async function RaffleDetailPage({
                   roleName: r.roleName,
                 })),
               }}
+            />
+            <RaffleQuickActions
+              raffleId={raffle.id}
+              canDuplicate={canCreate}
+              editHref={
+                canEdit &&
+                raffle.status !== "ENDED" &&
+                raffle.status !== "CANCELLED"
+                  ? `/${params.org}/raffles/${raffle.id}?edit=1`
+                  : undefined
+              }
+              initialToast={
+                searchParams?.duplicated === "1"
+                  ? "Raffle duplicated successfully."
+                  : undefined
+              }
             />
             <StatusBadge status={raffle.status} />
           </div>

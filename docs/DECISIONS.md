@@ -102,14 +102,16 @@ Discord-native reaction gates may explicitly require Discord.
 **Why:** KOS is no longer only a bot, and members should not be forced into one
 surface for ordinary account, wallet, task, and raffle operations.
 
-## D012 — Community pages are membership-public but session-gated
+## D012 — Community pages remain session-gated; raffle share pages are anonymous
 
-**Status:** Current implementation
-**Decision:** `/c/:slug` does not require organization membership, but the
-global middleware still requires a signed KOS session.
-**Why:** This is how S2.5 shipped. If anonymous sharing is desired, middleware
-and unauthenticated entry-panel behavior need an explicit product/security
-decision.
+**Status:** Superseded in part by D022
+**Decision:** `/c/:slug` remains a signed-in community directory, while
+`/r/:id` is the canonical anonymous, SEO-indexable raffle surface. Only
+UPCOMING, LIVE, and ENDED raffles belonging to non-suspended organizations are
+public. Entry APIs remain authenticated and return Discord OAuth users to the
+same `/r/:id` page.
+**Why:** Sharing should not require login, but private dashboard/admin data and
+entry mutations must retain their existing authorization boundaries.
 
 ## D013 — Deploy the dashboard and bot separately
 
@@ -196,3 +198,16 @@ awards, Discord task awards, and reward redemptions post best-effort updates to
 that channel when configured.
 **Why:** Communities need one obvious place for earning/spending activity and
 leaderboards, while still letting members use both web and Discord.
+
+## D022 — Public raffle IDs are canonical and duplication is configuration-only
+
+**Status:** Accepted
+**Decision:** Use the existing stable raffle integer ID for `/r/:id` canonical
+URLs instead of adding a slug migration. Duplicate actions load a reusable
+configuration blueprint and create a new `DRAFT` raffle while explicitly
+excluding participant, winner, proof, draw, message, counter, and analytics
+state. Variant transforms (`SAME`, `GTD`, `FCFS`) are applied before creation.
+**Why:** IDs already exist for every Discord- and web-created raffle, avoid
+backfill/collision risk, and make every historical eligible raffle immediately
+shareable. A configuration-only clone is safe and can later support templates,
+cross-community targets, drafts, and schedules without copying outcome data.

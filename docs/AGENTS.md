@@ -160,6 +160,13 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Dashboard reposts for unexpired cancelled raffles should queue the existing
   DB-mediated publish flow by returning the raffle to `DRAFT`; do not call the
   bot's localhost control API from Vercel or duplicate participant/draw data.
+- `/r/:id` is the canonical anonymous raffle URL. Keep `/c/:slug` session-gated,
+  keep entry APIs authenticated, and pass `/r/:id` through Discord OAuth's safe
+  `next` return when a signed-out visitor joins.
+- Raffle duplication is configuration-only. Reuse the duplicate blueprint and
+  variant helpers, preserve custom `requirements`, and never clone participants,
+  winners, entry counts, message IDs, proof/draw fields, timestamps, or
+  analytics.
 - Successful Discord raffle entry feedback must be shown in the member's
   ephemeral interaction response, not by changing the public raffle button to a
   per-user state. The public Discord message is shared by all members; use

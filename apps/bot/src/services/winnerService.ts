@@ -161,9 +161,7 @@ async function notifyRaffleResults(
     where: { guildId },
     include: { organization: { select: { slug: true } } },
   });
-  const link = conn
-    ? `/c/${conn.organization.slug}/raffles/${raffleId}`
-    : "/me/history";
+  const link = conn ? `/r/${raffleId}` : "/me/history";
 
   const winnerIds = new Set(winners.map((w) => w.userId));
   const losers = participants.filter((p) => !winnerIds.has(p.userId));

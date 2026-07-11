@@ -269,7 +269,7 @@ function RaffleEntryCard({
         {raffle.org ? (
           <div className="mt-3 text-right">
             <Link
-              href={`/c/${raffle.org.slug}/raffles/${raffle.id}`}
+              href={`/r/${raffle.id}`}
               className="text-xs text-kos-muted underline-offset-2 hover:text-kos-fg hover:underline"
             >
               View public raffle page →

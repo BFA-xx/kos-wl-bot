@@ -31,8 +31,8 @@ flowchart LR
   interactions, scheduling, final draws, announcements, wallet DMs, and proof
   generation.
 - `apps/dashboard`: Next.js 14 App Router application. It owns Discord OAuth,
-  organization administration, member pages, public-with-login community
-  pages, task verification, and web entry.
+  organization administration, member pages, signed-in community pages,
+  anonymous public raffle pages, task verification, and web entry.
 - `packages/db`: shared Prisma schema/client and migrations.
 - PostgreSQL is the integration boundary between Vercel and the bot. Both must
   use the same `DATABASE_URL`.
@@ -71,9 +71,11 @@ Organization-native data such as tasks is scoped directly by
 `organizationId`.
 
 Middleware requires a valid session for every route except `/login`,
-`/api/auth/*`, Next.js assets, and the favicon. Consequently `/c/:slug` pages
-are accessible without organization membership but are not anonymous public
-pages.
+`/api/auth/*`, `/r/:id`, Next.js assets, and public icons. `/c/:slug` pages are
+accessible without organization membership but still require a KOS session.
+`/r/:id` is anonymous and server-rendered; its client entry panel calls the
+authenticated `/api/me/raffles/:id` routes and offers Discord OAuth with a safe
+same-page return when no session exists.
 
 ## Main data model
 
@@ -135,6 +137,20 @@ There are no campaign/redemption-campaign models yet.
 Dashboard edits set `editRequestedAt`; end-now sets LIVE with `endAt = now`;
 rerolls set `rerollRequest` and `rerollRequestedAt`. The scheduler clears and
 processes those requests.
+
+### Public sharing and duplication
+
+- Every UPCOMING, LIVE, or ENDED raffle in a non-suspended organization has a
+  canonical `/r/:id` page with SSR metadata, Open Graph/Twitter banner data,
+  public requirements, and no admin controls.
+- Share-link helpers always point to the production raffle origin and the
+  stable raffle ID; clipboard actions have a manual-copy fallback.
+- `GET /api/:org/raffles/:id/duplicate` returns a permission-checked editable
+  blueprint. `POST` creates a fresh `DRAFT` from source configuration plus
+  reviewed overrides and preserves raw custom requirement fields.
+- Duplication never copies participants, winners, entry counts, Discord message
+  IDs, proof/draw state, created dates, or analytics. The bot publishes the new
+  draft through the standard database scheduler flow.
 
 ### Entry
 

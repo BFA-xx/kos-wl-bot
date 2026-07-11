@@ -6,6 +6,9 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { StatCard, StatusBadge, PageTitle, Segmented, Card, SectionTitle, Empty } from "@/components/ui";
 import { AreaChart } from "@/components/AreaChart";
+import { RaffleQuickActions } from "@/components/RaffleQuickActions";
+import { useCan } from "@/lib/org-context";
+import { PERMISSIONS } from "@/lib/permissions";
 import { fmtDate } from "@/lib/format";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -43,6 +46,8 @@ export default function OverviewPage() {
   const { org } = useParams<{ org: string }>();
   const [range, setRange] = useState("7d");
   const [copied, setCopied] = useState(false);
+  const canCreate = useCan(PERMISSIONS.RAFFLE_CREATE);
+  const canEdit = useCan(PERMISSIONS.RAFFLE_EDIT);
   const { data } = useSWR<Overview>(`/api/${org}/overview?range=${range}`, fetcher, {
     refreshInterval: 5000,
   });
@@ -132,27 +137,36 @@ export default function OverviewPage() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {data.live.map((r) => (
-              <Link
+              <div
                 key={r.id}
-                href={`/${org}/raffles/${r.id}`}
-                className="kos-card kos-card-hover flex items-center justify-between p-4"
+                className="kos-card kos-card-hover flex items-center gap-2 p-2"
               >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-kos-muted">#{r.id}</span>
-                    <StatusBadge status={r.status} />
+                <Link
+                  href={`/${org}/raffles/${r.id}`}
+                  className="flex min-w-0 flex-1 items-center justify-between rounded-2xl p-2"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-kos-muted">#{r.id}</span>
+                      <StatusBadge status={r.status} />
+                    </div>
+                    <div className="mt-1 truncate font-medium">{r.projectName}</div>
+                    <div className="truncate text-sm text-kos-muted">{r.title}</div>
                   </div>
-                  <div className="mt-1 truncate font-medium">{r.projectName}</div>
-                  <div className="truncate text-sm text-kos-muted">{r.title}</div>
-                </div>
-                <div className="ml-3 shrink-0 text-right">
-                  <div className="text-lg font-semibold">
-                    {r.entryCount}
-                    <span className="text-kos-muted"> / {r.spots}</span>
+                  <div className="ml-3 shrink-0 text-right">
+                    <div className="text-lg font-semibold">
+                      {r.entryCount}
+                      <span className="text-kos-muted"> / {r.spots}</span>
+                    </div>
+                    <div className="text-xs text-kos-muted">ends {fmtDate(r.endAt)}</div>
                   </div>
-                  <div className="text-xs text-kos-muted">ends {fmtDate(r.endAt)}</div>
-                </div>
-              </Link>
+                </Link>
+                <RaffleQuickActions
+                  raffleId={r.id}
+                  canDuplicate={canCreate}
+                  editHref={canEdit ? `/${org}/raffles/${r.id}?edit=1` : undefined}
+                />
+              </div>
             ))}
           </div>
         )}

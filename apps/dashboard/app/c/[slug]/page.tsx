@@ -102,7 +102,7 @@ export default async function CommunityPage({
           {live.map((r) => (
             <Link
               key={r.id}
-              href={`/c/${org.slug}/raffles/${r.id}`}
+              href={`/r/${r.id}`}
               className="kos-card kos-card-hover overflow-hidden"
             >
               {r.bannerUrl ? (
@@ -149,7 +149,7 @@ export default async function CommunityPage({
             {ended.map((r) => (
               <Link
                 key={r.id}
-                href={`/c/${org.slug}/raffles/${r.id}`}
+                href={`/r/${r.id}`}
                 className="kos-card kos-card-hover flex items-center justify-between p-4 opacity-80"
               >
                 <div className="min-w-0">

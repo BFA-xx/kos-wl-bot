@@ -22,6 +22,7 @@ export interface EditableRaffle {
   startAt: string;
   endAt: string;
   bannerUrl: string | null;
+  externalUrl: string | null;
   hideEntries: boolean;
   requireWallet: boolean;
   useRoleWeights: boolean;
@@ -44,9 +45,15 @@ function toLocal(iso: string): string {
     .slice(0, 16);
 }
 
-export function RaffleEditButton({ raffle }: { raffle: EditableRaffle }) {
+export function RaffleEditButton({
+  raffle,
+  initialOpen = false,
+}: {
+  raffle: EditableRaffle;
+  initialOpen?: boolean;
+}) {
   const canEdit = useCan(PERMISSIONS.RAFFLE_EDIT);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   if (!canEdit || raffle.status === "ENDED" || raffle.status === "CANCELLED")
     return null;
   return (
@@ -82,6 +89,7 @@ function EditModal({
   const [spots, setSpots] = useState(raffle.spots);
   const [endAt, setEndAt] = useState(toLocal(raffle.endAt));
   const [bannerUrl, setBannerUrl] = useState(raffle.bannerUrl ?? "");
+  const [externalUrl, setExternalUrl] = useState(raffle.externalUrl ?? "");
   const [hideEntries, setHideEntries] = useState(raffle.hideEntries);
   const [requireWallet, setRequireWallet] = useState(raffle.requireWallet);
   const [useRoleWeights, setUseRoleWeights] = useState(raffle.useRoleWeights);
@@ -144,6 +152,7 @@ function EditModal({
         spots: Number(spots),
         endAt: new Date(endAt).toISOString(),
         bannerUrl,
+        externalUrl,
         hideEntries,
         requireWallet,
         useRoleWeights,
@@ -239,6 +248,15 @@ function EditModal({
               value={bannerUrl}
               onChange={setBannerUrl}
             />
+            <F label="Project link">
+              <input
+                type="url"
+                className="kos-input"
+                value={externalUrl}
+                onChange={(e) => setExternalUrl(e.target.value)}
+                placeholder="https://project.example"
+              />
+            </F>
             <div className="grid grid-cols-2 gap-3">
               <F label="WL spots">
                 <input

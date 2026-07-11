@@ -12,6 +12,7 @@ import {
   TableShell,
 } from "@/components/ui";
 import { NewRaffleModal } from "@/components/NewRaffleModal";
+import { RaffleQuickActions } from "@/components/RaffleQuickActions";
 import { useCan } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
 import { fmtDate } from "@/lib/format";
@@ -51,6 +52,7 @@ function RafflesInner() {
   const [status, setStatus] = useState("");
   const [showNew, setShowNew] = useState(false);
   const canCreate = useCan(PERMISSIONS.RAFFLE_CREATE);
+  const canEdit = useCan(PERMISSIONS.RAFFLE_EDIT);
   const apiUrl = useMemo(() => {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
@@ -118,6 +120,7 @@ function RafflesInner() {
                 <th className="px-4 py-3 text-right">Entries</th>
                 <th className="px-4 py-3 text-right">Spots</th>
                 <th className="hidden px-4 py-3 md:table-cell">Ends</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -148,6 +151,21 @@ function RafflesInner() {
                   </td>
                   <td className="hidden px-4 py-3 text-kos-muted md:table-cell">
                     {fmtDate(r.endAt)}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end">
+                      <RaffleQuickActions
+                        raffleId={r.id}
+                        canDuplicate={canCreate}
+                        editHref={
+                          canEdit &&
+                          r.status !== "ENDED" &&
+                          r.status !== "CANCELLED"
+                            ? `/${org}/raffles/${r.id}?edit=1`
+                            : undefined
+                        }
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}
