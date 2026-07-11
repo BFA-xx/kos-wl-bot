@@ -96,7 +96,7 @@ export default async function CommunitiesPage({
   };
 
   return (
-    <>
+    <div data-testid="communities-directory">
       <PageTitle
         title="Communities"
         subtitle="Keep up with communities you belong to, or discover every community building with KOS."
@@ -107,7 +107,10 @@ export default async function CommunitiesPage({
         }
       />
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+      <div
+        data-testid="communities-metrics"
+        className="mb-6 grid gap-3 sm:grid-cols-3"
+      >
         <Metric
           label="Your communities"
           value={discordResult.ok ? myCommunities.length : "—"}
@@ -172,7 +175,7 @@ export default async function CommunitiesPage({
           ))}
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -217,7 +220,10 @@ function CommunityCard({
   joined: boolean;
 }) {
   return (
-    <article className="kos-card kos-card-hover group overflow-hidden">
+    <article
+      data-testid="community-card"
+      className="kos-card kos-card-hover group overflow-hidden"
+    >
       <Link href={`/c/${community.slug}`} className="block">
         <div className="relative flex min-h-28 items-end overflow-hidden border-b border-white/[0.08] bg-[radial-gradient(circle_at_20%_0%,rgba(59,130,246,0.18),transparent_55%),linear-gradient(135deg,rgba(255,255,255,0.04),transparent)] p-4">
           {community.bannerUrl ? (
@@ -249,6 +255,7 @@ function CommunityCard({
                 </span>
               ) : null}
               <span
+                data-testid="community-live-status"
                 className={`kos-badge ${
                   live
                     ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-200"

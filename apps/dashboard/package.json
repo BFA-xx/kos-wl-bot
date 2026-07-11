@@ -8,6 +8,8 @@
     "start": "next start -p 3001",
     "lint": "next lint",
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:update": "playwright test --update-snapshots",
     "postinstall": "prisma generate --schema=../../packages/db/prisma/schema.prisma",
     "typecheck": "tsc --noEmit"
   },
@@ -22,6 +24,7 @@
     "swr": "^2.2.5"
   },
   "devDependencies": {
+    "@playwright/test": "1.49.1",
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

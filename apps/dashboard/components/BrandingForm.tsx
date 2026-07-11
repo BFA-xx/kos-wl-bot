@@ -48,7 +48,7 @@ export function BrandingForm({
   }
 
   return (
-    <form onSubmit={save} className="space-y-4">
+    <form data-testid="branding-form" onSubmit={save} className="space-y-4">
       <Field label="Organization name">
         <input
           className="kos-input"
@@ -95,6 +95,7 @@ export function BrandingForm({
             @
           </span>
           <input
+            aria-label="Community X profile"
             className="kos-input pl-8"
             value={xHandle}
             onChange={(e) => setXHandle(e.target.value)}

@@ -21,6 +21,9 @@ logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+playwright-report/
+test-results/
+.playwright/
 
 # Generated artifacts
 generated/
