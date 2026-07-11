@@ -111,11 +111,31 @@ export interface DiscordGuildsResult {
 export async function fetchUserGuildsResult(
   token: string,
 ): Promise<DiscordGuildsResult> {
-  const res = await fetch("https://discord.com/api/users/@me/guilds", {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) return { ok: false, guilds: [] };
-  return { ok: true, guilds: (await res.json()) as DiscordGuildSummary[] };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch("https://discord.com/api/users/@me/guilds", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        return {
+          ok: true,
+          guilds: (await res.json()) as DiscordGuildSummary[],
+        };
+      }
+      const retryable = res.status === 429 || res.status >= 500;
+      if (!retryable || attempt === 2) return { ok: false, guilds: [] };
+
+      const retryAfter = Number(res.headers.get("retry-after"));
+      const delayMs = Number.isFinite(retryAfter)
+        ? Math.min(2_000, Math.max(75, retryAfter * 1_000))
+        : 150 * (attempt + 1);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    } catch {
+      if (attempt === 2) return { ok: false, guilds: [] };
+      await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
+    }
+  }
+  return { ok: false, guilds: [] };
 }
 
 /** Guilds the user is in (from their token). */
