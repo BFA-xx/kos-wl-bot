@@ -1,9 +1,9 @@
 # Engineering Handoff
 
-Last updated: 2026-07-08
+Last updated: 2026-07-11
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `6a6a5d2`
+Audited application commit: `436e67d`
 
 ## Current state
 
@@ -23,6 +23,8 @@ Phase 3 is implemented through S2.5:
 - S3 rewards/points-channel slice is committed, pushed, migrated, and deployed:
   configurable Discord points channels, web reward store/management, and
   Discord commands for points, tasks, and rewards.
+- Anonymous raffle sharing and configuration-only duplication are committed,
+  pushed, and deployed on the production dashboard.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -784,7 +786,7 @@ Verification:
   the cancelled-raffle failure panel, trimmed task links, and **Repost raffle**
   button are live. No raffle was requeued during verification.
 
-### Public raffle sharing and configuration-only duplication — implemented locally
+### Public raffle sharing and configuration-only duplication — committed/pushed/deployed
 
 - Added canonical anonymous SSR raffle pages at `/r/:id`. Middleware explicitly
   allows this route while `/c/:slug` remains session-gated.
@@ -826,7 +828,23 @@ Verification:
   redirect, confirmed the Discord CTA returns to `/r/57`, and verified canonical,
   Open Graph, Twitter card, and banner metadata.
 - `git diff --check`
-- Not committed, pushed, or deployed yet.
+- Application code committed as `46ec673` (`Add public raffle sharing and
+  duplication`); the cross-browser quick-action follow-up committed as
+  `436e67d` (`Harden raffle quick actions`). Both commits are pushed to
+  `origin/main`.
+- Both connected Vercel deployment statuses completed successfully for commit
+  `436e67d`.
+- Anonymous production request to `https://raffle.koslabs.app/r/57` returned
+  `200` with canonical URL, `NUTZY · GTD` Open Graph title, and its banner as
+  the Open Graph image.
+- Signed-in production browser QA confirmed every raffle table row exposes the
+  Actions menu; **Duplicate as FCFS** opened a prefilled raffle #57 builder with
+  FCFS type, source project/banner/channels/roles/tasks/wallet settings, four
+  spots, and fresh timing. The builder was closed without publishing.
+- Production browser QA also confirmed **Copy share link** completes without
+  navigating away and exposes the selectable
+  `https://raffle.koslabs.app/r/57` fallback when clipboard permissions are
+  denied.
 
 ## Assumptions
 
