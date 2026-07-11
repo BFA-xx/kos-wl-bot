@@ -50,6 +50,7 @@ export const getPublicRaffle = cache(async (id: number) => {
       name: true,
       logoUrl: true,
       description: true,
+      xHandle: true,
     },
   });
   if (!organization) return null;

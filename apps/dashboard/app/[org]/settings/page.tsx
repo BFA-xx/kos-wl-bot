@@ -38,6 +38,7 @@ export default async function SettingsPage({
               logoUrl: org.logoUrl,
               bannerUrl: org.bannerUrl,
               description: org.description,
+              xHandle: org.xHandle,
             }}
           />
         </Card>

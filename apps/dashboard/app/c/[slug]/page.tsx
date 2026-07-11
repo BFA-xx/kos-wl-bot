@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { StatusBadge, Empty } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
+import { xProfileUrl } from "@/lib/organization-social";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,7 +25,7 @@ export default async function CommunityPage({
   if (!org || org.suspendedAt) notFound();
 
   const guildIds = org.guildConnections.map((g) => g.guildId);
-  const [live, ended] = await Promise.all([
+  const [live, ended, guild] = await Promise.all([
     prisma.raffle.findMany({
       where: {
         guildId: { in: guildIds },
@@ -38,7 +39,14 @@ export default async function CommunityPage({
       orderBy: { endedAt: "desc" },
       take: 6,
     }),
+    guildIds.length
+      ? prisma.guild.findFirst({
+          where: { id: { in: guildIds } },
+          select: { iconUrl: true },
+        })
+      : null,
   ]);
+  const communityLogoUrl = org.logoUrl ?? guild?.iconUrl ?? null;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8">
@@ -58,10 +66,10 @@ export default async function CommunityPage({
         )}
         <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:p-6">
           <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-kos-fg text-sm font-black text-kos-bg">
-            {org.logoUrl ? (
+            {communityLogoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={org.logoUrl}
+                src={communityLogoUrl}
                 alt=""
                 className="h-full w-full object-cover"
               />
@@ -86,9 +94,21 @@ export default async function CommunityPage({
               </p>
             )}
           </div>
-          <Link href="/me/communities" className="kos-btn shrink-0 sm:ml-auto">
-            All communities
-          </Link>
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+            {org.xHandle ? (
+              <a
+                href={xProfileUrl(org.xHandle)}
+                target="_blank"
+                rel="noreferrer"
+                className="kos-btn shrink-0"
+              >
+                𝕏 @{org.xHandle}
+              </a>
+            ) : null}
+            <Link href="/me/communities" className="kos-btn shrink-0">
+              All communities
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -164,7 +184,6 @@ export default async function CommunityPage({
           </div>
         </>
       ) : null}
-
     </div>
   );
 }

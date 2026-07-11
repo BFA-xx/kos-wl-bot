@@ -6,6 +6,7 @@ import { RaffleCountdown } from "@/components/RaffleCountdown";
 import { StatusBadge } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
 import { sanitizeHttpUrl } from "@/lib/raffle-input";
+import { xProfileUrl } from "@/lib/organization-social";
 import {
   inferRaffleKind,
   parsePublicRaffleId,
@@ -45,7 +46,11 @@ export async function generateMetadata({
       title,
       description,
       ...(bannerUrl
-        ? { images: [{ url: bannerUrl, alt: `${raffle.projectName} raffle banner` }] }
+        ? {
+            images: [
+              { url: bannerUrl, alt: `${raffle.projectName} raffle banner` },
+            ],
+          }
         : {}),
     },
     twitter: {
@@ -73,8 +78,7 @@ export default async function ShareableRafflePage({
   const verificationTasks = raffle.RaffleTask.map((item) => ({
     key: item.task.id,
     label: item.task.title,
-    description:
-      item.task.description || formatTaskType(item.task.type),
+    description: item.task.description || formatTaskType(item.task.type),
     url: taskConfigUrl(item.task.config),
     required: item.required,
   }));
@@ -194,7 +198,9 @@ export default async function ShareableRafflePage({
                 </div>
                 <div className="mt-4 border-t border-white/[0.08] pt-4">
                   <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-kos-muted">
-                    {raffle.status === "UPCOMING" ? "Opens in" : "Time remaining"}
+                    {raffle.status === "UPCOMING"
+                      ? "Opens in"
+                      : "Time remaining"}
                   </div>
                   <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-white">
                     <RaffleCountdown
@@ -204,6 +210,17 @@ export default async function ShareableRafflePage({
                     />
                   </div>
                 </div>
+                {organization.xHandle ? (
+                  <a
+                    href={xProfileUrl(organization.xHandle)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="kos-focus mt-4 inline-flex items-center gap-2 rounded-xl text-sm text-kos-muted transition-colors hover:text-white"
+                  >
+                    <span className="font-semibold text-white">𝕏</span>@
+                    {organization.xHandle}
+                  </a>
+                ) : null}
               </aside>
             </div>
 
@@ -227,10 +244,14 @@ export default async function ShareableRafflePage({
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-kos-muted">
                     Eligibility
                   </div>
-                  <h2 className="mt-1 text-lg font-semibold">Required Discord roles</h2>
+                  <h2 className="mt-1 text-lg font-semibold">
+                    Required Discord roles
+                  </h2>
                 </div>
                 <span className="kos-badge text-kos-muted">
-                  {raffle.roleMatchMode === "ALL" ? "All required" : "Any qualifies"}
+                  {raffle.roleMatchMode === "ALL"
+                    ? "All required"
+                    : "Any qualifies"}
                 </span>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
@@ -245,7 +266,8 @@ export default async function ShareableRafflePage({
                   ))
                 ) : (
                   <span className="text-sm text-kos-muted">
-                    Open to every member of {raffle.guild.name || organization.name}.
+                    Open to every member of{" "}
+                    {raffle.guild.name || organization.name}.
                   </span>
                 )}
               </div>
@@ -256,7 +278,9 @@ export default async function ShareableRafflePage({
                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-kos-muted">
                   Steps to qualify
                 </div>
-                <h2 className="mt-1 text-lg font-semibold">Complete before joining</h2>
+                <h2 className="mt-1 text-lg font-semibold">
+                  Complete before joining
+                </h2>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   {[...legacyTasks, ...verificationTasks].map((task, index) => (
                     <div
@@ -303,7 +327,9 @@ export default async function ShareableRafflePage({
                       key={winner.id}
                       className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-3 text-sm"
                     >
-                      <span className="mr-2 text-kos-muted">#{winner.position}</span>
+                      <span className="mr-2 text-kos-muted">
+                        #{winner.position}
+                      </span>
                       {winner.username}
                     </li>
                   ))}
@@ -357,7 +383,9 @@ function Metric({
 }) {
   return (
     <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3 sm:p-4">
-      <div className={`${small ? "text-xs sm:text-sm" : "text-xl sm:text-2xl"} truncate font-semibold text-white`}>
+      <div
+        className={`${small ? "text-xs sm:text-sm" : "text-xl sm:text-2xl"} truncate font-semibold text-white`}
+      >
         {value}
       </div>
       <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.17em] text-kos-muted">
@@ -378,7 +406,8 @@ function getLegacyTasks(requirements: Record<string, unknown>) {
       {
         key: `legacy-${index}-${label}`,
         label,
-        description: "Open the link, complete the step, then verify when joining.",
+        description:
+          "Open the link, complete the step, then verify when joining.",
         url: sanitizeHttpUrl(task.url) || undefined,
         required: true,
       },
@@ -403,7 +432,8 @@ function getRules(
   const configured = requirements.rules;
   const custom = Array.isArray(configured)
     ? configured.filter(
-        (rule): rule is string => typeof rule === "string" && Boolean(rule.trim()),
+        (rule): rule is string =>
+          typeof rule === "string" && Boolean(rule.trim()),
       )
     : typeof configured === "string" && configured.trim()
       ? configured

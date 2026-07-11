@@ -6,13 +6,20 @@
  * request `guilds` so the linking flow can list servers the user manages, and
  * store refresh tokens so we can call Discord on their behalf later.
  */
-export const OAUTH_SCOPES = ["identify", "email", "guilds", "guilds.members.read"];
+export const OAUTH_SCOPES = [
+  "identify",
+  "email",
+  "guilds",
+  "guilds.members.read",
+];
 
 /** Discord permission bit for MANAGE_GUILD. */
 const MANAGE_GUILD = 1n << 5n; // 0x20
 
 export function oauthConfigured(): boolean {
-  return Boolean(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET);
+  return Boolean(
+    process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET,
+  );
 }
 
 export function buildAuthUrl(redirectUri: string, state: string): string {
@@ -95,13 +102,27 @@ export interface DiscordGuildSummary {
   permissions: string; // stringified bitfield
 }
 
-/** Guilds the user is in (from their token). */
-export async function fetchUserGuilds(token: string): Promise<DiscordGuildSummary[]> {
+export interface DiscordGuildsResult {
+  ok: boolean;
+  guilds: DiscordGuildSummary[];
+}
+
+/** Guild membership lookup with an explicit success signal for member UI. */
+export async function fetchUserGuildsResult(
+  token: string,
+): Promise<DiscordGuildsResult> {
   const res = await fetch("https://discord.com/api/users/@me/guilds", {
     headers: { authorization: `Bearer ${token}` },
   });
-  if (!res.ok) return [];
-  return (await res.json()) as DiscordGuildSummary[];
+  if (!res.ok) return { ok: false, guilds: [] };
+  return { ok: true, guilds: (await res.json()) as DiscordGuildSummary[] };
+}
+
+/** Guilds the user is in (from their token). */
+export async function fetchUserGuilds(
+  token: string,
+): Promise<DiscordGuildSummary[]> {
+  return (await fetchUserGuildsResult(token)).guilds;
 }
 
 /** True if the user owns the guild or holds MANAGE_GUILD. */
@@ -127,7 +148,10 @@ export function avatarUrl(user: DiscordUser): string | null {
   return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${ext}?size=128`;
 }
 
-export function guildIconUrl(g: { id: string; icon: string | null }): string | null {
+export function guildIconUrl(g: {
+  id: string;
+  icon: string | null;
+}): string | null {
   if (!g.icon) return null;
   return `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=64`;
 }
@@ -166,11 +190,19 @@ export async function fetchGuildChannels(
 ): Promise<{ id: string; name: string }[]> {
   const token = botToken();
   if (!token) return [];
-  const res = await fetch(`https://discord.com/api/guilds/${guildId}/channels`, {
-    headers: { authorization: `Bot ${token}` },
-  });
+  const res = await fetch(
+    `https://discord.com/api/guilds/${guildId}/channels`,
+    {
+      headers: { authorization: `Bot ${token}` },
+    },
+  );
   if (!res.ok) return [];
-  const all = (await res.json()) as { id: string; name: string; type: number; position: number }[];
+  const all = (await res.json()) as {
+    id: string;
+    name: string;
+    type: number;
+    position: number;
+  }[];
   return all
     .filter((c) => c.type === 0 || c.type === 5) // text + announcement
     .sort((a, b) => a.position - b.position)
@@ -187,7 +219,12 @@ export async function fetchGuildRoles(
     headers: { authorization: `Bot ${token}` },
   });
   if (!res.ok) return [];
-  const all = (await res.json()) as { id: string; name: string; managed: boolean; position: number }[];
+  const all = (await res.json()) as {
+    id: string;
+    name: string;
+    managed: boolean;
+    position: number;
+  }[];
   return all
     .filter((r) => r.id !== guildId && !r.managed)
     .sort((a, b) => b.position - a.position)

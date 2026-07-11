@@ -413,6 +413,8 @@ model Organization {
   logoUrl     String?
   bannerUrl   String?
   description String?
+  /// Optional public X profile handle (stored without @ or URL wrapper).
+  xHandle     String?
   ownerId     String
   /// When set, the org is suspended by a KOS super-admin (access blocked).
   suspendedAt DateTime?
