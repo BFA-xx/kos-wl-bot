@@ -8,6 +8,7 @@ import { fmtDate } from "@/lib/format";
 import { sanitizeHttpUrl } from "@/lib/raffle-input";
 import {
   inferRaffleKind,
+  parsePublicRaffleId,
   publicRafflePath,
   publicRaffleUrl,
 } from "@/lib/raffle-share";
@@ -21,7 +22,8 @@ export async function generateMetadata({
 }: {
   params: { id: string };
 }): Promise<Metadata> {
-  const data = await getPublicRaffle(Number(params.id));
+  const id = parsePublicRaffleId(params.id);
+  const data = id ? await getPublicRaffle(id) : null;
   if (!data) return { title: "Raffle not found · KOS" };
 
   const { raffle, organization } = data;
@@ -61,7 +63,8 @@ export default async function ShareableRafflePage({
 }: {
   params: { id: string };
 }) {
-  const data = await getPublicRaffle(Number(params.id));
+  const id = parsePublicRaffleId(params.id);
+  const data = id ? await getPublicRaffle(id) : null;
   if (!data) notFound();
 
   const { raffle, organization } = data;

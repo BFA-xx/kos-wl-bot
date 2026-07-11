@@ -24,3 +24,8 @@ export function duplicateTitle(
 export function parseDuplicateVariant(value: string | null): DuplicateVariant {
   return value === "GTD" || value === "FCFS" ? value : "SAME";
 }
+
+/** Mandatory tenant scope for every source-raffle read. */
+export function duplicateSourceWhere(id: number, guildIds: string[]) {
+  return { id, guildId: { in: [...guildIds] } };
+}

@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { prisma } from "@/lib/db";
+import { PUBLIC_RAFFLE_STATUSES } from "@/lib/raffle-share";
 
 /** Public-safe raffle payload used by SSR and Open Graph metadata. */
 export const getPublicRaffle = cache(async (id: number) => {
@@ -8,7 +9,7 @@ export const getPublicRaffle = cache(async (id: number) => {
   const raffle = await prisma.raffle.findFirst({
     where: {
       id,
-      status: { in: ["UPCOMING", "LIVE", "ENDED"] },
+      status: { in: [...PUBLIC_RAFFLE_STATUSES] },
     },
     include: {
       guild: { select: { id: true, name: true, iconUrl: true } },

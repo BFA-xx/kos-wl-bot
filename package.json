@@ -9,7 +9,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "build": "pnpm -r --filter ./packages/** build && pnpm -r --filter ./apps/** build",
+    "build": "pnpm -r --filter './packages/**' build && pnpm -r --filter './apps/**' build",
     "dev:bot": "pnpm --filter @kos/bot dev",
     "dev:dashboard": "pnpm --filter @kos/dashboard dev",
     "start:bot": "pnpm --filter @kos/bot start",
@@ -21,6 +21,7 @@
     "db:studio": "pnpm --filter @kos/db studio",
     "db:seed": "pnpm --filter @kos/db seed",
     "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\""
   },

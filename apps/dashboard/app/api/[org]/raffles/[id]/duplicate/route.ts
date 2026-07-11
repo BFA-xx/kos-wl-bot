@@ -5,9 +5,11 @@ import { AccessError, logAudit, requireOrgAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
   duplicateSchedule,
+  duplicateSourceWhere,
   duplicateTitle,
   parseDuplicateVariant,
 } from "@/lib/raffle-duplication";
+import { parsePublicRaffleId } from "@/lib/raffle-share";
 import { sanitizeHttpUrl, sanitizeLegacyRaffleTasks } from "@/lib/raffle-input";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +24,7 @@ const sourceInclude = {
 
 async function sourceRaffle(id: number, guildIds: string[]) {
   return prisma.raffle.findFirst({
-    where: { id, guildId: { in: guildIds } },
+    where: duplicateSourceWhere(id, guildIds),
     include: sourceInclude,
   });
 }
@@ -37,8 +39,8 @@ export async function GET(
       params.org,
       PERMISSIONS.RAFFLE_CREATE,
     );
-    const id = Number(params.id);
-    if (!Number.isSafeInteger(id) || id < 1) {
+    const id = parsePublicRaffleId(params.id);
+    if (!id) {
       return NextResponse.json({ error: "Invalid raffle id." }, { status: 400 });
     }
     const source = await sourceRaffle(id, guildIds);
@@ -105,8 +107,8 @@ export async function POST(
       params.org,
       PERMISSIONS.RAFFLE_CREATE,
     );
-    const id = Number(params.id);
-    if (!Number.isSafeInteger(id) || id < 1) {
+    const id = parsePublicRaffleId(params.id);
+    if (!id) {
       return NextResponse.json({ error: "Invalid raffle id." }, { status: 400 });
     }
     const source = await sourceRaffle(id, guildIds);

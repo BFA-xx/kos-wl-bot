@@ -1,12 +1,40 @@
 export type RaffleKind = "GTD" | "FCFS";
 export type DuplicateVariant = "SAME" | RaffleKind;
 
-export const PUBLIC_RAFFLE_ORIGIN =
-  process.env.NEXT_PUBLIC_RAFFLE_ORIGIN?.replace(/\/$/u, "") ||
-  "https://raffle.koslabs.app";
+export const DEFAULT_PUBLIC_RAFFLE_ORIGIN = "https://raffle.koslabs.app";
+export const PUBLIC_RAFFLE_STATUSES = ["UPCOMING", "LIVE", "ENDED"] as const;
+
+/** Normalize the configured share origin to one safe HTTP(S) origin. */
+export function normalizePublicRaffleOrigin(value?: string): string {
+  try {
+    const url = new URL(value?.trim() || DEFAULT_PUBLIC_RAFFLE_ORIGIN);
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      return DEFAULT_PUBLIC_RAFFLE_ORIGIN;
+    }
+    return url.origin;
+  } catch {
+    return DEFAULT_PUBLIC_RAFFLE_ORIGIN;
+  }
+}
+
+export const PUBLIC_RAFFLE_ORIGIN = normalizePublicRaffleOrigin(
+  process.env.NEXT_PUBLIC_RAFFLE_ORIGIN,
+);
+
+/** Raffle ids are global PostgreSQL `Int` identities and public identifiers. */
+export function parsePublicRaffleId(value: string | number): number | null {
+  const raw = typeof value === "number" ? String(value) : value.trim();
+  if (!/^\d+$/u.test(raw)) return null;
+  const id = Number(raw);
+  return Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647
+    ? id
+    : null;
+}
 
 export function publicRafflePath(raffleId: number): string {
-  return `/r/${raffleId}`;
+  const id = parsePublicRaffleId(raffleId);
+  if (!id) throw new RangeError("Invalid public raffle id.");
+  return `/r/${id}`;
 }
 
 export function publicRaffleUrl(raffleId: number): string {

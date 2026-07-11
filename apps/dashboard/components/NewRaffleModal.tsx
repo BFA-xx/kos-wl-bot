@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import { useOrg } from "@/lib/org-context";
 import type { DuplicateVariant } from "@/lib/raffle-share";
 import { ImageDrop } from "./ImageDrop";
@@ -266,9 +267,17 @@ export function NewRaffleModal({
   ).length;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/75 backdrop-blur-xl">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.16, ease: "easeOut" }}
+      className="fixed inset-0 z-[100] overflow-y-auto bg-black/75 backdrop-blur-xl"
+    >
       <div className="flex min-h-full items-start justify-center p-3 sm:p-6">
-        <form
+        <motion.form
+          initial={{ opacity: 0, y: 18, scale: 0.985 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
           onSubmit={submit}
           className="my-4 w-full max-w-3xl rounded-[2rem] border border-white/[0.10] bg-[#0A0A0A]/95 p-5 shadow-2xl shadow-black/60 sm:my-8 sm:p-6"
         >
@@ -320,8 +329,7 @@ export function NewRaffleModal({
               </select>
               {duplicate ? (
                 <p className="mt-1 text-[11px] text-kos-muted/70">
-                  This copy stays in the source community. Cross-community
-                  duplication can reuse the same clone engine later.
+                  For tenant safety, this copy stays in the source community.
                 </p>
               ) : null}
             </Field>
@@ -708,9 +716,9 @@ export function NewRaffleModal({
           <p className="mt-2 text-right text-[11px] text-kos-muted/70">
             The bot posts it to Discord within a few seconds.
           </p>
-        </form>
+        </motion.form>
       </div>
-    </div>,
+    </motion.div>,
     document.body,
   );
 }

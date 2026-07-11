@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import { NewRaffleModal, type DuplicateRaffleRequest } from "./NewRaffleModal";
 import { publicRaffleUrl } from "@/lib/raffle-share";
 
@@ -142,43 +143,51 @@ export function RaffleQuickActions({
 
       </div>
 
-      {open && typeof document !== "undefined"
+      {typeof document !== "undefined"
         ? createPortal(
-            <div
-              ref={menuRef}
-              role="menu"
-              style={menuPosition}
-              className="kos-fade fixed z-[130] w-60 overflow-hidden rounded-2xl border border-white/[0.10] bg-[#111]/95 p-1.5 shadow-2xl shadow-black/60 backdrop-blur-2xl"
-            >
-              <MenuButton onClick={copyShareLink}>Copy share link</MenuButton>
-              {canDuplicate ? (
-                <>
-                  <div className="my-1 border-t border-white/[0.08]" />
-                  <MenuButton onClick={() => startDuplicate("SAME")}>
-                    Duplicate
-                  </MenuButton>
-                  <MenuButton onClick={() => startDuplicate("GTD")}>
-                    Duplicate as GTD
-                  </MenuButton>
-                  <MenuButton onClick={() => startDuplicate("FCFS")}>
-                    Duplicate as FCFS
-                  </MenuButton>
-                </>
+            <AnimatePresence>
+              {open ? (
+                <motion.div
+                  ref={menuRef}
+                  role="menu"
+                  style={menuPosition}
+                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.985 }}
+                  transition={{ duration: 0.14, ease: "easeOut" }}
+                  className="fixed z-[130] w-60 overflow-hidden rounded-2xl border border-white/[0.10] bg-[#111]/95 p-1.5 shadow-2xl shadow-black/60 backdrop-blur-2xl"
+                >
+                  <MenuButton onClick={copyShareLink}>Copy share link</MenuButton>
+                  {canDuplicate ? (
+                    <>
+                      <div className="my-1 border-t border-white/[0.08]" />
+                      <MenuButton onClick={() => startDuplicate("SAME")}>
+                        Duplicate
+                      </MenuButton>
+                      <MenuButton onClick={() => startDuplicate("GTD")}>
+                        Duplicate as GTD
+                      </MenuButton>
+                      <MenuButton onClick={() => startDuplicate("FCFS")}>
+                        Duplicate as FCFS
+                      </MenuButton>
+                    </>
+                  ) : null}
+                  {editHref ? (
+                    <>
+                      <div className="my-1 border-t border-white/[0.08]" />
+                      <Link
+                        role="menuitem"
+                        href={editHref}
+                        onClick={() => setOpen(false)}
+                        className="block rounded-xl px-3 py-2.5 text-sm text-kos-muted transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50"
+                      >
+                        Edit raffle
+                      </Link>
+                    </>
+                  ) : null}
+                </motion.div>
               ) : null}
-              {editHref ? (
-                <>
-                  <div className="my-1 border-t border-white/[0.08]" />
-                  <Link
-                    role="menuitem"
-                    href={editHref}
-                    onClick={() => setOpen(false)}
-                    className="block rounded-xl px-3 py-2.5 text-sm text-kos-muted transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50"
-                  >
-                    Edit raffle
-                  </Link>
-                </>
-              ) : null}
-            </div>,
+            </AnimatePresence>,
             document.body,
           )
         : null}
@@ -190,10 +199,14 @@ export function RaffleQuickActions({
         />
       ) : null}
 
+      <AnimatePresence>
       {toast ? (
-        <div
+        <motion.div
           role="status"
-          className="kos-fade fixed bottom-5 left-1/2 z-[140] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-white/[0.10] bg-[#181818]/95 p-3.5 text-sm text-white shadow-2xl shadow-black/60 backdrop-blur-2xl"
+          initial={{ opacity: 0, y: 16, x: "-50%" }}
+          animate={{ opacity: 1, y: 0, x: "-50%" }}
+          exit={{ opacity: 0, y: 10, x: "-50%" }}
+          className="fixed bottom-5 left-1/2 z-[140] w-[calc(100%-2rem)] max-w-md rounded-2xl border border-white/[0.10] bg-[#181818]/95 p-3.5 text-sm text-white shadow-2xl shadow-black/60 backdrop-blur-2xl"
         >
           <div className="flex items-start justify-between gap-3">
             <span>{toast}</span>
@@ -218,8 +231,9 @@ export function RaffleQuickActions({
               aria-label="Share link"
             />
           ) : null}
-        </div>
+        </motion.div>
       ) : null}
+      </AnimatePresence>
     </>
   );
 }
