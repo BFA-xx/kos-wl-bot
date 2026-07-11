@@ -206,6 +206,7 @@ function EditModal({
             </div>
             <button
               type="button"
+              aria-label="Close raffle editor"
               onClick={onClose}
               className="rounded-xl p-2 text-kos-muted transition-colors hover:bg-white/[0.06] hover:text-kos-fg"
             >

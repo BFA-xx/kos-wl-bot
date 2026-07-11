@@ -43,7 +43,7 @@ export function RaffleQuickActions({
       }
     };
     const closeForViewportChange = () => setOpen(false);
-    document.addEventListener("mousedown", close);
+    document.addEventListener("click", close);
     document.addEventListener("keydown", escape);
     window.addEventListener("resize", closeForViewportChange);
     window.addEventListener("scroll", closeForViewportChange, true);
@@ -53,7 +53,7 @@ export function RaffleQuickActions({
         ?.focus();
     });
     return () => {
-      document.removeEventListener("mousedown", close);
+      document.removeEventListener("click", close);
       document.removeEventListener("keydown", escape);
       window.removeEventListener("resize", closeForViewportChange);
       window.removeEventListener("scroll", closeForViewportChange, true);
