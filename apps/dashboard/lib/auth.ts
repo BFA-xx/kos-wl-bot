@@ -54,7 +54,9 @@ export async function getSessionUser(): Promise<User | null> {
  * the stored refresh token if it's expired (and persisting the rotated tokens).
  * Returns null if the user never linked or the refresh fails.
  */
-export async function getValidAccessToken(userId: string): Promise<string | null> {
+export async function getValidAccessToken(
+  userId: string,
+): Promise<string | null> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user?.accessToken) return null;
 
@@ -64,15 +66,42 @@ export async function getValidAccessToken(userId: string): Promise<string | null
 
   if (!user.refreshToken) return null;
   const refreshed = await refreshAccessToken(decryptSecret(user.refreshToken));
-  if (!refreshed) return null;
+  if (!refreshed) return waitForConcurrentTokenRefresh(userId);
 
-  await prisma.user.update({
-    where: { id: userId },
+  const updated = await prisma.user.updateMany({
+    where: { id: userId, refreshToken: user.refreshToken },
     data: {
       accessToken: encryptSecret(refreshed.access_token),
       refreshToken: encryptSecret(refreshed.refresh_token),
       tokenExpiresAt: new Date(Date.now() + refreshed.expires_in * 1000),
     },
   });
+  if (updated.count === 0) {
+    return waitForConcurrentTokenRefresh(userId);
+  }
   return refreshed.access_token;
+}
+
+/**
+ * Discord rotates refresh tokens. If another request refreshed the same user
+ * first, wait briefly for its database update and reuse the newly stored token.
+ */
+async function waitForConcurrentTokenRefresh(
+  userId: string,
+): Promise<string | null> {
+  for (const delayMs of [75, 200, 400]) {
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    const latest = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { accessToken: true, tokenExpiresAt: true },
+    });
+    if (
+      latest?.accessToken &&
+      latest.tokenExpiresAt &&
+      latest.tokenExpiresAt.getTime() - 30_000 > Date.now()
+    ) {
+      return decryptSecret(latest.accessToken);
+    }
+  }
+  return null;
 }
