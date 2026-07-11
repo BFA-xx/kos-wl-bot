@@ -21,6 +21,9 @@
 - One participant row represents an entry regardless of Discord or web origin.
 - Member-facing features should ship with Discord and web parity unless a
   Discord-native constraint is explicitly documented.
+- "Your communities" means organizations with at least one connected Discord
+  guild present in the signed-in member's OAuth guild list; organization team
+  membership is not a substitute for Discord membership.
 
 ## Data and security
 
@@ -33,6 +36,8 @@
 - Validate all IDs and tenant ownership at API boundaries.
 - Keep organization and bot audit trails for privileged or state-changing
   actions.
+- Store community X branding as a validated handle only. It is a public link,
+  not proof of X account ownership or engagement.
 - Preserve database uniqueness constraints and transactional counter updates.
 - Applied migrations are immutable; new schema work gets a new additive
   migration.

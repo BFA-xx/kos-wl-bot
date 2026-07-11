@@ -3,7 +3,7 @@
 Last updated: 2026-07-11
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `2e6ef94`
+Audited application commit: `64e8158`
 
 ## Current state
 
@@ -25,6 +25,8 @@ Phase 3 is implemented through S2.5:
   Discord commands for points, tasks, and rewards.
 - Anonymous raffle sharing and configuration-only duplication are committed,
   pushed, and deployed on the production dashboard.
+- Member-aware community discovery and optional community X branding are
+  migrated and deployed.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -704,7 +706,7 @@ Verification:
 - `corepack pnpm --filter @kos/bot build`
 - `git diff --check`
 - Code committed as `72c3347` (`Inline raffle tasks and share link
-  verification`) and pushed to `origin/main`.
+verification`) and pushed to `origin/main`.
 - EC2 bot deployed via `./scripts/deploy-ec2.sh`; Discord slash command count
   remained 7, PM2 reported `kos-bot` online, and the local internal health
   endpoint returned `{"ok":true,"ready":true}`.
@@ -830,7 +832,7 @@ Verification:
   Open Graph, Twitter card, and banner metadata.
 - `git diff --check`
 - Application code committed as `46ec673` (`Add public raffle sharing and
-  duplication`); the cross-browser quick-action follow-up committed as
+duplication`); the cross-browser quick-action follow-up committed as
   `436e67d` (`Harden raffle quick actions`). Both commits are pushed to
   `origin/main`.
 - Both connected Vercel deployment statuses completed successfully for commit
@@ -881,6 +883,44 @@ Verification:
 - Anonymous requests to the signed-in compatibility route still pass through
   middleware and return the expected login redirect; after authentication the
   page verifies tenant ownership and permanently redirects to `/r/:id`.
+
+### Member community views and community X branding — committed/pushed/migrated/deployed
+
+- `/me/communities` now has **Your communities** and **Discover all** views,
+  counts, joined badges, live-raffle totals, cleaner responsive cards, and
+  Discord guild-icon fallback when an organization has no uploaded logo.
+- "Your communities" is derived privately from the signed-in user's Discord
+  OAuth guild list and matches an organization when any connected guild is
+  present. Token/API failure shows a Discord reconnect action instead of a
+  misleading zero-community state.
+- Organization Settings → Branding now accepts an optional X handle or
+  x.com/twitter.com profile URL. The API validates it under `branding:edit`,
+  stores only the normalized handle, and keeps the existing organization audit
+  entry.
+- Community X links render on directory cards, community headers, and the host
+  block on canonical public raffle pages. They are plain public branding links,
+  not paid X API verification.
+- Added additive migration `20260711195000_organization_x_handle` for nullable
+  `Organization.xHandle`.
+- Added five focused tests for community membership matching and X handle
+  normalization, bringing the dashboard suite to 14 tests across five files.
+
+Verification:
+
+- Prisma schema validation passes with Prisma 5.22.0.
+- `corepack pnpm test` — 5 files, 14 tests passed.
+- `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm build`
+- `git diff --check`
+- Application and migration committed as `64e8158` (`Add member community
+  views and X profiles`) and pushed to `origin/main`.
+- Local production migration attempts could not reach Neon. The existing EC2
+  production connection applied migration
+  `20260711195000_organization_x_handle` successfully; Prisma reported all 20
+  migrations applied.
+- Both connected Vercel deployments completed successfully for `64e8158`.
+- Production canaries confirmed canonical raffle #57 still returns `200` after
+  selecting the new organization field, and signed-out
+  `/me/communities?view=all` preserves its login return URL.
 
 ## Confirmed invariants and current product policies
 

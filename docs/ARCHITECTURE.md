@@ -96,6 +96,7 @@ same-page return when no session exists.
 
 - `Organization`, `OrganizationMember`, `OrganizationRole`,
   `OrganizationInvite`, `GuildConnection`.
+- `Organization.xHandle`: optional normalized public X branding handle.
 - `Subscription`: FREE/PRO/SCALE scaffold; paid billing is not wired.
 - `AuditLog`: organization audit trail.
 - `Announcement`, `FeatureFlag`: super-admin platform controls.
@@ -117,6 +118,16 @@ same-page return when no session exists.
 - `RewardRedemption`: member reward claim.
 
 There are no campaign/redemption-campaign models yet.
+
+### Member community discovery
+
+`/me/communities` refreshes the member's stored Discord OAuth token when
+needed, reads `users/@me/guilds`, and compares those guild IDs with each
+organization's unique `GuildConnection` rows. The member can switch between
+their matching communities and the full non-suspended directory. Discord guild
+icons are used when an organization has not uploaded a dedicated logo. A
+failed membership lookup produces an explicit reconnect state, not an empty
+membership claim.
 
 ## Raffle lifecycle and data flow
 

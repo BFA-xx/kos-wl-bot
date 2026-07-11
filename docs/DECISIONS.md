@@ -236,3 +236,27 @@ the production origin `https://raffle.koslabs.app`. The compatibility route
 `/c/:slug/raffles/:id` verifies the slug and permanently redirects to `/r/:id`.
 **Why:** These were already product expectations. Encoding and testing them
 removes ambiguity and prevents route implementations from drifting apart.
+
+## D025 — Member community membership comes from Discord OAuth
+
+**Status:** Accepted
+**Decision:** The member Communities tab separates communities whose connected
+Discord guild appears in the signed-in user's `users/@me/guilds` response from
+the complete non-suspended KOS directory. An organization with multiple guilds
+is considered joined when any connected guild matches. If the stored Discord
+token cannot be refreshed or the lookup fails, show a reconnect action instead
+of treating the member as belonging to zero communities.
+**Why:** Organization team membership and Discord community membership are
+different concepts. Discord OAuth already grants the `guilds` scope and gives
+the member an accurate, private list without additional paid APIs.
+
+## D026 — Community X profiles are optional branding links
+
+**Status:** Accepted
+**Decision:** Store an optional normalized `Organization.xHandle`, editable
+under Branding with `branding:edit`. Accept a handle or x.com/twitter.com
+profile URL, store only the handle, and render canonical `x.com/:handle` links
+on member cards, community pages, and public raffle host details.
+**Why:** A first-class social link makes community identity clearer while
+remaining separate from paid X engagement verification and OAuth-linked member
+accounts.

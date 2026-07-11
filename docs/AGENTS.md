@@ -174,14 +174,20 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Org raffle detail pages should render entry requirements as user-friendly
   cards, not raw `requirements` JSON.
 - Community, raffle, and notification features shipped in S2.5.
+- Member `/me/communities` distinguishes Discord communities the signed-in
+  user belongs to from the complete KOS directory by comparing the OAuth
+  `users/@me/guilds` response with organization `GuildConnection` rows. A
+  failed lookup must show reconnect state rather than a false empty list.
+- Community X branding is `Organization.xHandle`, validated from a handle or
+  supported profile URL and rendered only as a public profile link. It is not
+  X ownership or engagement verification.
 - `SystemStatus["bot-heartbeat"]` is updated about once per minute; the admin
   health page considers it online for three minutes.
 - Proof files live on the bot host and are also delivered to Discord.
 - Focused dashboard tests cover public raffle policy, duplicate scheduling, and
   duplicate-route tenant isolation. Broader browser/integration coverage is
   still missing, and the scheduler assumes one bot instance.
-- Root `pnpm build` is currently broken by shell expansion; individual package
-  builds pass.
+- Root `pnpm build` quotes workspace filters and builds DB, bot, and dashboard.
 - Older public setup/deployment docs and `.env.example` lag Phase 2/3 and still
   emphasize the legacy internal API.
 
