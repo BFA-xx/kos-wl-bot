@@ -744,7 +744,7 @@ Verification:
   push; no Vercel CLI/API credential is available in this local shell to
   inspect the deployment record directly.
 
-### Cancelled raffle URL hardening and dashboard repost — implemented locally
+### Cancelled raffle URL hardening and dashboard repost — committed/pushed/deployed
 
 - Root cause confirmed from production audit rows and EC2 PM2 logs: raffles
   #58-#60 were rejected by Discord with `50035` because legacy task button URLs
@@ -772,8 +772,17 @@ Verification:
 - `corepack pnpm --filter @kos/dashboard typecheck`
 - `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
 - `git diff --check`
-- Not committed, pushed, or deployed yet; repository rules require explicit
-  authorization for those operations.
+- Production-row smoke test built raffle #60's Discord components and confirmed
+  the stored task URLs now render without trailing whitespace.
+- Code committed as `108acb2` (`Fix cancelled raffle repost flow`) and pushed
+  to `origin/main`.
+- EC2 bot deployed via `./scripts/deploy-ec2.sh`; PM2 reported `kos-bot` online
+  and the internal health endpoint returned `{"ok":true,"ready":true}`.
+- Both connected Vercel deployment statuses completed successfully for commit
+  `108acb2`.
+- Signed-in production browser verification on `raffle.koslabs.app` confirmed
+  the cancelled-raffle failure panel, trimmed task links, and **Repost raffle**
+  button are live. No raffle was requeued during verification.
 
 ## Assumptions
 
