@@ -58,3 +58,9 @@
 - `/c/*` community pages require sign-in. `/r/:id` is the only anonymous raffle
   surface and must never expose organization controls, entrant identities, or
   hidden entry counts.
+- Public raffle IDs are positive PostgreSQL integers. Only UPCOMING, LIVE, and
+  ENDED records may resolve publicly; DRAFT and CANCELLED never do.
+- Raffle duplicate source queries must include both the raffle ID and the
+  requesting organization's connected guild IDs. Duplicates remain in their
+  source guild unless a future cross-organization flow performs independent
+  authorization for both organizations.

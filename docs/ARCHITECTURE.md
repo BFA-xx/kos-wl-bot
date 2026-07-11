@@ -143,11 +143,18 @@ processes those requests.
 - Every UPCOMING, LIVE, or ENDED raffle in a non-suspended organization has a
   canonical `/r/:id` page with SSR metadata, Open Graph/Twitter banner data,
   public requirements, and no admin controls.
-- Share-link helpers always point to the production raffle origin and the
-  stable raffle ID; clipboard actions have a manual-copy fallback.
+- Raffle IDs are validated as positive PostgreSQL integers. Share-link helpers
+  normalize the configured HTTP(S) origin and use the stable global raffle ID;
+  clipboard actions have a manual-copy fallback.
+- Public organization identity is derived from the raffle guild's unique
+  `GuildConnection`. The legacy `/c/:slug/raffles/:id` page verifies that
+  relationship and permanently redirects to the canonical page.
 - `GET /api/:org/raffles/:id/duplicate` returns a permission-checked editable
   blueprint. `POST` creates a fresh `DRAFT` from source configuration plus
   reviewed overrides and preserves raw custom requirement fields.
+- Both duplicate endpoints query the source by raffle ID plus the requesting
+  organization's connected guild IDs. The client cannot select a different
+  organization or guild for the clone.
 - Duplication never copies participants, winners, entry counts, Discord message
   IDs, proof/draw state, created dates, or analytics. The bot publishes the new
   draft through the standard database scheduler flow.
@@ -240,7 +247,9 @@ storage for development. Bot and dashboard must share the same key.
 
 ## Verification posture
 
-There is no automated test suite. Current safety nets are strict TypeScript,
+Vitest covers public raffle policy, duplicate scheduling/variants, and the
+duplicate API's tenant boundary. Additional safety nets are strict TypeScript,
 Prisma schema validation, package builds, database constraints, and production
-smoke checks. See `docs/HANDOFF.md` for the latest verified commands and known
-gaps.
+smoke checks. Draws, full eligibility parity, OAuth, Discord, and authenticated
+browser flows still need broader automated coverage. See `docs/HANDOFF.md` for
+the latest verified commands and known gaps.

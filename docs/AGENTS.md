@@ -177,7 +177,9 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - `SystemStatus["bot-heartbeat"]` is updated about once per minute; the admin
   health page considers it online for three minutes.
 - Proof files live on the bot host and are also delivered to Discord.
-- There is no automated test suite and the scheduler assumes one bot instance.
+- Focused dashboard tests cover public raffle policy, duplicate scheduling, and
+  duplicate-route tenant isolation. Broader browser/integration coverage is
+  still missing, and the scheduler assumes one bot instance.
 - Root `pnpm build` is currently broken by shell expansion; individual package
   builds pass.
 - Older public setup/deployment docs and `.env.example` lag Phase 2/3 and still
@@ -233,12 +235,13 @@ DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder \
   pnpm --filter @kos/dashboard build
 ```
 
-The root `pnpm build` command is currently unreliable because its unquoted
-workspace filter globs are shell-expanded. Until fixed, build packages
-individually as above.
+The root `pnpm build` command quotes its workspace filter globs and builds the
+DB, bot, and dashboard. Package-specific commands remain useful during focused
+development.
 
-There are no automated tests. For behavior changes, add focused tests where
-possible and describe any remaining manual Discord/Vercel smoke checks.
+Dashboard Vitest coverage currently focuses on public raffle policy,
+duplication behavior, and tenant isolation. Add focused tests for behavior
+changes and describe remaining manual Discord/Vercel smoke checks.
 
 ## Deployment boundaries
 

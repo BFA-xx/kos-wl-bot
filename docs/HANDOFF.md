@@ -3,7 +3,7 @@
 Last updated: 2026-07-11
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `436e67d`
+Audited application commit: `2e6ef94`
 
 ## Current state
 
@@ -82,7 +82,8 @@ availability described below.
   `/me/points` redirects to `/login?next=%2Fme%2Fpoints`, and the new
   `/api/me/points` and `/api/kos/points` endpoints return `401` instead of
   `404`, confirming the points routes are live on the web deployment.
-- No automated test files exist.
+- Focused dashboard policy and tenant-isolation tests are available through
+  `pnpm --filter @kos/dashboard test`; broader coverage remains incomplete.
 
 ## Handoff reconciliation
 
@@ -109,10 +110,10 @@ precision points:
 
 ### High priority
 
-- No automated tests for draw logic, eligibility parity, tenant isolation,
-  OAuth, task verification, wallet validation, or scheduler request handling.
-- Root `pnpm build` is broken by shell-expanded `--filter ./apps/**`; package
-  builds pass individually.
+- Focused automated tests now cover public raffle URL/lifecycle policy,
+  duplicate schedule/variant behavior, and duplicate-route tenant isolation.
+  Draw logic, full eligibility parity, OAuth, wallet validation, scheduler
+  requests, and authenticated browser flows still lack automated coverage.
 - Documentation outside the new takeover docs is substantially pre-Phase 3.
   `README.md`, `GUIDE.md`, `docs/VERCEL.md`, deployment/security guides, and
   `.env.example` still emphasize the localhost control API and omit several
@@ -194,9 +195,9 @@ began.
 - Updating legacy social tasks merges them into the existing requirements JSON
   instead of erasing account-age, server-age, reaction, or extra-role gates.
 
-Verification: dashboard typecheck and production build pass. No database,
-Discord, or browser integration smoke test was run, and the repository still
-has no automated test harness.
+Verification at that point: dashboard typecheck and production build passed;
+no database, Discord, or browser integration smoke test was run for that
+specific slice. A focused dashboard test harness was added later.
 
 ### Profile task hub and org raffle detail cleanup — committed/pushed
 
@@ -846,22 +847,55 @@ Verification:
   `https://raffle.koslabs.app/r/57` fallback when clipboard permissions are
   denied.
 
-## Assumptions
+### Multi-tenant sharing hardening and debt cleanup — committed/pushed/deployed
 
-- `/Users/adebayodaniel/KOS RAF` is the intended repository because it is the
-  only local Git repository matching the handoff and its HEAD exactly matches
-  Claude's final commit.
-- "Active raffles" for the profile Tasks hub means `Raffle.status = LIVE`
+- Confirmed the production design is multi-tenant: unique
+  `GuildConnection.guildId` anchors ownership, and duplicate GET/POST source
+  reads use both the source raffle ID and the requesting organization's guild
+  IDs.
+- Extracted and tested the mandatory duplicate tenant scope. Route tests prove
+  an out-of-tenant raffle returns `404` and malformed IDs are rejected before a
+  database read.
+- Encoded public policy as code-level invariants: positive PostgreSQL `Int`
+  identifiers, normalized HTTP(S) origin, and an allowlist of UPCOMING/LIVE/
+  ENDED. DRAFT and CANCELLED remain private.
+- Replaced the duplicate legacy raffle implementation with a tenant-verified
+  permanent redirect from `/c/:slug/raffles/:id` to `/r/:id`.
+- Added Framer Motion to raffle action menus, toasts, and the raffle builder.
+- Added Vitest and nine focused tests across three files.
+- Fixed the root build script by quoting recursive pnpm filters; root
+  `pnpm build` now builds DB, bot, and dashboard successfully.
+- No schema migration or environment-variable change is required.
+
+Verification:
+
+- `corepack pnpm test` — 3 files, 9 tests passed.
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm build`
+- `git diff --check`
+- Application committed as `2e6ef94` (`Harden multi-tenant raffle sharing`)
+  and pushed to `origin/main`.
+- Both connected Vercel deployments completed successfully for `2e6ef94`.
+- Production canaries confirmed `/r/57` returns `200`, while cancelled raffle
+  `/r/60` and malformed `/r/not-valid` return `404`.
+- Anonymous requests to the signed-in compatibility route still pass through
+  middleware and return the expected login redirect; after authentication the
+  page verifies tenant ownership and permanently redirects to `/r/:id`.
+
+## Confirmed invariants and current product policies
+
+- The active repository is `/Users/adebayodaniel/KOS RAF`; its `origin` is
+  `BFA-xx/kos-wl-bot` and the deployment branch is `main`.
+- "Active raffles" for the profile Tasks hub is defined as `Raffle.status = LIVE`
   within non-suspended organizations that have connected guilds.
 - Active org-created tasks are intended to be visible as standalone earning
   tasks to signed-in members; raffle attachment is only needed when that task
   must gate raffle entry.
 - Legacy social/link task verification is intentionally click-and-attest, not
   paid X API verification.
-- Vercel is configured to auto-deploy pushes to `main`; the route-canary checks
-  confirm the new points/rewards routes are present in production, but no
-  Vercel CLI/API credential is available in this local environment to inspect
-  the deployment record directly.
+- Vercel auto-deploys pushes to `main`; deployment state is verified through
+  the repository's two connected Vercel commit statuses and production route
+  canaries.
 - "Points channel" means a Discord channel per connected guild where KOS posts
   points/rewards activity and where managers can host `/points panel`.
 - Reward fulfillment is manual for now; points spend/refund and stock changes

@@ -211,3 +211,28 @@ state. Variant transforms (`SAME`, `GTD`, `FCFS`) are applied before creation.
 backfill/collision risk, and make every historical eligible raffle immediately
 shareable. A configuration-only clone is safe and can later support templates,
 cross-community targets, drafts, and schedules without copying outcome data.
+
+## D023 — Raffle sharing and duplication preserve tenant ownership
+
+**Status:** Accepted
+**Decision:** `/r/:id` uses the globally unique raffle identity, then derives
+the host organization exclusively through the raffle guild's unique
+`GuildConnection`. Duplicate reads and writes must use both the source raffle
+ID and the requesting organization's connected guild IDs. A duplicate remains
+in its source guild; moving configuration across organizations requires a
+separate, explicitly authorized future workflow.
+**Why:** A globally shareable URL must not weaken dashboard isolation. Keeping
+the tenant boundary in the server query prevents guessed IDs, modified request
+bodies, or another organization's manager from reading or cloning private
+configuration.
+
+## D024 — Public raffle URL and lifecycle policy are code-level invariants
+
+**Status:** Accepted
+**Decision:** Raffle IDs are positive PostgreSQL `Int` identities. Only
+UPCOMING, LIVE, and ENDED raffles are public; DRAFT and CANCELLED are not.
+Share URLs use a normalized HTTP(S) `NEXT_PUBLIC_RAFFLE_ORIGIN`, falling back to
+the production origin `https://raffle.koslabs.app`. The compatibility route
+`/c/:slug/raffles/:id` verifies the slug and permanently redirects to `/r/:id`.
+**Why:** These were already product expectations. Encoding and testing them
+removes ambiguity and prevents route implementations from drifting apart.
