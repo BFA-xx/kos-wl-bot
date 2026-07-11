@@ -744,6 +744,37 @@ Verification:
   push; no Vercel CLI/API credential is available in this local shell to
   inspect the deployment record directly.
 
+### Cancelled raffle URL hardening and dashboard repost — implemented locally
+
+- Root cause confirmed from production audit rows and EC2 PM2 logs: raffles
+  #58-#60 were rejected by Discord with `50035` because legacy task button URLs
+  contained trailing spaces. Raffle #57 was published earlier but its later
+  message refreshes failed for the same reason.
+- Dashboard create/edit APIs now trim and validate HTTP(S) task/project URLs
+  before persistence.
+- Discord embed/component rendering performs the same validation defensively,
+  allowing existing affected rows to publish safely without a data migration.
+- Discord publish failures now retain the detailed Discord field error instead
+  of replacing it with the generic `Invalid Form Body` summary.
+- Cancelled raffle detail pages show the latest publish-failure audit message.
+- Users with `raffle:edit` can click **Repost raffle** for an unexpired
+  cancelled raffle. The API clears stale message state and returns it to
+  `DRAFT`; the EC2 scheduler publishes it on its next tick using the existing
+  database-mediated flow. Entries and raffle configuration are preserved.
+- Repost is rejected for non-cancelled raffles, expired raffles, missing
+  channels, invalid IDs, and out-of-organization records.
+- No database migration is required.
+
+Verification:
+
+- `corepack pnpm --filter @kos/bot typecheck`
+- `corepack pnpm --filter @kos/bot build`
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
+- `git diff --check`
+- Not committed, pushed, or deployed yet; repository rules require explicit
+  authorization for those operations.
+
 ## Assumptions
 
 - `/Users/adebayodaniel/KOS RAF` is the intended repository because it is the

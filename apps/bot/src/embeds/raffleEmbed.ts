@@ -63,8 +63,8 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
     `# ${raffle.projectName.toUpperCase()}`,
     `-# ${raffle.title}`,
   ];
-  if (raffle.externalUrl)
-    head.push(`-# [Visit project ↗](${raffle.externalUrl})`);
+  const externalUrl = safeHttpUrl(raffle.externalUrl);
+  if (externalUrl) head.push(`-# [Visit project ↗](${externalUrl})`);
   if (raffle.description) head.push("", raffle.description.slice(0, 1500));
   head.push("", `**Status** — ${statusBadge(raffle.status)}`, countdown);
 
@@ -140,13 +140,15 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
     });
   }
 
-  if (raffle.bannerUrl) embed.setImage(raffle.bannerUrl);
+  const bannerUrl = safeHttpUrl(raffle.bannerUrl);
+  if (bannerUrl) embed.setImage(bannerUrl);
 
   // Show who hosted the raffle (avatar + name), like a post author.
   if (raffle.createdByName) {
+    const hostAvatarUrl = safeHttpUrl(raffle.createdByAvatar);
     embed.setAuthor({
       name: `Hosted by ${raffle.createdByName}`,
-      ...(raffle.createdByAvatar ? { iconURL: raffle.createdByAvatar } : {}),
+      ...(hostAvatarUrl ? { iconURL: hostAvatarUrl } : {}),
     });
   }
 
@@ -186,7 +188,13 @@ export function buildRaffleComponents(
   // Link tasks become buttons (max 5 in one row). Text-only tasks are shown in
   // the embed instead.
   const linkTasks = (parseRequirements(raffle.requirements).tasks ?? [])
-    .filter((t): t is { label: string; url: string } => Boolean(t.url))
+    .map((task) => ({
+      label: task.label.trim(),
+      url: safeHttpUrl(task.url),
+    }))
+    .filter((t): t is { label: string; url: string } =>
+      Boolean(t.label && t.url),
+    )
     .slice(0, 5);
   if (linkTasks.length > 0) {
     const taskRow = new ActionRowBuilder<ButtonBuilder>();
@@ -246,4 +254,16 @@ function describeRequirements(raw: unknown): string | null {
     );
   if (req.requiredReaction) lines.push(`• React on the announcement post`);
   return lines.length ? lines.join("\n") : null;
+}
+
+function safeHttpUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
 }

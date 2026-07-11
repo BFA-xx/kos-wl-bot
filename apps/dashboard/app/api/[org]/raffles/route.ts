@@ -8,6 +8,7 @@ import {
 } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
 import type { Prisma, RaffleStatus, WalletChain } from "@prisma/client";
+import { sanitizeHttpUrl, sanitizeLegacyRaffleTasks } from "@/lib/raffle-input";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -155,13 +156,7 @@ export async function POST(
       }));
 
     // Social / off-platform tasks (label + optional URL) → requirements.tasks.
-    const tasks = (Array.isArray(b.tasks) ? b.tasks : [])
-      .filter((t: { label?: string }) => t?.label && String(t.label).trim())
-      .slice(0, 10)
-      .map((t: { label: string; url?: string }) => ({
-        label: String(t.label).trim().slice(0, 80),
-        ...(t.url && /^https?:\/\//i.test(t.url) ? { url: String(t.url) } : {}),
-      }));
+    const tasks = sanitizeLegacyRaffleTasks(b.tasks);
 
     // Verification tasks (Task Engine) — must belong to this org.
     const taskIds: string[] = Array.isArray(b.verificationTaskIds)
@@ -182,7 +177,9 @@ export async function POST(
         channelId,
         announceChannelId,
         proofChannelId,
-        requirements: tasks.length ? { tasks } : undefined,
+        requirements: tasks.length
+          ? ({ tasks } as unknown as Prisma.InputJsonValue)
+          : undefined,
         projectName,
         title,
         description: b.description ? String(b.description) : null,
@@ -200,7 +197,7 @@ export async function POST(
         collectWallets: b.collectWallets !== false,
         walletChains: walletChains.length ? walletChains : ["ETHEREUM"],
         bannerUrl: b.bannerUrl ? String(b.bannerUrl) : null,
-        externalUrl: b.externalUrl ? String(b.externalUrl) : null,
+        externalUrl: sanitizeHttpUrl(b.externalUrl),
         createdById: user.id,
         createdByName: user.globalName ?? user.username,
         createdByAvatar: user.avatarUrl,

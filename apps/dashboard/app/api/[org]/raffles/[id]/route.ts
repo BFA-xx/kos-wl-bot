@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { AccessError, requireOrgAccess, logAudit } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
 import { Prisma, type WalletChain } from "@prisma/client";
+import { sanitizeHttpUrl, sanitizeLegacyRaffleTasks } from "@/lib/raffle-input";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -92,7 +93,7 @@ export async function PATCH(
     if ("bannerUrl" in b)
       data.bannerUrl = b.bannerUrl ? String(b.bannerUrl) : null;
     if ("externalUrl" in b)
-      data.externalUrl = b.externalUrl ? String(b.externalUrl) : null;
+      data.externalUrl = sanitizeHttpUrl(b.externalUrl);
     if ("hideEntries" in b) data.hideEntries = Boolean(b.hideEntries);
     if ("requireWallet" in b) data.requireWallet = Boolean(b.requireWallet);
     if ("useRoleWeights" in b) data.useRoleWeights = Boolean(b.useRoleWeights);
@@ -118,15 +119,7 @@ export async function PATCH(
     if ("collectWallets" in b) data.collectWallets = Boolean(b.collectWallets);
 
     if (Array.isArray(b.tasks)) {
-      const tasks = b.tasks
-        .filter((t: { label?: string }) => t?.label && String(t.label).trim())
-        .slice(0, 10)
-        .map((t: { label: string; url?: string }) => ({
-          label: String(t.label).trim().slice(0, 80),
-          ...(t.url && /^https?:\/\//i.test(t.url)
-            ? { url: String(t.url) }
-            : {}),
-        }));
+      const tasks = sanitizeLegacyRaffleTasks(b.tasks);
       const requirements = {
         ...((existing.requirements ?? {}) as Record<string, unknown>),
       };

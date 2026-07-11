@@ -154,8 +154,14 @@ export async function publishRaffleMessage(
     });
     return { ok: true };
   } catch (err) {
-    const e = err as { code?: number; message?: string; rawError?: { message?: string } };
-    const detail = e.rawError?.message ?? e.message ?? "unknown error";
+    const e = err as {
+      code?: number;
+      message?: string;
+      rawError?: { message?: string };
+    };
+    // Discord's top-level message includes the exact invalid field; rawError's
+    // message is often only the unhelpful "Invalid Form Body" summary.
+    const detail = e.message ?? e.rawError?.message ?? "unknown error";
     logger.warn({ err, raffleId, channelId: raffle.channelId }, "failed to post raffle embed");
     return {
       ok: false,

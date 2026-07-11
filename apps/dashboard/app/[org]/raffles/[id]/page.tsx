@@ -58,6 +58,12 @@ export default async function RaffleDetailPage({
         include: { wallet: true },
       },
       proof: true,
+      logs: {
+        where: { action: "PUBLISH_FAILED" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { message: true, createdAt: true },
+      },
       _count: { select: { participants: true } },
     },
   });
@@ -318,6 +324,22 @@ export default async function RaffleDetailPage({
         <ParticipantsLive raffleId={raffle.id} />
       </div>
 
+      {raffle.status === "CANCELLED" && raffle.logs[0] ? (
+        <div className="mt-4 rounded-3xl border border-amber-400/20 bg-amber-500/[0.07] p-4 text-sm">
+          <div className="font-semibold text-amber-200">Discord post failed</div>
+          <p className="mt-1 leading-6 text-amber-100/70">
+            {raffle.logs[0].message.replace(
+              "Dashboard raffle could not be posted: ",
+              "",
+            )}
+          </p>
+          <p className="mt-2 text-xs text-kos-muted">
+            Fix the invalid field or channel permissions, then use Repost raffle
+            below. Existing entries and settings are preserved.
+          </p>
+        </div>
+      ) : null}
+
       <div className="mt-4">
         <RaffleActions raffleId={raffle.id} status={raffle.status} />
       </div>
@@ -388,7 +410,10 @@ function getSocialTasks(
     return [
       {
         label: t.label,
-        url: typeof t.url === "string" && t.url.trim() ? t.url : undefined,
+        url:
+          typeof t.url === "string" && t.url.trim()
+            ? t.url.trim()
+            : undefined,
       },
     ];
   });

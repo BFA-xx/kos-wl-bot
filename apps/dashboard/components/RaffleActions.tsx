@@ -15,6 +15,7 @@ export function RaffleActions({
   const router = useRouter();
   const { slug } = useOrg();
   const canEnd = useCan(PERMISSIONS.RAFFLE_END);
+  const canEdit = useCan(PERMISSIONS.RAFFLE_EDIT);
   const canReroll = useCan(PERMISSIONS.RAFFLE_REROLL);
   const canExportWallets = useCan(PERMISSIONS.WALLET_EXPORT);
   const canExportReports = useCan(PERMISSIONS.REPORT_EXPORT);
@@ -50,7 +51,27 @@ export function RaffleActions({
     router.refresh();
   }
 
-  const nothing = !canEnd && !canReroll && !canExportWallets && !canExportReports;
+  async function repost() {
+    setBusy("repost");
+    setMsg(null);
+    const res = await fetch(api("/repost"), { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    setBusy(null);
+    setMsg(
+      res.ok
+        ? "Repost queued — the bot will publish it in a few seconds."
+        : body.error ?? "Couldn't queue the repost.",
+    );
+    router.refresh();
+  }
+
+  const canRepost = canEdit && status === "CANCELLED";
+  const nothing =
+    !canEnd &&
+    !canRepost &&
+    !canReroll &&
+    !canExportWallets &&
+    !canExportReports;
   if (nothing) return null;
 
   return (
@@ -79,6 +100,15 @@ export function RaffleActions({
         {canEnd && status !== "ENDED" && status !== "CANCELLED" ? (
           <button className="kos-btn" onClick={endNow} disabled={busy !== null}>
             {busy === "end" ? "Ending…" : "End Now & Draw"}
+          </button>
+        ) : null}
+        {canRepost ? (
+          <button
+            className="kos-btn-primary"
+            onClick={repost}
+            disabled={busy !== null}
+          >
+            {busy === "repost" ? "Queuing…" : "Repost raffle"}
           </button>
         ) : null}
       </div>

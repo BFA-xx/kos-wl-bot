@@ -153,6 +153,13 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Discord raffle task verification feedback should name the exact raffle/project
   and retry entry for that same raffle, so members are never pushed into a
   generic multi-raffle task context.
+- Normalize external/task URLs at the dashboard API boundary and again before
+  building Discord embeds/components. Discord rejects link buttons containing
+  leading or trailing whitespace with error `50035`, which otherwise causes a
+  dashboard-created raffle to be marked `CANCELLED`.
+- Dashboard reposts for unexpired cancelled raffles should queue the existing
+  DB-mediated publish flow by returning the raffle to `DRAFT`; do not call the
+  bot's localhost control API from Vercel or duplicate participant/draw data.
 - Successful Discord raffle entry feedback must be shown in the member's
   ephemeral interaction response, not by changing the public raffle button to a
   per-user state. The public Discord message is shared by all members; use
