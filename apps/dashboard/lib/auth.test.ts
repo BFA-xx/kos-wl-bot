@@ -2,16 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
-  updateMany: vi.fn(),
+  lockedFindUnique: vi.fn(),
+  update: vi.fn(),
+  queryRaw: vi.fn(),
+  transaction: vi.fn(),
   refreshAccessToken: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    user: {
-      findUnique: mocks.findUnique,
-      updateMany: mocks.updateMany,
-    },
+    user: { findUnique: mocks.findUnique },
+    $transaction: mocks.transaction,
   },
 }));
 
@@ -34,24 +35,36 @@ const expiredUser = {
 
 describe("Discord access token refresh", () => {
   beforeEach(() => {
-    mocks.findUnique.mockReset();
-    mocks.updateMany.mockReset();
-    mocks.refreshAccessToken.mockReset();
+    Object.values(mocks).forEach((mock) => mock.mockReset());
+    mocks.queryRaw.mockResolvedValue([{ pg_advisory_xact_lock: null }]);
+    mocks.transaction.mockImplementation(
+      async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          $queryRaw: mocks.queryRaw,
+          user: {
+            findUnique: mocks.lockedFindUnique,
+            update: mocks.update,
+          },
+        }),
+    );
   });
 
-  it("reuses a token persisted by a concurrent refresh", async () => {
-    mocks.findUnique.mockResolvedValueOnce(expiredUser).mockResolvedValueOnce({
+  it("reuses a token persisted while waiting for the distributed lock", async () => {
+    mocks.findUnique.mockResolvedValue(expiredUser);
+    mocks.lockedFindUnique.mockResolvedValue({
+      ...expiredUser,
       accessToken: "new-access",
       tokenExpiresAt: new Date(Date.now() + 60 * 60_000),
     });
-    mocks.refreshAccessToken.mockResolvedValue(null);
 
     await expect(getValidAccessToken("user-1")).resolves.toBe("new-access");
-    expect(mocks.updateMany).not.toHaveBeenCalled();
+    expect(mocks.queryRaw).toHaveBeenCalledOnce();
+    expect(mocks.refreshAccessToken).not.toHaveBeenCalled();
   });
 
-  it("updates rotated tokens only when the stored refresh token still matches", async () => {
-    mocks.findUnique.mockResolvedValueOnce(expiredUser);
+  it("rotates expired tokens while holding the distributed lock", async () => {
+    mocks.findUnique.mockResolvedValue(expiredUser);
+    mocks.lockedFindUnique.mockResolvedValue(expiredUser);
     mocks.refreshAccessToken.mockResolvedValue({
       access_token: "new-access",
       refresh_token: "new-refresh",
@@ -59,13 +72,11 @@ describe("Discord access token refresh", () => {
       token_type: "Bearer",
       scope: "identify guilds",
     });
-    mocks.updateMany.mockResolvedValue({ count: 1 });
+    mocks.update.mockResolvedValue({ id: "user-1" });
 
     await expect(getValidAccessToken("user-1")).resolves.toBe("new-access");
-    expect(mocks.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "user-1", refreshToken: "old-refresh" },
-      }),
+    expect(mocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "user-1" } }),
     );
   });
 });

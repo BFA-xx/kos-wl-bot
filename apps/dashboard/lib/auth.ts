@@ -60,48 +60,47 @@ export async function getValidAccessToken(
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user?.accessToken) return null;
 
-  const notExpired =
-    user.tokenExpiresAt && user.tokenExpiresAt.getTime() - 60_000 > Date.now();
-  if (notExpired) return decryptSecret(user.accessToken);
+  if (hasUsableAccessToken(user)) return decryptSecret(user.accessToken);
 
-  if (!user.refreshToken) return null;
-  const refreshed = await refreshAccessToken(decryptSecret(user.refreshToken));
-  if (!refreshed) return waitForConcurrentTokenRefresh(userId);
+  return prisma.$transaction(
+    async (tx) => {
+      // The transaction-scoped advisory lock serializes refresh-token rotation
+      // across concurrent Vercel instances without holding a permanent lock.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`discord-oauth:${userId}`}))`;
 
-  const updated = await prisma.user.updateMany({
-    where: { id: userId, refreshToken: user.refreshToken },
-    data: {
-      accessToken: encryptSecret(refreshed.access_token),
-      refreshToken: encryptSecret(refreshed.refresh_token),
-      tokenExpiresAt: new Date(Date.now() + refreshed.expires_in * 1000),
+      const lockedUser = await tx.user.findUnique({ where: { id: userId } });
+      if (!lockedUser?.accessToken) return null;
+      if (hasUsableAccessToken(lockedUser)) {
+        return decryptSecret(lockedUser.accessToken);
+      }
+      if (!lockedUser.refreshToken) return null;
+
+      const refreshed = await refreshAccessToken(
+        decryptSecret(lockedUser.refreshToken),
+      );
+      if (!refreshed) return null;
+
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          accessToken: encryptSecret(refreshed.access_token),
+          refreshToken: encryptSecret(refreshed.refresh_token),
+          tokenExpiresAt: new Date(Date.now() + refreshed.expires_in * 1000),
+        },
+      });
+      return refreshed.access_token;
     },
-  });
-  if (updated.count === 0) {
-    return waitForConcurrentTokenRefresh(userId);
-  }
-  return refreshed.access_token;
+    { maxWait: 5_000, timeout: 15_000 },
+  );
 }
 
-/**
- * Discord rotates refresh tokens. If another request refreshed the same user
- * first, wait briefly for its database update and reuse the newly stored token.
- */
-async function waitForConcurrentTokenRefresh(
-  userId: string,
-): Promise<string | null> {
-  for (const delayMs of [75, 200, 400]) {
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
-    const latest = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { accessToken: true, tokenExpiresAt: true },
-    });
-    if (
-      latest?.accessToken &&
-      latest.tokenExpiresAt &&
-      latest.tokenExpiresAt.getTime() - 30_000 > Date.now()
-    ) {
-      return decryptSecret(latest.accessToken);
-    }
-  }
-  return null;
+function hasUsableAccessToken(user: {
+  accessToken: string | null;
+  tokenExpiresAt: Date | null;
+}): user is { accessToken: string; tokenExpiresAt: Date } {
+  return Boolean(
+    user.accessToken &&
+    user.tokenExpiresAt &&
+    user.tokenExpiresAt.getTime() - 60_000 > Date.now(),
+  );
 }
