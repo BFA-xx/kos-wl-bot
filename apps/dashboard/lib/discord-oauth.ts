@@ -139,8 +139,18 @@ async function discordRetryDelay(
   response: Response,
   attempt: number,
 ): Promise<number> {
-  let retryAfter = Number(response.headers.get("retry-after"));
-  if (!Number.isFinite(retryAfter) && response.status === 429) {
+  const retryHeader = Number(response.headers.get("retry-after"));
+  if (Number.isFinite(retryHeader)) {
+    // Discord's REST header is milliseconds (for example `997`), while some
+    // proxies use seconds for small decimal values. Support both forms.
+    return Math.min(
+      5_000,
+      Math.max(100, retryHeader > 60 ? retryHeader : retryHeader * 1_000),
+    );
+  }
+
+  let retryAfter = Number.NaN;
+  if (response.status === 429) {
     try {
       const body = (await response.clone().json()) as { retry_after?: unknown };
       retryAfter = Number(body.retry_after);

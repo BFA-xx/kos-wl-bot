@@ -9,12 +9,13 @@ describe("Discord guild membership lookup", () => {
 
   it("retries a rate-limited request and returns the guild list", async () => {
     vi.useFakeTimers();
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ retry_after: 0.01 }), {
+        new Response(null, {
           status: 429,
-          headers: { "content-type": "application/json" },
+          headers: { "retry-after": "997" },
         }),
       )
       .mockResolvedValueOnce(
@@ -49,6 +50,7 @@ describe("Discord guild membership lookup", () => {
       ],
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(timeoutSpy).toHaveBeenCalledWith(expect.any(Function), 997);
   });
 
   it("does not retry a permanent authorization failure", async () => {
