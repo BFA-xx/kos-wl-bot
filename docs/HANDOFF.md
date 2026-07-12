@@ -31,7 +31,7 @@ Phase 3 is implemented through S2.5:
   completion output are implemented and verified.
 - The member Raffles tab now includes read-only ended history, and team raffle
   deletion is implemented through the database-mediated bot cleanup flow.
-  Production deployment is authorized in the active task and pending.
+  Both dashboard projects and the EC2 bot are deployed.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -148,6 +148,9 @@ precision points:
 ### Operational
 
 - Proof artifacts live only on EC2 local disk plus Discord delivery.
+- Raffle deletion removes the live raffle post and EC2 proof files, but cannot
+  remove the previously delivered proof-channel message because its Discord
+  message ID is not stored.
 - Legacy internal control API code/config remains even though production uses
   DB mediation.
 - The scheduler is designed for one bot instance; multiple bot instances could
@@ -171,7 +174,7 @@ weighted-draw foundations:
    refresh setup/deployment documentation before adding the full campaigns
    layer.
 
-## Member activity and private proof hardening — complete locally
+## Member activity and private proof hardening — committed/deployed
 
 - Participant identities are clickable from the organization Participants
   table, live raffle participant table, points leaderboard/recent activity,
@@ -209,10 +212,9 @@ Verification:
 - `git diff --check`
 
 No schema migration or environment change is required. The working tree has
-not yet been committed, pushed, or deployed at this checkpoint; the user has
-now explicitly authorized all three operations in the active task.
+been committed and pushed as part of `6f252d7`.
 
-## Ended member raffles and team deletion — complete locally
+## Ended member raffles and team deletion — committed/deployed
 
 - `/api/me/tasks` retains `raffles` for up to 50 live raffles and adds a
   separate `endedRaffles` collection for the 30 most recently ended raffles.
@@ -240,10 +242,24 @@ now explicitly authorized all three operations in the active task.
 - Added route tests for tenant isolation, atomic cancellation/queueing, audit
   logging, and idempotent repeat requests.
 
-Verification at this checkpoint:
+Verification and deployment:
 
 - `pnpm typecheck` passes for DB, dashboard, and bot.
 - `pnpm test` passes: dashboard 22 tests across eight files; bot two tests.
+- `pnpm build` passes for DB, dashboard, and bot.
+- Application commit `6f252d7` (`Add member insights and raffle lifecycle
+controls`) and compact ended-history follow-up `eef3257` were pushed to
+  `origin/main`.
+- EC2 deploy rebuilt DB/bot, registered seven guild commands, restarted PM2
+  process `kos-bot`, reported `online`, and returned
+  `{"ok":true,"ready":true}` from the internal health endpoint.
+- Both Vercel projects reported successful/Ready production deployments for
+  `eef3257`. Deployment `dpl_CCYkxNL7JGAs5yuZsquSEvGRhFbi` was verified as
+  commit `eef3257` and explicitly assigned to `https://raffle.koslabs.app`.
+- Authenticated production QA confirmed `/me/raffles` exposes separate live
+  and ended sections with 30 recent ended raffles and read-only ended states.
+  It also confirmed all 59 team raffle rows expose Actions and that an expanded
+  menu includes **Delete raffle**. No raffle was deleted during QA.
 - No schema migration or environment-variable change is required.
 
 ## Changes in this takeover task
