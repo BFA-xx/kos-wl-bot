@@ -12,9 +12,9 @@ describe("Discord guild membership lookup", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(null, {
+        new Response(JSON.stringify({ retry_after: 0.01 }), {
           status: 429,
-          headers: { "retry-after": "0" },
+          headers: { "content-type": "application/json" },
         }),
       )
       .mockResolvedValueOnce(

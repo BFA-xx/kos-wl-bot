@@ -78,7 +78,12 @@ export async function getValidAccessToken(
       const refreshed = await refreshAccessToken(
         decryptSecret(lockedUser.refreshToken),
       );
-      if (!refreshed) return null;
+      if (!refreshed) {
+        const concurrent = await tx.user.findUnique({ where: { id: userId } });
+        return concurrent && hasUsableAccessToken(concurrent)
+          ? decryptSecret(concurrent.accessToken)
+          : null;
+      }
 
       await tx.user.update({
         where: { id: userId },

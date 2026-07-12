@@ -111,7 +111,7 @@ export interface DiscordGuildsResult {
 export async function fetchUserGuildsResult(
   token: string,
 ): Promise<DiscordGuildsResult> {
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const res = await fetch("https://discord.com/api/users/@me/guilds", {
         headers: { authorization: `Bearer ${token}` },
@@ -123,19 +123,34 @@ export async function fetchUserGuildsResult(
         };
       }
       const retryable = res.status === 429 || res.status >= 500;
-      if (!retryable || attempt === 2) return { ok: false, guilds: [] };
+      if (!retryable || attempt === 3) return { ok: false, guilds: [] };
 
-      const retryAfter = Number(res.headers.get("retry-after"));
-      const delayMs = Number.isFinite(retryAfter)
-        ? Math.min(2_000, Math.max(75, retryAfter * 1_000))
-        : 150 * (attempt + 1);
+      const delayMs = await discordRetryDelay(res, attempt);
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     } catch {
-      if (attempt === 2) return { ok: false, guilds: [] };
+      if (attempt === 3) return { ok: false, guilds: [] };
       await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
     }
   }
   return { ok: false, guilds: [] };
+}
+
+async function discordRetryDelay(
+  response: Response,
+  attempt: number,
+): Promise<number> {
+  let retryAfter = Number(response.headers.get("retry-after"));
+  if (!Number.isFinite(retryAfter) && response.status === 429) {
+    try {
+      const body = (await response.clone().json()) as { retry_after?: unknown };
+      retryAfter = Number(body.retry_after);
+    } catch {
+      // Fall through to bounded exponential backoff.
+    }
+  }
+  return Number.isFinite(retryAfter)
+    ? Math.min(5_000, Math.max(100, retryAfter * 1_000))
+    : 250 * 2 ** attempt;
 }
 
 /** Guilds the user is in (from their token). */

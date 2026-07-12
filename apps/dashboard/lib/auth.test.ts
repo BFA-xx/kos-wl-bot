@@ -79,4 +79,21 @@ describe("Discord access token refresh", () => {
       expect.objectContaining({ where: { id: "user-1" } }),
     );
   });
+
+  it("rechecks storage when refresh rotation was already consumed", async () => {
+    mocks.findUnique.mockResolvedValue(expiredUser);
+    mocks.lockedFindUnique
+      .mockResolvedValueOnce(expiredUser)
+      .mockResolvedValueOnce({
+        ...expiredUser,
+        accessToken: "concurrent-access",
+        tokenExpiresAt: new Date(Date.now() + 60 * 60_000),
+      });
+    mocks.refreshAccessToken.mockResolvedValue(null);
+
+    await expect(getValidAccessToken("user-1")).resolves.toBe(
+      "concurrent-access",
+    );
+    expect(mocks.lockedFindUnique).toHaveBeenCalledTimes(2);
+  });
 });
