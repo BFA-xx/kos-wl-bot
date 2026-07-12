@@ -53,6 +53,7 @@ function RafflesInner() {
   const [showNew, setShowNew] = useState(false);
   const canCreate = useCan(PERMISSIONS.RAFFLE_CREATE);
   const canEdit = useCan(PERMISSIONS.RAFFLE_EDIT);
+  const canDelete = useCan(PERMISSIONS.RAFFLE_DELETE);
   const apiUrl = useMemo(() => {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
@@ -60,11 +61,9 @@ function RafflesInner() {
     const qs = params.toString();
     return `/api/${org}/raffles${qs ? `?${qs}` : ""}`;
   }, [org, q, status]);
-  const { data } = useSWR<{ raffles: Raffle[] }>(
-    apiUrl,
-    fetcher,
-    { refreshInterval: 8000 },
-  );
+  const { data, mutate } = useSWR<{ raffles: Raffle[] }>(apiUrl, fetcher, {
+    refreshInterval: 8000,
+  });
   const raffles = data?.raffles ?? [];
 
   return (
@@ -157,6 +156,10 @@ function RafflesInner() {
                       <RaffleQuickActions
                         raffleId={r.id}
                         canDuplicate={canCreate}
+                        canDelete={canDelete}
+                        orgSlug={org}
+                        raffleStatus={r.status}
+                        onDeleted={() => void mutate()}
                         editHref={
                           canEdit &&
                           r.status !== "ENDED" &&

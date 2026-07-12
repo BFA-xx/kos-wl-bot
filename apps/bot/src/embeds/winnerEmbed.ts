@@ -4,16 +4,17 @@ import { discordFull } from "../utils/time.js";
 
 export interface WinnerEmbedData {
   id: number;
+  communityName: string;
   projectName: string;
   title: string;
   spots: number;
-  entryCount: number;
+  entryCount?: number;
   endedAt: Date;
   winners: { userId: string; username: string }[];
   drawSeedHash: string | null;
 }
 
-/** Winner announcement embed: "🎉 KOS WL Raffle Finished". */
+/** Winner announcement embed branded for the community and project. */
 export function buildWinnerEmbed(data: WinnerEmbedData): EmbedBuilder {
   const winnerList =
     data.winners.length === 0
@@ -22,14 +23,21 @@ export function buildWinnerEmbed(data: WinnerEmbedData): EmbedBuilder {
 
   const embed = new EmbedBuilder()
     .setColor(KOS.colors.white)
-    .setAuthor({ name: data.projectName })
-    .setTitle(`${KOS.emoji.trophy} KOS WL Raffle Finished`)
+    .setAuthor({ name: data.communityName })
+    .setTitle(
+      `${KOS.emoji.trophy} ${data.communityName} × ${data.projectName} — WL Raffle Finished`.slice(
+        0,
+        256,
+      ),
+    )
     .setDescription(
       [
         `**${data.title}**`,
         "",
         `${KOS.emoji.spot} **WL Spots:** ${data.spots}`,
-        `**Entries:** ${data.entryCount}`,
+        ...(data.entryCount === undefined
+          ? []
+          : [`**Entries:** ${data.entryCount}`]),
         `**Closed:** ${discordFull(data.endedAt)}`,
       ].join("\n"),
     )
@@ -54,9 +62,7 @@ export function buildWinnerEmbed(data: WinnerEmbedData): EmbedBuilder {
 }
 
 /** Plain-text mention line so winners get a real ping. */
-export function buildWinnerMentions(
-  winners: { userId: string }[],
-): string {
+export function buildWinnerMentions(winners: { userId: string }[]): string {
   if (winners.length === 0) return "";
   return `Congratulations ${winners.map((w) => `<@${w.userId}>`).join(" ")} 🎉`;
 }

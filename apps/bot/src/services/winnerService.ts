@@ -199,12 +199,19 @@ async function announceWinners(
   const channel = await fetchTextChannel(client, channelId);
   if (!channel) return null;
 
+  const connection = await prisma.guildConnection.findUnique({
+    where: { guildId: raffle.guildId },
+    select: { organization: { select: { name: true } } },
+  });
+  const communityName = connection?.organization.name ?? channel.guild.name;
+
   const embed = buildWinnerEmbed({
     id: raffle.id,
+    communityName,
     projectName: raffle.projectName,
     title: raffle.title,
     spots: raffle.spots,
-    entryCount: raffle.entryCount,
+    entryCount: raffle.hideEntries ? undefined : raffle.entryCount,
     endedAt: raffle.endedAt ?? new Date(),
     winners,
     drawSeedHash: raffle.drawSeedHash,

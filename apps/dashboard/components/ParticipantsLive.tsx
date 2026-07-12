@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import { useState } from "react";
+import Link from "next/link";
 import { fmtDate } from "@/lib/format";
 import { useOrg } from "@/lib/org-context";
 import { TableShell } from "@/components/ui";
@@ -105,15 +106,25 @@ export function ParticipantsLive({ raffleId }: { raffleId: number }) {
                   <tr key={p.userId}>
                     <td className="px-2 py-2 text-kos-grey">{i + 1}</td>
                     <td className="px-2 py-2">
-                      {p.username}
-                      {p.flagged ? (
-                        <span
-                          className="ml-2 text-xs text-kos-grey"
-                          title={p.flagReason ?? "flagged"}
-                        >
-                          ⚑
+                      <Link
+                        href={`/${slug}/participants/${p.userId}`}
+                        className="group inline-flex flex-col"
+                      >
+                        <span className="font-medium group-hover:text-blue-300">
+                          {p.username}
+                          {p.flagged ? (
+                            <span
+                              className="ml-2 text-xs text-kos-grey"
+                              title={p.flagReason ?? "flagged"}
+                            >
+                              ⚑
+                            </span>
+                          ) : null}
                         </span>
-                      ) : null}
+                        <span className="text-[10px] text-kos-muted group-hover:text-kos-fg">
+                          {p.userId}
+                        </span>
+                      </Link>
                     </td>
                     <td className="px-2 py-2 text-kos-grey">
                       {fmtDate(p.enteredAt)}

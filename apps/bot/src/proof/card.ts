@@ -1,4 +1,9 @@
-import { createCanvas, loadImage, GlobalFonts, type SKRSContext2D } from "@napi-rs/canvas";
+import {
+  createCanvas,
+  loadImage,
+  GlobalFonts,
+  type SKRSContext2D,
+} from "@napi-rs/canvas";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -18,7 +23,7 @@ export interface WinnerCardData {
   projectName: string;
   title: string;
   spots: number;
-  entryCount: number;
+  entryCount?: number;
   winners: { username: string }[];
   timestamp: Date;
   brandName: string;
@@ -102,7 +107,11 @@ export async function renderWinnerCard(data: WinnerCardData): Promise<Buffer> {
 
   ctx.fillStyle = FG;
   ctx.font = bold(46);
-  ctx.fillText(truncate(ctx, data.projectName.toUpperCase(), W - PAD * 2), PAD, 200);
+  ctx.fillText(
+    truncate(ctx, data.projectName.toUpperCase(), W - PAD * 2),
+    PAD,
+    200,
+  );
 
   ctx.fillStyle = MUTED;
   ctx.font = reg(22);
@@ -110,9 +119,14 @@ export async function renderWinnerCard(data: WinnerCardData): Promise<Buffer> {
 
   // ── Stat chips (like the dashboard stat cards) ──
   const chipY = 268;
-  chip(ctx, PAD, chipY, "WL SPOTS", String(data.spots));
-  chip(ctx, PAD + 216, chipY, "ENTRIES", String(data.entryCount));
-  chip(ctx, PAD + 432, chipY, "WINNERS", String(data.winners.length));
+  const stats: [string, string][] = [["WL SPOTS", String(data.spots)]];
+  if (data.entryCount !== undefined) {
+    stats.push(["ENTRIES", String(data.entryCount)]);
+  }
+  stats.push(["WINNERS", String(data.winners.length)]);
+  stats.forEach(([label, value], index) => {
+    chip(ctx, PAD + index * 216, chipY, label, value);
+  });
 
   // ── Winners ──
   const listTop = 386;
@@ -145,14 +159,22 @@ export async function renderWinnerCard(data: WinnerCardData): Promise<Buffer> {
   if (data.winners.length > maxShown) {
     ctx.fillStyle = MUTED;
     ctx.font = reg(16);
-    ctx.fillText(`+ ${data.winners.length - maxShown} more`, PAD, listTop + 54 + 4 * rowH);
+    ctx.fillText(
+      `+ ${data.winners.length - maxShown} more`,
+      PAD,
+      listTop + 54 + 4 * rowH,
+    );
   }
 
   // ── Commitment ──
   if (data.commitment) {
     ctx.fillStyle = MUTED;
     ctx.font = reg(13);
-    ctx.fillText(`Draw commitment (SHA-256): ${data.commitment.slice(0, 40)}…`, PAD, H - 100);
+    ctx.fillText(
+      `Draw commitment (SHA-256): ${data.commitment.slice(0, 40)}…`,
+      PAD,
+      H - 100,
+    );
   }
 
   // ── Footer ──
@@ -167,7 +189,13 @@ export async function renderWinnerCard(data: WinnerCardData): Promise<Buffer> {
   return canvas.toBuffer("image/png");
 }
 
-function chip(ctx: SKRSContext2D, x: number, y: number, label: string, value: string): void {
+function chip(
+  ctx: SKRSContext2D,
+  x: number,
+  y: number,
+  label: string,
+  value: string,
+): void {
   const w = 200;
   const h = 96;
   roundRect(ctx, x, y, w, h, 14);
@@ -194,7 +222,14 @@ function hairline(ctx: SKRSContext2D, x1: number, y: number, x2: number): void {
   ctx.stroke();
 }
 
-function roundRect(ctx: SKRSContext2D, x: number, y: number, w: number, h: number, r: number): void {
+function roundRect(
+  ctx: SKRSContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);

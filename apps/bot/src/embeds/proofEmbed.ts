@@ -7,7 +7,7 @@ export interface ProofEmbedData {
   projectName: string;
   startAt: Date;
   endAt: Date;
-  entryCount: number;
+  entryCount?: number;
   winnerCount: number;
   messageLink: string | null;
   drawSeedHash: string | null;
@@ -26,7 +26,6 @@ export function buildProofEmbed(data: ProofEmbedData): EmbedBuilder {
         value: humanDuration(data.startAt, data.endAt),
         inline: true,
       },
-      { name: "Entries", value: `${data.entryCount}`, inline: true },
       { name: "Winners", value: `${data.winnerCount}`, inline: true },
       { name: "Start", value: discordFull(data.startAt), inline: true },
       { name: "End", value: discordFull(data.endAt), inline: true },
@@ -37,8 +36,17 @@ export function buildProofEmbed(data: ProofEmbedData): EmbedBuilder {
     })
     .setTimestamp(new Date());
 
+  if (data.entryCount !== undefined) {
+    embed.spliceFields(2, 0, {
+      name: "Entries",
+      value: `${data.entryCount}`,
+      inline: true,
+    });
+  }
+
   const extra: string[] = [];
-  if (data.messageLink) extra.push(`[Announcement message](${data.messageLink})`);
+  if (data.messageLink)
+    extra.push(`[Announcement message](${data.messageLink})`);
   if (data.drawSeedHash)
     extra.push(`Draw commitment: \`${data.drawSeedHash.slice(0, 32)}…\``);
   if (extra.length) {

@@ -112,10 +112,20 @@ export default function WalletsPage() {
               {filtered.map((r, i) => (
                 <tr key={`${r.raffleId}-${r.userId}-${i}`}>
                   <td className="px-4 py-3">
-                    {r.username}
-                    <span className="ml-1 text-xs text-kos-muted">
-                      #{r.position}
-                    </span>
+                    <Link
+                      href={`/${org}/participants/${r.userId}`}
+                      className="group inline-flex flex-col"
+                    >
+                      <span className="font-medium group-hover:text-blue-300">
+                        {r.username}
+                        <span className="ml-1 text-xs text-kos-muted">
+                          #{r.position}
+                        </span>
+                      </span>
+                      <span className="text-[10px] text-kos-muted group-hover:text-kos-fg">
+                        {r.userId}
+                      </span>
+                    </Link>
                   </td>
                   <td className="px-4 py-3">
                     <Link

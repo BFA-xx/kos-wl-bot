@@ -125,7 +125,9 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Member profile IA is split deliberately:
   - `/me/raffles` is the raffle-entry panel with live raffle cards,
     `EntryPanel` checklists, and focused `/me/raffles?raffle=N` task/entry
-    flows for raffle-specific requirements;
+    flows for raffle-specific requirements. It also includes a separate,
+    read-only recent-ended section; ended task actions stay disabled and the
+    UI must say `Raffle ended` rather than looking like an unfinished entry;
   - `/me/points` is the points/earning panel and embeds standalone point
     tasks only; raffle-specific tasks should not be shown there;
   - `/me/tasks` remains a hidden compatibility route for old deep links.
@@ -160,6 +162,12 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Dashboard reposts for unexpired cancelled raffles should queue the existing
   DB-mediated publish flow by returning the raffle to `DRAFT`; do not call the
   bot's localhost control API from Vercel or duplicate participant/draw data.
+- Dashboard raffle deletion requires `raffle:delete` and is database-mediated.
+  The API immediately changes the raffle to `CANCELLED` and writes a
+  `RAFFLE_DELETE_REQUEST` guild log. The bot scheduler consumes that request,
+  removes the Discord raffle post, deletes EC2 proof files, writes the guild
+  deletion audit, and finally deletes the database row. Do not make Vercel
+  delete the Discord message or try to access bot-local proof paths.
 - `/r/:id` is the canonical anonymous raffle URL. Keep `/c/:slug` session-gated,
   keep entry APIs authenticated, and pass `/r/:id` through Discord OAuth's safe
   `next` return when a signed-out visitor joins.
@@ -171,6 +179,15 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   ephemeral interaction response, not by changing the public raffle button to a
   per-user state. The public Discord message is shared by all members; use
   disabled per-user components such as `Raffle entered ✓` for confirmation.
+- Organization participant IDs link to an internal member activity page. That
+  page must first prove organization-scoped raffle, points, task, win, or
+  reward activity; every subsequent query must stay scoped to the same guild
+  IDs or organization ID. Wallet status additionally requires `wallet:view`,
+  and wallet addresses remain in the dedicated Wallets surface.
+- `Raffle.hideEntries` applies to completion output as well as the live raffle.
+  Winner announcements and every delivered proof presentation (Discord embed,
+  PNG, and PDF) must omit entry totals entirely. Do not substitute `Private`, a
+  dash, or another placeholder that reveals an intentionally hidden field.
 - Org raffle detail pages should render entry requirements as user-friendly
   cards, not raw `requirements` JSON.
 - Community, raffle, and notification features shipped in S2.5.

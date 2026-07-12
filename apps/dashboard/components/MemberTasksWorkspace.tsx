@@ -4,7 +4,13 @@ import Link from "next/link";
 import useSWR, { mutate as mutateKey } from "swr";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { PageTitle, Card, Empty, SectionTitle, StatCard } from "@/components/ui";
+import {
+  PageTitle,
+  Card,
+  Empty,
+  SectionTitle,
+  StatCard,
+} from "@/components/ui";
 import { EntryPanel } from "@/components/EntryPanel";
 import { fmtDate } from "@/lib/format";
 
@@ -181,7 +187,9 @@ function TasksInner({
   if (data?.error) {
     return (
       <>
-        {!embedded ? <PageTitle title="Tasks" subtitle="Raffle tasks." /> : null}
+        {!embedded ? (
+          <PageTitle title="Tasks" subtitle="Raffle tasks." />
+        ) : null}
         <Empty>{data.error}</Empty>
       </>
     );
@@ -189,6 +197,7 @@ function TasksInner({
 
   const tasks = data?.tasks ?? [];
   const summary = taskSummary(tasks);
+  const raffleEnded = data?.raffle?.status === "ENDED";
 
   return (
     <>
@@ -201,7 +210,9 @@ function TasksInner({
           title={data?.raffle ? `${data.raffle.projectName}` : "Tasks"}
           subtitle={
             data?.raffle
-              ? `${data.raffle.title} · complete the required tasks, then enter below.`
+              ? raffleEnded
+                ? `${data.raffle.title} · this raffle has ended. Review its tasks and results.`
+                : `${data.raffle.title} · complete the required tasks, then enter below.`
               : "Loading…"
           }
           action={
@@ -227,7 +238,11 @@ function TasksInner({
                 </span>
               ) : null}
             </div>
-            {summary.requiredLeft === 0 ? (
+            {raffleEnded ? (
+              <span className="kos-badge border-kos-border text-kos-muted">
+                Raffle ended
+              </span>
+            ) : summary.requiredLeft === 0 ? (
               <span className="kos-badge border-emerald-400/30 text-emerald-400">
                 {summary.social > 0
                   ? "All raffle steps verified — enter below 🎉"
@@ -239,7 +254,9 @@ function TasksInner({
                 {summary.requiredLeft === 1 ? "" : "s"} left
               </span>
             )}
-            {!data.xLinked && tasks.some((t) => t.type.startsWith("X_")) ? (
+            {!raffleEnded &&
+            !data.xLinked &&
+            tasks.some((t) => t.type.startsWith("X_")) ? (
               <a href="/api/connect/x/start" className="kos-btn-primary">
                 Link X account
               </a>
@@ -261,6 +278,7 @@ function TasksInner({
           busy={busy}
           notes={notes}
           raffleId={data.raffle?.id}
+          readOnly={raffleEnded}
           onComplete={complete}
           onOpen={openTask}
         />
@@ -503,9 +521,7 @@ function RaffleTaskCard({
   onOpen: (task: TaskRow, raffleIdForRefresh?: number) => void;
 }) {
   const summary = taskSummary(raffle.tasks);
-  const publicHref = raffle.org
-    ? `/r/${raffle.id}`
-    : "#";
+  const publicHref = raffle.org ? `/r/${raffle.id}` : "#";
 
   return (
     <div className="kos-card overflow-hidden">
@@ -626,11 +642,7 @@ function CommunityAvatar({ org }: { org: TaskOrg }) {
     <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/[0.08] bg-kos-fg text-xs font-black text-kos-bg">
       {org.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={org.logoUrl}
-          alt=""
-          className="h-full w-full object-cover"
-        />
+        <img src={org.logoUrl} alt="" className="h-full w-full object-cover" />
       ) : (
         org.name.slice(0, 2).toUpperCase()
       )}
@@ -644,6 +656,7 @@ export function TaskList({
   notes,
   raffleId,
   compact = false,
+  readOnly = false,
   onComplete,
   onOpen,
 }: {
@@ -652,6 +665,7 @@ export function TaskList({
   notes: Record<string, string>;
   raffleId?: number;
   compact?: boolean;
+  readOnly?: boolean;
   onComplete: (id: string, raffleIdForRefresh?: number) => void;
   onOpen: (task: TaskRow, raffleIdForRefresh?: number) => void;
 }) {
@@ -670,13 +684,15 @@ export function TaskList({
             : t.kind === "SOCIAL" && t.clicked
               ? "Verify"
               : "Verify";
-        const helper = isDone
-          ? "Done — this step is verified."
-          : locked
-            ? "Open the link first. Then come back and verify."
-            : t.kind === "SOCIAL" && t.clicked
-              ? "Link opened — verify once you've completed it."
-              : t.description;
+        const helper = readOnly
+          ? "Task attached to this ended raffle."
+          : isDone
+            ? "Done — this step is verified."
+            : locked
+              ? "Open the link first. Then come back and verify."
+              : t.kind === "SOCIAL" && t.clicked
+                ? "Link opened — verify once you've completed it."
+                : t.description;
         return (
           <div
             key={t.id}
@@ -728,7 +744,11 @@ export function TaskList({
                 </div>
               </div>
               <div className="flex w-full shrink-0 flex-col gap-2 sm:w-40">
-                {isDone ? (
+                {readOnly ? (
+                  <span className="kos-btn cursor-default text-center text-kos-muted">
+                    Raffle ended
+                  </span>
+                ) : isDone ? (
                   <span className="kos-btn cursor-default text-center text-emerald-400">
                     Verified ✓
                   </span>

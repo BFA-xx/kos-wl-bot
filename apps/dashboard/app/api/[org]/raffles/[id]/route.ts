@@ -4,6 +4,7 @@ import { AccessError, requireOrgAccess, logAudit } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
 import { Prisma, type WalletChain } from "@prisma/client";
 import { sanitizeHttpUrl, sanitizeLegacyRaffleTasks } from "@/lib/raffle-input";
+import { parsePublicRaffleId } from "@/lib/raffle-share";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -92,8 +93,7 @@ export async function PATCH(
     if (Number.isInteger(b.spots) && b.spots > 0) data.spots = b.spots;
     if ("bannerUrl" in b)
       data.bannerUrl = b.bannerUrl ? String(b.bannerUrl) : null;
-    if ("externalUrl" in b)
-      data.externalUrl = sanitizeHttpUrl(b.externalUrl);
+    if ("externalUrl" in b) data.externalUrl = sanitizeHttpUrl(b.externalUrl);
     if ("hideEntries" in b) data.hideEntries = Boolean(b.hideEntries);
     if ("requireWallet" in b) data.requireWallet = Boolean(b.requireWallet);
     if ("useRoleWeights" in b) data.useRoleWeights = Boolean(b.useRoleWeights);
@@ -223,6 +223,91 @@ export async function PATCH(
     if (err instanceof AccessError)
       return NextResponse.json({ error: err.message }, { status: err.status });
     console.error("raffle edit failed", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
+/** Queue a tenant-scoped deletion for the bot, which owns Discord + EC2 files. */
+export async function DELETE(
+  _req: Request,
+  { params }: { params: { org: string; id: string } },
+) {
+  try {
+    const { org, user, guildIds } = await requireOrgAccess(
+      params.org,
+      PERMISSIONS.RAFFLE_DELETE,
+    );
+    const id = parsePublicRaffleId(params.id);
+    if (!id) {
+      return NextResponse.json(
+        { error: "Invalid raffle ID." },
+        { status: 400 },
+      );
+    }
+
+    const raffle = await prisma.raffle.findFirst({
+      where: { id, guildId: { in: guildIds } },
+      select: {
+        id: true,
+        guildId: true,
+        projectName: true,
+        title: true,
+        status: true,
+        channelId: true,
+        messageId: true,
+      },
+    });
+    if (!raffle) {
+      return NextResponse.json({ error: "Raffle not found." }, { status: 404 });
+    }
+
+    const existingRequest = await prisma.log.findFirst({
+      where: { raffleId: id, action: "RAFFLE_DELETE_REQUEST" },
+      select: { id: true },
+    });
+    if (existingRequest) {
+      return NextResponse.json({ ok: true, id, queued: true });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Cancel immediately so entry/draw/publish flows stop while the bot
+      // performs Discord and proof-file cleanup on its next scheduler tick.
+      await tx.raffle.update({
+        where: { id },
+        data: {
+          status: "CANCELLED",
+          editRequestedAt: null,
+          rerollRequest: Prisma.DbNull,
+          rerollRequestedAt: null,
+        },
+      });
+      await tx.log.create({
+        data: {
+          guildId: raffle.guildId,
+          raffleId: id,
+          actorId: user.id,
+          category: "RAFFLE",
+          action: "RAFFLE_DELETE_REQUEST",
+          message: `Dashboard deletion requested for raffle #${id}`,
+        },
+      });
+    });
+    await logAudit(org.id, user.id, "RAFFLE_DELETE_REQUEST", {
+      targetType: "raffle",
+      targetId: String(id),
+      metadata: {
+        guildId: raffle.guildId,
+        projectName: raffle.projectName,
+        title: raffle.title,
+        status: raffle.status,
+      },
+    });
+
+    return NextResponse.json({ ok: true, id, queued: true });
+  } catch (err) {
+    if (err instanceof AccessError)
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    console.error("raffle delete failed", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { AccessError, requireUser } from "@/lib/access";
 import { TASK_TYPE_LABELS, taskActionUrl, type TaskConfig } from "@/lib/verify";
-import type { CompletionStatus, TaskDefinition } from "@prisma/client";
+import type { CompletionStatus, Prisma, TaskDefinition } from "@prisma/client";
 import {
   getLegacyRaffleTasks,
   LEGACY_TASK_CLICK,
@@ -17,8 +17,8 @@ export const runtime = "nodejs";
  * Tasks for the signed-in participant.
  *
  * - Without a query param, this returns the profile Tasks hub: standalone
- *   earning tasks plus every live raffle from public KOS communities, all with
- *   the caller's completion state.
+ *   earning tasks, live raffles, and a separate recent-ended raffle collection
+ *   from public KOS communities, all with the caller's completion state.
  * - With ?raffle=N, it returns the task list for one raffle.
  *
  * Participants aren't org members, so this is user-auth only — it exposes just
@@ -71,41 +71,50 @@ export async function GET(req: NextRequest) {
             take: 100,
           })
         : [];
-      const raffles = guildIds.length
-        ? await prisma.raffle.findMany({
-            where: { guildId: { in: guildIds }, status: "LIVE" },
-            orderBy: { endAt: "asc" },
-            take: 50,
-            select: {
-              id: true,
-              guildId: true,
-              projectName: true,
-              title: true,
-              description: true,
-              status: true,
-              endAt: true,
-              spots: true,
-              entryCount: true,
-              hideEntries: true,
-              bannerUrl: true,
-              requirements: true,
-              participants: {
-                where: { userId: user.id },
-                select: { enteredAt: true },
-                take: 1,
-              },
-              RaffleTask: {
-                where: { task: { active: true } },
-                include: { task: true },
-                orderBy: { id: "asc" },
-              },
-            },
-          })
-        : [];
+      const raffleSelect = {
+        id: true,
+        guildId: true,
+        projectName: true,
+        title: true,
+        description: true,
+        status: true,
+        endAt: true,
+        spots: true,
+        entryCount: true,
+        hideEntries: true,
+        bannerUrl: true,
+        requirements: true,
+        participants: {
+          where: { userId: user.id },
+          select: { enteredAt: true },
+          take: 1,
+        },
+        RaffleTask: {
+          include: { task: true },
+          orderBy: { id: "asc" },
+        },
+      } satisfies Prisma.RaffleSelect;
+      const [raffles, endedRaffles] = guildIds.length
+        ? await Promise.all([
+            prisma.raffle.findMany({
+              where: { guildId: { in: guildIds }, status: "LIVE" },
+              orderBy: { endAt: "asc" },
+              take: 50,
+              select: raffleSelect,
+            }),
+            prisma.raffle.findMany({
+              where: { guildId: { in: guildIds }, status: "ENDED" },
+              orderBy: { endAt: "desc" },
+              take: 30,
+              select: raffleSelect,
+            }),
+          ])
+        : [[], []];
+      const visibleRaffles = [...raffles, ...endedRaffles];
 
       const taskIds = [
         ...standaloneTasks.map((task) => task.id),
-        ...raffles.flatMap((r) => r.RaffleTask.map((rt) => rt.taskId)),
+        ...visibleRaffles.flatMap((r) => r.RaffleTask.map((rt) => rt.taskId)),
       ];
       const completions = taskIds.length
         ? await prisma.taskCompletion.findMany({
@@ -114,16 +123,17 @@ export async function GET(req: NextRequest) {
           })
         : [];
       const byTask = new Map(completions.map((c) => [c.taskId, c.status]));
-      const taskClickLogs = taskIds.length && guildIds.length
-        ? await prisma.log.findMany({
-            where: {
-              actorId: user.id,
-              guildId: { in: guildIds },
-              action: TASK_DEFINITION_CLICK,
-            },
-            select: { metadata: true },
-          })
-        : [];
+      const taskClickLogs =
+        taskIds.length && guildIds.length
+          ? await prisma.log.findMany({
+              where: {
+                actorId: user.id,
+                guildId: { in: guildIds },
+                action: TASK_DEFINITION_CLICK,
+              },
+              select: { metadata: true },
+            })
+          : [];
       const clickedTaskIds = new Set(
         taskClickLogs.flatMap((log) => {
           const metadata = log.metadata as { taskId?: unknown } | null;
@@ -140,7 +150,7 @@ export async function GET(req: NextRequest) {
       const balanceByOrg = new Map(
         balances.map((row) => [row.organizationId, row._sum.delta ?? 0]),
       );
-      const socialLogs = raffles.length
+      const socialLogs = visibleRaffles.length
         ? await prisma.log.findMany({
             where: {
               actorId: user.id,
@@ -158,11 +168,51 @@ export async function GET(req: NextRequest) {
         }),
       );
 
+      const raffleRow = (
+        raffle: (typeof visibleRaffles)[number],
+        historical: boolean,
+      ) => ({
+        id: raffle.id,
+        org: orgByGuild.get(raffle.guildId) ?? null,
+        projectName: raffle.projectName,
+        title: raffle.title,
+        description: raffle.description,
+        status: raffle.status,
+        endAt: raffle.endAt,
+        spots: raffle.spots,
+        entryCount: raffle.hideEntries ? null : raffle.entryCount,
+        bannerUrl: raffle.bannerUrl,
+        entered: raffle.participants.length > 0,
+        enteredAt: raffle.participants[0]?.enteredAt ?? null,
+        tasks: [
+          ...raffle.RaffleTask.filter((rt) => historical || rt.task.active).map(
+            (rt) => ({
+              ...taskRow(
+                rt.task,
+                byTask.get(rt.taskId),
+                clickedTaskIds.has(rt.taskId),
+                rt.required,
+              ),
+              source: "RAFFLE",
+            }),
+          ),
+          ...getLegacyRaffleTasks(raffle.id, raffle.requirements).map((task) =>
+            legacyTaskRow(
+              task,
+              socialByTask.get(task.key) ??
+                (task.sharedKey ? socialByTask.get(task.sharedKey) : undefined),
+            ),
+          ),
+        ],
+      });
+
       return NextResponse.json({
         xLinked,
         taskGroups: orgs
           .map((org) => {
-            const tasks = standaloneTasks.filter((task) => task.organizationId === org.id);
+            const tasks = standaloneTasks.filter(
+              (task) => task.organizationId === org.id,
+            );
             const guildId = org.guildConnections[0]?.guildId ?? null;
             return {
               org: {
@@ -174,44 +224,27 @@ export async function GET(req: NextRequest) {
               },
               balance: balanceByOrg.get(org.id) ?? 0,
               tasks: tasks.map((task) =>
-                taskRow(task, byTask.get(task.id), clickedTaskIds.has(task.id), false),
+                taskRow(
+                  task,
+                  byTask.get(task.id),
+                  clickedTaskIds.has(task.id),
+                  false,
+                ),
               ),
             };
           })
           .filter((group) => group.tasks.length > 0),
-        raffles: raffles.map((raffle) => ({
-          id: raffle.id,
-          org: orgByGuild.get(raffle.guildId) ?? null,
-          projectName: raffle.projectName,
-          title: raffle.title,
-          description: raffle.description,
-          status: raffle.status,
-          endAt: raffle.endAt,
-          spots: raffle.spots,
-          entryCount: raffle.hideEntries ? null : raffle.entryCount,
-          bannerUrl: raffle.bannerUrl,
-          entered: raffle.participants.length > 0,
-          enteredAt: raffle.participants[0]?.enteredAt ?? null,
-          tasks: [
-            ...raffle.RaffleTask.map((rt) => ({
-              ...taskRow(rt.task, byTask.get(rt.taskId), clickedTaskIds.has(rt.taskId), rt.required),
-              source: "RAFFLE",
-            })),
-            ...getLegacyRaffleTasks(raffle.id, raffle.requirements).map((task) =>
-              legacyTaskRow(
-                task,
-                socialByTask.get(task.key) ??
-                  (task.sharedKey ? socialByTask.get(task.sharedKey) : undefined),
-              ),
-            ),
-          ],
-        })),
+        raffles: raffles.map((raffle) => raffleRow(raffle, false)),
+        endedRaffles: endedRaffles.map((raffle) => raffleRow(raffle, true)),
       });
     }
 
     const raffleId = Number(raffleParam);
     if (!Number.isFinite(raffleId)) {
-      return NextResponse.json({ error: "raffle query param must be a number" }, { status: 400 });
+      return NextResponse.json(
+        { error: "raffle query param must be a number" },
+        { status: 400 },
+      );
     }
 
     const raffle = await prisma.raffle.findUnique({
@@ -229,7 +262,8 @@ export async function GET(req: NextRequest) {
         },
       },
     });
-    if (!raffle) return NextResponse.json({ error: "Raffle not found." }, { status: 404 });
+    if (!raffle)
+      return NextResponse.json({ error: "Raffle not found." }, { status: 404 });
 
     const taskIds = raffle.RaffleTask.map((rt) => rt.taskId);
     const completions = taskIds.length
@@ -285,7 +319,12 @@ export async function GET(req: NextRequest) {
         ...raffle.RaffleTask.map((rt) => {
           const c = byTask.get(rt.taskId);
           return {
-            ...taskRow(rt.task, c?.status, clickedTaskIds.has(rt.taskId), rt.required),
+            ...taskRow(
+              rt.task,
+              c?.status,
+              clickedTaskIds.has(rt.taskId),
+              rt.required,
+            ),
             source: "RAFFLE",
           };
         }),
@@ -299,7 +338,8 @@ export async function GET(req: NextRequest) {
       ],
     });
   } catch (err) {
-    if (err instanceof AccessError) return NextResponse.json({ error: err.message }, { status: err.status });
+    if (err instanceof AccessError)
+      return NextResponse.json({ error: err.message }, { status: err.status });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
@@ -341,14 +381,17 @@ function taskRow(
           ? opened
             ? "CLICKED"
             : "ACTION_REQUIRED"
-          : status ?? "NOT_STARTED",
+          : (status ?? "NOT_STARTED"),
     verifiable: true,
     requiresClick,
     clicked: opened,
   };
 }
 
-function requiresOpenBeforeVerify(task: TaskDefinition, actionUrl: string | null) {
+function requiresOpenBeforeVerify(
+  task: TaskDefinition,
+  actionUrl: string | null,
+) {
   if (!actionUrl) return false;
   return (
     task.type === "X_FOLLOW" ||
@@ -382,7 +425,11 @@ function legacyTaskRow(
     points: 0,
     active: true,
     actionUrl: task.url,
-    status: status?.verified ? "VERIFIED" : status?.clicked ? "CLICKED" : "ACTION_REQUIRED",
+    status: status?.verified
+      ? "VERIFIED"
+      : status?.clicked
+        ? "CLICKED"
+        : "ACTION_REQUIRED",
     verifiable: true,
     requiresClick: Boolean(task.url),
     clicked: Boolean(status?.clicked || status?.verified || !task.url),

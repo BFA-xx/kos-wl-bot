@@ -1,9 +1,9 @@
 # Engineering Handoff
 
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `2ba4343`
+Audited application commit: `5533012`
 
 ## Current state
 
@@ -27,6 +27,11 @@ Phase 3 is implemented through S2.5:
   pushed, and deployed on the production dashboard.
 - Member-aware community discovery and optional community X branding are
   migrated and deployed.
+- Organization-scoped member activity pages and community-branded Discord
+  completion output are implemented and verified.
+- The member Raffles tab now includes read-only ended history, and team raffle
+  deletion is implemented through the database-mediated bot cleanup flow.
+  Production deployment is authorized in the active task and pending.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -165,6 +170,80 @@ weighted-draw foundations:
 4. persist and expose reroll proof data, correct upload authorization, and
    refresh setup/deployment documentation before adding the full campaigns
    layer.
+
+## Member activity and private proof hardening — complete locally
+
+- Participant identities are clickable from the organization Participants
+  table, live raffle participant table, points leaderboard/recent activity,
+  and winner-wallet table.
+- `/:org/participants/:userId` consolidates tenant-scoped raffle entries,
+  active/replaced wins, points balance and events, task verification, reward
+  claims, entry weights, Discord identity snapshots, and permitted wallet-chain
+  registration status.
+- The member route requires `participant:view`, proves that the user has
+  activity owned by the current organization, scopes guild-backed records by
+  connected guild IDs, scopes native records by `organizationId`, and requires
+  `wallet:view` before showing even wallet registration status. It never shows
+  wallet addresses.
+- Totals use database aggregates; activity lists are bounded to recent rows so
+  heavily active members do not create unbounded dashboard responses.
+- Discord winner announcements now use
+  `Community × Project — WL Raffle Finished`, with the linked organization name
+  and the Discord guild name as a fallback.
+- Community branding now carries into generated proof cards/reports by using
+  the organization name/logo when available.
+- When `hideEntries` is enabled, the winner announcement, proof Discord embed,
+  PNG card, and PDF report omit entry totals entirely. No `Private` label or
+  placeholder is rendered. The winners-only CSV never contained entry totals.
+- Added bot presentation tests for community/project winner titles and private
+  completion output.
+
+Verification:
+
+- `pnpm --filter @kos/dashboard typecheck`
+- `pnpm --filter @kos/bot typecheck`
+- `pnpm --filter @kos/dashboard test` — 7 files, 19 tests passed.
+- `pnpm --filter @kos/bot test` — 2 tests passed.
+- `pnpm --filter @kos/bot build`
+- `pnpm --filter @kos/dashboard build`
+- `git diff --check`
+
+No schema migration or environment change is required. The working tree has
+not yet been committed, pushed, or deployed at this checkpoint; the user has
+now explicitly authorized all three operations in the active task.
+
+## Ended member raffles and team deletion — complete locally
+
+- `/api/me/tasks` retains `raffles` for up to 50 live raffles and adds a
+  separate `endedRaffles` collection for the 30 most recently ended raffles.
+  Historical cards include inactive attached task definitions so members can
+  still understand the requirements that applied when the raffle ran.
+- `/me/raffles` now has separate **Enter raffles** and **Ended raffles**
+  sections. Ended cards retain banners, community/project details, visibility-
+  safe entry totals, task state, and results links while replacing entry with
+  an explicit `Raffle ended` panel.
+- Focused ended raffle views render the same historical tasks in read-only mode
+  and disable task verification/open actions. `EntryPanel` also uses the exact
+  `Raffle ended` state for ENDED records.
+- Team action menus expose **Delete raffle** only to owners/roles with
+  `raffle:delete`, across the overview, raffle list, and raffle detail page.
+  The confirmation explains cascading removal and is keyboard dismissible.
+- Dashboard deletion is tenant-scoped and idempotent. It immediately changes
+  the raffle to CANCELLED and writes `RAFFLE_DELETE_REQUEST`; no Discord or EC2
+  filesystem side effect runs from Vercel.
+- The bot scheduler consumes deletion requests before publish/edit/draw work,
+  removes the shared Discord raffle post, removes stored PDF/CSV/PNG proof
+  files, records the deletion audit, and deletes the raffle row. Existing
+  Discord `/raffle delete` now receives the same proof cleanup and audit-order
+  correction.
+- Added route tests for tenant isolation, atomic cancellation/queueing, audit
+  logging, and idempotent repeat requests.
+
+Verification at this checkpoint:
+
+- `pnpm typecheck` passes for DB, dashboard, and bot.
+- `pnpm test` passes: dashboard 22 tests across eight files; bot two tests.
+- No schema migration or environment-variable change is required.
 
 ## Changes in this takeover task
 
@@ -913,7 +992,7 @@ Verification:
 - `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm build`
 - `git diff --check`
 - Application and migration committed as `64e8158` (`Add member community
-  views and X profiles`) and pushed to `origin/main`.
+views and X profiles`) and pushed to `origin/main`.
 - Local production migration attempts could not reach Neon. The existing EC2
   production connection applied migration
   `20260711195000_organization_x_handle` successfully; Prisma reported all 20

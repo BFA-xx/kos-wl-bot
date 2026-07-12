@@ -77,16 +77,26 @@ export default function ParticipantsPage() {
               {filtered.map((r, i) => (
                 <tr key={`${r.raffleId}-${r.userId}-${i}`}>
                   <td className="px-4 py-3">
-                    {r.username}
-                    {r.flagged ? (
-                      <span
-                        className="ml-2 text-xs text-amber-400"
-                        title={r.flagReason ?? "flagged"}
-                      >
-                        ⚑
+                    <Link
+                      href={`/${org}/participants/${r.userId}`}
+                      className="group inline-flex min-w-0 flex-col"
+                      aria-label={`View stats for ${r.username}`}
+                    >
+                      <span className="font-medium group-hover:text-blue-300">
+                        {r.username}
+                        {r.flagged ? (
+                          <span
+                            className="ml-2 text-xs text-amber-400"
+                            title={r.flagReason ?? "flagged"}
+                          >
+                            ⚑
+                          </span>
+                        ) : null}
                       </span>
-                    ) : null}
-                    <div className="text-[11px] text-kos-muted">{r.userId}</div>
+                      <span className="text-[11px] text-kos-muted underline-offset-4 group-hover:text-kos-fg group-hover:underline">
+                        {r.userId}
+                      </span>
+                    </Link>
                   </td>
                   <td className="px-4 py-3">
                     <Link

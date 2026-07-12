@@ -32,6 +32,7 @@ interface RaffleSummary {
 
 interface RafflesData {
   raffles?: RaffleSummary[];
+  endedRaffles?: RaffleSummary[];
   error?: string;
 }
 
@@ -50,6 +51,7 @@ function MeRafflesInner() {
     refreshInterval: 15000,
   });
   const raffles = data?.raffles ?? [];
+  const endedRaffles = data?.endedRaffles ?? [];
   const entered = raffles.filter((r) => r.entered).length;
   const [busy, setBusy] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -104,8 +106,8 @@ function MeRafflesInner() {
     return (
       <>
         <PageTitle
-          title="Raffle entry"
-          subtitle="Open each raffle step, verify it, then enter from this same tab."
+          title="Raffle details"
+          subtitle="Review the raffle tasks and status. Live raffles can be entered from this same tab."
           action={
             <Link href="/me/raffles" className="kos-btn">
               All raffles
@@ -138,12 +140,20 @@ function MeRafflesInner() {
         <Empty>{data.error}</Empty>
       ) : (
         <>
-          <div className="mb-6 grid gap-3 sm:grid-cols-3">
-            <StatCard accent label="Live raffles" value={data ? raffles.length : "—"} />
-            <StatCard label="Entered" value={data ? entered : "—"} />
+          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard
+              accent
+              label="Live raffles"
+              value={data ? raffles.length : "—"}
+            />
+            <StatCard label="Live entries" value={data ? entered : "—"} />
             <StatCard
               label="Open spots"
               value={data ? raffles.reduce((sum, r) => sum + r.spots, 0) : "—"}
+            />
+            <StatCard
+              label="Recently ended"
+              value={data ? endedRaffles.length : "—"}
             />
           </div>
 
@@ -169,6 +179,29 @@ function MeRafflesInner() {
               ))}
             </div>
           )}
+
+          <div className="mt-10">
+            <SectionTitle>Ended raffles</SectionTitle>
+            {!data ? (
+              <Empty>Loading ended raffles…</Empty>
+            ) : endedRaffles.length === 0 ? (
+              <Empty>No raffles have ended recently.</Empty>
+            ) : (
+              <div className="grid gap-4 xl:grid-cols-2">
+                {endedRaffles.map((raffle) => (
+                  <RaffleEntryCard
+                    key={raffle.id}
+                    raffle={raffle}
+                    busy={busy}
+                    notes={notes}
+                    ended
+                    onComplete={completeTask}
+                    onOpen={openTask}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </>
       )}
     </>
@@ -179,16 +212,20 @@ function RaffleEntryCard({
   raffle,
   busy,
   notes,
+  ended = false,
   onComplete,
   onOpen,
 }: {
   raffle: RaffleSummary;
   busy: string | null;
   notes: Record<string, string>;
+  ended?: boolean;
   onComplete: (id: string, raffleIdForRefresh?: number) => void;
   onOpen: (task: TaskRow, raffleIdForRefresh?: number) => void;
 }) {
-  const verifiedTasks = raffle.tasks.filter((t) => t.status === "VERIFIED").length;
+  const verifiedTasks = raffle.tasks.filter(
+    (t) => t.status === "VERIFIED",
+  ).length;
   return (
     <div className="kos-card overflow-hidden">
       {raffle.bannerUrl ? (
@@ -221,8 +258,10 @@ function RaffleEntryCard({
             ) : null}
           </div>
           <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
-            <span className="kos-badge border-emerald-400/30 text-emerald-400">
-              LIVE
+            <span
+              className={`kos-badge ${ended ? "border-kos-border text-kos-muted" : "border-emerald-400/30 text-emerald-400"}`}
+            >
+              {ended ? "ENDED" : "LIVE"}
             </span>
             {raffle.entered ? (
               <span className="kos-badge border-emerald-400/30 text-emerald-400">
@@ -233,7 +272,10 @@ function RaffleEntryCard({
         </div>
 
         <div className="mb-4 grid grid-cols-3 gap-2 text-center">
-          <MiniStat label="Ends" value={fmtDate(raffle.endAt)} />
+          <MiniStat
+            label={ended ? "Ended" : "Ends"}
+            value={fmtDate(raffle.endAt)}
+          />
           <MiniStat
             label="Entries"
             value={raffle.entryCount === null ? "—" : raffle.entryCount}
@@ -247,8 +289,9 @@ function RaffleEntryCard({
               <div>
                 <div className="text-sm font-semibold">Raffle steps</div>
                 <div className="text-xs text-kos-muted">
-                  {verifiedTasks}/{raffle.tasks.length} verified · complete
-                  them here, then enter below.
+                  {ended
+                    ? `${verifiedTasks}/${raffle.tasks.length} verified · review the steps from this completed raffle.`
+                    : `${verifiedTasks}/${raffle.tasks.length} verified · complete them here, then enter below.`}
                 </div>
               </div>
             </div>
@@ -258,13 +301,24 @@ function RaffleEntryCard({
               notes={notes}
               raffleId={raffle.id}
               compact
+              readOnly={ended}
               onComplete={onComplete}
               onOpen={onOpen}
             />
           </div>
         ) : null}
 
-        <EntryPanel raffleId={raffle.id} compact taskControlsInline />
+        {ended ? (
+          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
+            <div className="text-sm font-semibold">Raffle ended</div>
+            <p className="mt-1 text-xs leading-5 text-kos-muted">
+              Entry is closed. You can still review the raffle steps and open
+              the public result page.
+            </p>
+          </div>
+        ) : (
+          <EntryPanel raffleId={raffle.id} compact taskControlsInline />
+        )}
 
         {raffle.org ? (
           <div className="mt-3 text-right">
@@ -272,7 +326,7 @@ function RaffleEntryCard({
               href={`/r/${raffle.id}`}
               className="text-xs text-kos-muted underline-offset-2 hover:text-kos-fg hover:underline"
             >
-              View public raffle page →
+              {ended ? "View results →" : "View public raffle page →"}
             </Link>
           </div>
         ) : null}

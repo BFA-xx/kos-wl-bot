@@ -275,3 +275,51 @@ REST rate-limit bucket.
 but production authentication must not be weakened for testing. Serial visual
 projects make screenshot comparison deterministic without pretending to be a
 load test.
+
+## D028 — Member activity remains tenant- and permission-scoped
+
+**Status:** Accepted
+**Decision:** Team members with `participant:view` can open a participant ID to
+see that user's organization-specific raffle entries, wins, task verification,
+points, and reward activity. The route resolves a user only after proving
+activity owned by the current organization. Guild-backed records use the
+organization's connected guild IDs and native records use `organizationId`.
+Wallet registration status additionally requires `wallet:view`; addresses stay
+on the Wallets page.
+**Why:** A consolidated member view makes moderation and community management
+faster without turning a global Discord identity into a cross-tenant data leak
+or weakening the existing wallet permission boundary.
+
+## D029 — Private entry counts are omitted from completion artifacts
+
+**Status:** Accepted
+**Decision:** When `Raffle.hideEntries` is enabled, omit the entry count from
+the winner announcement, proof Discord embed, PNG winner card, and PDF report.
+Do not render a `Private` label, dash, empty chip, or other placeholder.
+**Why:** Entry visibility is a raffle-level privacy choice and should remain
+consistent after the raffle closes. Omitting the field is clearer and avoids
+revealing information the community chose to hide.
+
+## D030 — Member raffle history is readable but not actionable
+
+**Status:** Accepted
+**Decision:** `/me/raffles` returns live raffles separately from the 30 most
+recent ENDED raffles across non-suspended KOS communities. Ended cards preserve
+historical task labels and the member's completion state, but task buttons and
+entry controls are disabled. Focused ended views explicitly show `Raffle ended`
+and link to the canonical public result page.
+**Why:** Members need to review past requirements and results without mistaking
+an ended campaign for something they can still complete or enter.
+
+## D031 — Dashboard raffle deletion is bot-mediated
+
+**Status:** Accepted
+**Decision:** A team member with `raffle:delete` can request permanent deletion
+from dashboard raffle menus. The dashboard atomically cancels the raffle and
+writes a `RAFFLE_DELETE_REQUEST` guild log. The scheduler consumes the request,
+removes the shared Discord post, removes bot-local proof files, records a guild
+audit event, and deletes the raffle and its cascading records. Duplicate
+requests are idempotent.
+**Why:** Vercel cannot clean EC2-local proof artifacts and should not bypass the
+bot's ownership of Discord side effects. Immediate cancellation closes entry
+and draw races while the bot completes destructive cleanup on its next tick.

@@ -80,6 +80,10 @@ export default async function RaffleDetailPage({
     { isOwner, permissions },
     PERMISSIONS.RAFFLE_CREATE,
   );
+  const canDelete = hasPermission(
+    { isOwner, permissions },
+    PERMISSIONS.RAFFLE_DELETE,
+  );
   const verificationTasks = canEdit
     ? await prisma.taskDefinition.findMany({
         where: { organizationId: org.id, active: true },
@@ -160,6 +164,10 @@ export default async function RaffleDetailPage({
             <RaffleQuickActions
               raffleId={raffle.id}
               canDuplicate={canCreate}
+              canDelete={canDelete}
+              orgSlug={params.org}
+              raffleStatus={raffle.status}
+              deleteRedirectHref={`/${params.org}/raffles`}
               editHref={
                 canEdit &&
                 raffle.status !== "ENDED" &&
@@ -351,7 +359,9 @@ export default async function RaffleDetailPage({
 
       {raffle.status === "CANCELLED" && raffle.logs[0] ? (
         <div className="mt-4 rounded-3xl border border-amber-400/20 bg-amber-500/[0.07] p-4 text-sm">
-          <div className="font-semibold text-amber-200">Discord post failed</div>
+          <div className="font-semibold text-amber-200">
+            Discord post failed
+          </div>
           <p className="mt-1 leading-6 text-amber-100/70">
             {raffle.logs[0].message.replace(
               "Dashboard raffle could not be posted: ",
@@ -436,9 +446,7 @@ function getSocialTasks(
       {
         label: t.label,
         url:
-          typeof t.url === "string" && t.url.trim()
-            ? t.url.trim()
-            : undefined,
+          typeof t.url === "string" && t.url.trim() ? t.url.trim() : undefined,
       },
     ];
   });

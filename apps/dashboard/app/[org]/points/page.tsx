@@ -28,6 +28,7 @@ interface PointsData {
   }[];
   recent: {
     id: string;
+    userId: string;
     name: string;
     avatarUrl: string | null;
     delta: number;
@@ -105,9 +106,17 @@ export default function PointsPage() {
                           <td>
                             <div className="flex min-w-0 items-center gap-2">
                               <Avatar name={row.name} src={row.avatarUrl} />
-                              <span className="truncate font-medium">
-                                {row.name}
-                              </span>
+                              <Link
+                                href={`/${org}/participants/${row.userId}`}
+                                className="min-w-0 hover:text-blue-300"
+                              >
+                                <span className="block truncate font-medium">
+                                  {row.name}
+                                </span>
+                                <span className="block truncate text-[10px] text-kos-muted">
+                                  {row.userId}
+                                </span>
+                              </Link>
                             </div>
                           </td>
                           <td className="text-right font-semibold">
@@ -140,14 +149,17 @@ export default function PointsPage() {
                       className="kos-card flex items-center gap-3 p-3"
                     >
                       <Avatar name={row.name} src={row.avatarUrl} />
-                      <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/${org}/participants/${row.userId}`}
+                        className="min-w-0 flex-1 hover:text-blue-300"
+                      >
                         <div className="truncate text-sm font-medium">
                           {row.name}
                         </div>
                         <div className="truncate text-xs text-kos-muted">
                           {row.reason}
                         </div>
-                      </div>
+                      </Link>
                       <div className="shrink-0 text-right">
                         <div className="text-sm font-semibold text-emerald-400">
                           +{row.delta}
@@ -206,7 +218,11 @@ function PointsChannelCard({
     });
     const body = await res.json().catch(() => ({}));
     setSaving(false);
-    setMsg(res.ok ? "Points channel saved." : body.error || "Could not save channel.");
+    setMsg(
+      res.ok
+        ? "Points channel saved."
+        : body.error || "Could not save channel.",
+    );
     if (res.ok) mutate();
   }
 
@@ -220,7 +236,11 @@ function PointsChannelCard({
       ) : (
         <div className="space-y-3">
           {guilds.length > 1 ? (
-            <select className="kos-input" value={guildId} onChange={(e) => setGuildId(e.target.value)}>
+            <select
+              className="kos-input"
+              value={guildId}
+              onChange={(e) => setGuildId(e.target.value)}
+            >
               {guilds.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.name}
@@ -228,7 +248,11 @@ function PointsChannelCard({
               ))}
             </select>
           ) : null}
-          <select className="kos-input" value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+          <select
+            className="kos-input"
+            value={channelId}
+            onChange={(e) => setChannelId(e.target.value)}
+          >
             <option value="">No points channel</option>
             {(meta?.channels ?? []).map((c) => (
               <option key={c.id} value={c.id}>
@@ -241,7 +265,11 @@ function PointsChannelCard({
             updates here.
           </p>
           <div className="flex items-center gap-2">
-            <button className="kos-btn-primary text-xs" onClick={save} disabled={saving}>
+            <button
+              className="kos-btn-primary text-xs"
+              onClick={save}
+              disabled={saving}
+            >
               {saving ? "Saving…" : "Save channel"}
             </button>
             {msg ? <span className="text-xs text-kos-muted">{msg}</span> : null}

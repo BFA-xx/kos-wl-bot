@@ -33,10 +33,20 @@ export async function generateAndDeliverProof(
   });
 
   const walletRows = await getWinnerWallets(raffleId);
-  // Prefer a configured brand logo; otherwise use the bot's own avatar (the KOS
-  // mark) so the proof is always branded without extra setup.
+  const connection = await prisma.guildConnection.findUnique({
+    where: { guildId: raffle.guildId },
+    select: {
+      organization: { select: { name: true, logoUrl: true } },
+    },
+  });
+  const brandName = connection?.organization.name ?? KOS.name;
+  // Prefer the community logo, then configured KOS branding, then the bot's
+  // own avatar so generated proofs are always recognizably branded.
   const logoUrl =
-    KOS.logoUrl ?? client.user?.displayAvatarURL({ extension: "png", size: 256 }) ?? null;
+    connection?.organization.logoUrl ??
+    KOS.logoUrl ??
+    client.user?.displayAvatarURL({ extension: "png", size: 256 }) ??
+    null;
   const logoBuffer = await fetchLogo(logoUrl);
 
   // 1. Render artifacts.
@@ -50,22 +60,22 @@ export async function generateAndDeliverProof(
       drawnAt: raffle.drawnAt,
       roleMatchMode: raffle.roleMatchMode,
       eligibleRoles: raffle.eligibleRoles.map((r) => r.roleName),
-      entryCount: raffle.entryCount,
+      entryCount: raffle.hideEntries ? undefined : raffle.entryCount,
       spots: raffle.spots,
       winners: winnerRows,
       messageLink,
       drawSeedHash: raffle.drawSeedHash,
-      brandName: KOS.name,
+      brandName,
       logoBuffer,
     }),
     renderWinnerCard({
       projectName: raffle.projectName,
       title: raffle.title,
       spots: raffle.spots,
-      entryCount: raffle.entryCount,
+      entryCount: raffle.hideEntries ? undefined : raffle.entryCount,
       winners: winnerRows,
       timestamp: raffle.drawnAt ?? new Date(),
-      brandName: KOS.name,
+      brandName,
       logoUrl,
       raffleId: raffle.id,
       commitment: raffle.drawSeedHash,
@@ -89,11 +99,18 @@ export async function generateAndDeliverProof(
   await prisma.proof.upsert({
     where: { raffleId },
     create: { raffleId, messageLink, pdfPath, csvPath, cardPath },
-    update: { messageLink: messageLink ?? undefined, pdfPath, csvPath, cardPath, generatedAt: new Date() },
+    update: {
+      messageLink: messageLink ?? undefined,
+      pdfPath,
+      csvPath,
+      cardPath,
+      generatedAt: new Date(),
+    },
   });
 
   // 4. Deliver to proof channel.
-  const channelId = raffle.proofChannelId ?? raffle.announceChannelId ?? raffle.channelId;
+  const channelId =
+    raffle.proofChannelId ?? raffle.announceChannelId ?? raffle.channelId;
   if (channelId) {
     const channel = await fetchTextChannel(client, channelId);
     if (channel) {
@@ -102,7 +119,7 @@ export async function generateAndDeliverProof(
         projectName: raffle.projectName,
         startAt: raffle.startAt,
         endAt: raffle.endAt,
-        entryCount: raffle.entryCount,
+        entryCount: raffle.hideEntries ? undefined : raffle.entryCount,
         winnerCount: winnerRows.length,
         messageLink,
         drawSeedHash: raffle.drawSeedHash,
@@ -125,7 +142,9 @@ export async function generateAndDeliverProof(
 
       await channel
         .send({ embeds: [embed], files })
-        .catch((err) => logger.warn({ err, raffleId }, "proof delivery failed"));
+        .catch((err) =>
+          logger.warn({ err, raffleId }, "proof delivery failed"),
+        );
     }
   }
 

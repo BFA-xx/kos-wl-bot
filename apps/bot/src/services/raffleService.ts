@@ -3,6 +3,8 @@ import {
   type GuildTextBasedChannel,
   PermissionFlagsBits,
 } from "discord.js";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import {
   prisma,
   LogCategory,
@@ -11,7 +13,10 @@ import {
   WalletChain,
   Prisma,
 } from "@kos/db";
-import { buildRaffleEmbed, buildRaffleComponents } from "../embeds/raffleEmbed.js";
+import {
+  buildRaffleEmbed,
+  buildRaffleComponents,
+} from "../embeds/raffleEmbed.js";
 import { audit } from "./auditService.js";
 import { ensureGuild } from "./userService.js";
 import { logger } from "../logger.js";
@@ -128,16 +133,26 @@ export async function publishRaffleMessage(
 
   const channel = await fetchTextChannel(client, raffle.channelId);
   if (!channel) {
-    logger.warn({ raffleId, channelId: raffle.channelId }, "raffle channel not found / not text");
-    return { ok: false, reason: "I can't see that channel (or it isn't a text channel)." };
+    logger.warn(
+      { raffleId, channelId: raffle.channelId },
+      "raffle channel not found / not text",
+    );
+    return {
+      ok: false,
+      reason: "I can't see that channel (or it isn't a text channel).",
+    };
   }
 
   // Make sure the bot's member object is cached so the permission check is real.
   const me =
-    channel.guild.members.me ?? (await channel.guild.members.fetchMe().catch(() => null));
+    channel.guild.members.me ??
+    (await channel.guild.members.fetchMe().catch(() => null));
   const missing = missingPostPermissions(channel, me);
   if (missing.length > 0) {
-    return { ok: false, reason: `I'm missing **${missing.join(", ")}** in <#${channel.id}>.` };
+    return {
+      ok: false,
+      reason: `I'm missing **${missing.join(", ")}** in <#${channel.id}>.`,
+    };
   }
 
   try {
@@ -162,7 +177,10 @@ export async function publishRaffleMessage(
     // Discord's top-level message includes the exact invalid field; rawError's
     // message is often only the unhelpful "Invalid Form Body" summary.
     const detail = e.message ?? e.rawError?.message ?? "unknown error";
-    logger.warn({ err, raffleId, channelId: raffle.channelId }, "failed to post raffle embed");
+    logger.warn(
+      { err, raffleId, channelId: raffle.channelId },
+      "failed to post raffle embed",
+    );
     return {
       ok: false,
       reason: `Discord rejected the post in <#${channel.id}> — ${detail}${e.code ? ` (code ${e.code})` : ""}. Give me **View Channel**, **Send Messages** and **Embed Links** in that channel.`,
@@ -228,8 +246,12 @@ export async function repostRaffleMessage(
  * Note: Discord only push-notifies on message *create*, so an instant ("now")
  * raffle pings on post; a scheduled one is re-posted when it flips live.
  */
-function startMentionContent(raffle: { status: RaffleStatus; startPing: string }): string {
-  if (raffle.status !== RaffleStatus.LIVE || raffle.startPing === "none") return "";
+function startMentionContent(raffle: {
+  status: RaffleStatus;
+  startPing: string;
+}): string {
+  if (raffle.status !== RaffleStatus.LIVE || raffle.startPing === "none")
+    return "";
   return raffle.startPing === "here" ? "@here" : "@everyone";
 }
 
@@ -262,6 +284,10 @@ export async function deleteRaffle(
 ): Promise<boolean> {
   const raffle = await getRaffle(raffleId);
   if (!raffle) return false;
+  const proof = await prisma.proof.findUnique({
+    where: { raffleId },
+    select: { pdfPath: true, csvPath: true, cardPath: true },
+  });
 
   // Best-effort cleanup of the live message.
   if (client && raffle.channelId && raffle.messageId) {
@@ -272,7 +298,8 @@ export async function deleteRaffle(
       .catch(() => undefined);
   }
 
-  await prisma.raffle.delete({ where: { id: raffleId } });
+  // Write the guild audit before deletion. The raffle FK is set to null by the
+  // delete, preserving the event without referencing a removed record.
   await audit({
     guildId: raffle.guildId,
     raffleId,
@@ -281,6 +308,19 @@ export async function deleteRaffle(
     message: `Deleted raffle #${raffleId} "${raffle.title}"`,
     actorId,
   });
+  await prisma.raffle.delete({ where: { id: raffleId } });
+
+  const proofPaths = [proof?.pdfPath, proof?.csvPath, proof?.cardPath].filter(
+    (value): value is string => Boolean(value),
+  );
+  await Promise.all(
+    proofPaths.map((file) =>
+      fs.rm(file, { force: true }).catch(() => undefined),
+    ),
+  );
+  if (proofPaths[0]) {
+    await fs.rmdir(path.dirname(proofPaths[0])).catch(() => undefined);
+  }
   return true;
 }
 
@@ -313,7 +353,9 @@ export async function getGuildStats(guildId: string): Promise<RaffleStats> {
     await Promise.all([
       prisma.raffle.count({ where: { guildId } }),
       prisma.raffle.count({ where: { guildId, status: RaffleStatus.LIVE } }),
-      prisma.winner.count({ where: { raffleId: { in: raffleIds }, replaced: false } }),
+      prisma.winner.count({
+        where: { raffleId: { in: raffleIds }, replaced: false },
+      }),
       prisma.participant.findMany({
         where: { raffleId: { in: raffleIds } },
         select: { userId: true },
@@ -362,7 +404,10 @@ export function missingPostPermissions(
   ];
   // Threads need SendMessagesInThreads instead of SendMessages.
   if (channel.isThread()) {
-    required[1] = [PermissionFlagsBits.SendMessagesInThreads, "Send Messages in Threads"];
+    required[1] = [
+      PermissionFlagsBits.SendMessagesInThreads,
+      "Send Messages in Threads",
+    ];
   }
   return required.filter(([flag]) => !perms.has(flag)).map(([, name]) => name);
 }

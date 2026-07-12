@@ -113,7 +113,9 @@ export function EntryPanel({
                 ? "Enter this raffle"
                 : data.status === "UPCOMING"
                   ? "Not open yet"
-                  : "Entries closed"}
+                  : data.status === "ENDED"
+                    ? "Raffle ended"
+                    : "Entries closed"}
           </div>
           {data.entryCount !== null ? (
             <div className="text-xs text-kos-muted">

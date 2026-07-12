@@ -2,8 +2,17 @@ import { type Client } from "discord.js";
 import { prisma, Prisma, LogCategory, RaffleStatus } from "@kos/db";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
-import { publishRaffleMessage, repostRaffleMessage, refreshRaffleMessage } from "./raffleService.js";
-import { closeAndDraw, rerollWinners, type RerollMode } from "./winnerService.js";
+import {
+  deleteRaffle,
+  publishRaffleMessage,
+  repostRaffleMessage,
+  refreshRaffleMessage,
+} from "./raffleService.js";
+import {
+  closeAndDraw,
+  rerollWinners,
+  type RerollMode,
+} from "./winnerService.js";
 import { audit } from "./auditService.js";
 
 /**
@@ -66,6 +75,7 @@ export class Scheduler {
       // requests. This is how the Vercel dashboard drives the bot (they share
       // only the DB — the dashboard can't reach the bot's local API).
       await this.heartbeat();
+      await this.processDeleteRequests();
       await this.publishDashboardRaffles();
       await this.processRerollRequests();
       await this.processEditRequests();
@@ -110,6 +120,32 @@ export class Scheduler {
     }
   }
 
+  /** Remove dashboard-deleted raffle posts, proof files, and DB records. */
+  private async processDeleteRequests(): Promise<void> {
+    const requests = await prisma.log.findMany({
+      where: {
+        action: "RAFFLE_DELETE_REQUEST",
+        raffleId: { not: null },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 25,
+      select: { id: true, raffleId: true, actorId: true },
+    });
+    for (const request of requests) {
+      if (!request.raffleId) continue;
+      await deleteRaffle(
+        request.raffleId,
+        request.actorId ?? "dashboard",
+        this.client,
+      ).catch((err) =>
+        logger.error(
+          { err, raffleId: request.raffleId },
+          "dashboard raffle deletion failed",
+        ),
+      );
+    }
+  }
+
   /**
    * Publish raffles the dashboard created (status DRAFT + a channel set). The
    * dashboard writes the row; we set the real status and post it to Discord.
@@ -121,7 +157,9 @@ export class Scheduler {
     });
     for (const r of drafts) {
       const status =
-        r.startAt.getTime() <= Date.now() ? RaffleStatus.LIVE : RaffleStatus.UPCOMING;
+        r.startAt.getTime() <= Date.now()
+          ? RaffleStatus.LIVE
+          : RaffleStatus.UPCOMING;
       await prisma.raffle.update({ where: { id: r.id }, data: { status } });
       const res = await publishRaffleMessage(this.client, r.id).catch((err) => {
         logger.error({ err, raffleId: r.id }, "dashboard raffle publish threw");
@@ -132,7 +170,10 @@ export class Scheduler {
       } else {
         // Don't loop forever on a bad channel — cancel and surface the reason.
         await prisma.raffle
-          .update({ where: { id: r.id }, data: { status: RaffleStatus.CANCELLED } })
+          .update({
+            where: { id: r.id },
+            data: { status: RaffleStatus.CANCELLED },
+          })
           .catch(() => undefined);
         await audit({
           guildId: r.guildId,
@@ -141,7 +182,10 @@ export class Scheduler {
           action: "PUBLISH_FAILED",
           message: `Dashboard raffle could not be posted: ${res.reason ?? "unknown"}`,
         }).catch(() => undefined);
-        logger.warn({ raffleId: r.id, reason: res.reason }, "dashboard raffle publish failed → cancelled");
+        logger.warn(
+          { raffleId: r.id, reason: res.reason },
+          "dashboard raffle publish failed → cancelled",
+        );
       }
     }
   }
@@ -155,7 +199,10 @@ export class Scheduler {
     for (const r of pending) {
       // Clear FIRST so a failure can't loop.
       await prisma.raffle
-        .update({ where: { id: r.id }, data: { rerollRequest: Prisma.DbNull, rerollRequestedAt: null } })
+        .update({
+          where: { id: r.id },
+          data: { rerollRequest: Prisma.DbNull, rerollRequestedAt: null },
+        })
         .catch(() => undefined);
       const req = (r.rerollRequest ?? {}) as {
         mode?: RerollMode;
@@ -167,7 +214,9 @@ export class Scheduler {
         mode: req.mode ?? "all",
         count: req.count,
         userIds: req.userIds,
-      }).catch((err) => logger.error({ err, raffleId: r.id }, "dashboard reroll failed"));
+      }).catch((err) =>
+        logger.error({ err, raffleId: r.id }, "dashboard reroll failed"),
+      );
     }
   }
 
