@@ -12,6 +12,9 @@ export default defineConfig({
   snapshotPathTemplate:
     "{testDir}/__screenshots__/{testFilePath}/{arg}-{projectName}{ext}",
   fullyParallel: false,
+  // One authenticated Discord user backs both viewport projects. Serial runs
+  // keep visual baselines deterministic and respect Discord's per-user bucket.
+  workers: 1,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [["line"], ["html", { open: "never" }]] : "list",

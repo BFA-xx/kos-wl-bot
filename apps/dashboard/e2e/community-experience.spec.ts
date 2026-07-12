@@ -26,6 +26,7 @@ test.describe("authenticated community experience", () => {
     await expect(page.getByTestId("communities-directory")).toHaveScreenshot(
       "communities-mine.png",
       {
+        maskColor: "#27272a",
         mask: [
           page.getByTestId("communities-metrics"),
           page.getByTestId("community-live-status"),
@@ -44,6 +45,7 @@ test.describe("authenticated community experience", () => {
     await expect(page.getByTestId("communities-directory")).toHaveScreenshot(
       "communities-all.png",
       {
+        maskColor: "#27272a",
         mask: [
           page.getByTestId("communities-metrics"),
           page.getByTestId("community-live-status"),
@@ -65,6 +67,7 @@ test.describe("authenticated community experience", () => {
     await expect(page.getByTestId("branding-form")).toHaveScreenshot(
       "community-branding.png",
       {
+        maskColor: "#27272a",
         mask: [
           page.getByTestId("branding-form").locator("input"),
           page.getByTestId("branding-form").locator("textarea"),
