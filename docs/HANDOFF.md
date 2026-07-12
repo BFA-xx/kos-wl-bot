@@ -220,8 +220,9 @@ now explicitly authorized all three operations in the active task.
   still understand the requirements that applied when the raffle ran.
 - `/me/raffles` now has separate **Enter raffles** and **Ended raffles**
   sections. Ended cards retain banners, community/project details, visibility-
-  safe entry totals, task state, and results links while replacing entry with
-  an explicit `Raffle ended` panel.
+  safe entry totals, a compact task-completion summary, and results links while
+  replacing entry with an explicit `Raffle ended` panel. Full historical task
+  rows load only after **Review tasks**, avoiding an oversized 30-card page.
 - Focused ended raffle views render the same historical tasks in read-only mode
   and disable task verification/open actions. `EntryPanel` also uses the exact
   `Raffle ended` state for ENDED records.

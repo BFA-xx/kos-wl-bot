@@ -234,6 +234,7 @@ function RaffleEntryCard({
           <img
             src={raffle.bannerUrl}
             alt=""
+            loading={ended ? "lazy" : "eager"}
             className="mx-auto block max-h-[220px] w-auto max-w-full rounded-3xl object-contain"
           />
         </div>
@@ -294,17 +295,26 @@ function RaffleEntryCard({
                     : `${verifiedTasks}/${raffle.tasks.length} verified · complete them here, then enter below.`}
                 </div>
               </div>
+              {ended ? (
+                <Link
+                  href={`/me/raffles?raffle=${raffle.id}`}
+                  className="kos-btn mt-2 text-center text-xs sm:mt-0"
+                >
+                  Review tasks
+                </Link>
+              ) : null}
             </div>
-            <TaskList
-              tasks={raffle.tasks}
-              busy={busy}
-              notes={notes}
-              raffleId={raffle.id}
-              compact
-              readOnly={ended}
-              onComplete={onComplete}
-              onOpen={onOpen}
-            />
+            {!ended ? (
+              <TaskList
+                tasks={raffle.tasks}
+                busy={busy}
+                notes={notes}
+                raffleId={raffle.id}
+                compact
+                onComplete={onComplete}
+                onOpen={onOpen}
+              />
+            ) : null}
           </div>
         ) : null}
 
