@@ -38,6 +38,9 @@
   actions.
 - Store community X branding as a validated handle only. It is a public link,
   not proof of X account ownership or engagement.
+- Authenticated E2E tests must use an externally supplied normal session cookie,
+  storage state, or session secret plus test user ID. Never ship a test-login
+  endpoint or commit authentication state.
 - Preserve database uniqueness constraints and transactional counter updates.
 - Applied migrations are immutable; new schema work gets a new additive
   migration.

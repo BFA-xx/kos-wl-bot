@@ -184,9 +184,11 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - `SystemStatus["bot-heartbeat"]` is updated about once per minute; the admin
   health page considers it online for three minutes.
 - Proof files live on the bot host and are also delivered to Discord.
-- Focused dashboard tests cover public raffle policy, duplicate scheduling, and
-  duplicate-route tenant isolation. Broader browser/integration coverage is
-  still missing, and the scheduler assumes one bot instance.
+- Dashboard Vitest covers public raffle policy, duplication, tenant isolation,
+  community membership, X branding, and Discord OAuth concurrency/rate-limit
+  handling. Authenticated Playwright coverage includes desktop/mobile
+  Communities and Branding visual baselines. Broader Discord/draw browser
+  coverage is still missing, and the scheduler assumes one bot instance.
 - Root `pnpm build` quotes workspace filters and builds DB, bot, and dashboard.
 - Older public setup/deployment docs and `.env.example` lag Phase 2/3 and still
   emphasize the legacy internal API.
@@ -246,8 +248,11 @@ DB, bot, and dashboard. Package-specific commands remain useful during focused
 development.
 
 Dashboard Vitest coverage currently focuses on public raffle policy,
-duplication behavior, and tenant isolation. Add focused tests for behavior
-changes and describe remaining manual Discord/Vercel smoke checks.
+duplication behavior, tenant isolation, community discovery, and OAuth
+resilience. Run authenticated community visual checks with
+`pnpm --filter @kos/dashboard test:e2e`; credentials must stay outside Git.
+Add focused tests for behavior changes and describe remaining manual
+Discord/Vercel smoke checks.
 
 ## Deployment boundaries
 

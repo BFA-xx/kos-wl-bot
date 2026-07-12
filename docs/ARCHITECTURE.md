@@ -261,6 +261,9 @@ storage for development. Bot and dashboard must share the same key.
 Vitest covers public raffle policy, duplicate scheduling/variants, and the
 duplicate API's tenant boundary. Additional safety nets are strict TypeScript,
 Prisma schema validation, package builds, database constraints, and production
-smoke checks. Draws, full eligibility parity, OAuth, Discord, and authenticated
-browser flows still need broader automated coverage. See `docs/HANDOFF.md` for
-the latest verified commands and known gaps.
+smoke checks. Playwright now covers the authenticated Communities directory and
+organization Branding/X form on desktop and mobile, including committed visual
+baselines. Its global setup signs a short-lived ordinary session from external
+credentials and never adds a test authentication route. Draws, full eligibility
+parity, and broader Discord workflows still need automated browser coverage.
+See `docs/HANDOFF.md` for the latest verified commands and known gaps.

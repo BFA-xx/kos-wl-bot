@@ -260,3 +260,18 @@ on member cards, community pages, and public raffle host details.
 **Why:** A first-class social link makes community identity clearer while
 remaining separate from paid X engagement verification and OAuth-linked member
 accounts.
+
+## D027 — Authenticated visual tests use normal signed sessions
+
+**Status:** Accepted
+**Decision:** Playwright visual regression tests create a short-lived normal
+`kos_session` cookie from externally supplied test credentials, or consume an
+externally supplied storage-state file. Generated authentication state,
+reports, traces, and failure output are gitignored; no application test-login
+route or authentication bypass is allowed. Desktop and mobile projects run
+serially because both use one Discord identity and Discord enforces a per-user
+REST rate-limit bucket.
+**Why:** Member and organization pages need real authenticated browser coverage,
+but production authentication must not be weakened for testing. Serial visual
+projects make screenshot comparison deterministic without pretending to be a
+load test.

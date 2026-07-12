@@ -3,7 +3,7 @@
 Last updated: 2026-07-11
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `64e8158`
+Audited application commit: `2ba4343`
 
 ## Current state
 
@@ -112,10 +112,11 @@ precision points:
 
 ### High priority
 
-- Focused automated tests now cover public raffle URL/lifecycle policy,
-  duplicate schedule/variant behavior, and duplicate-route tenant isolation.
-  Draw logic, full eligibility parity, OAuth, wallet validation, scheduler
-  requests, and authenticated browser flows still lack automated coverage.
+- Automated tests now cover public raffle policy, duplication/tenant isolation,
+  community discovery, X normalization, OAuth refresh/rate-limit resilience,
+  and authenticated desktop/mobile Communities + Branding visuals. Draw logic,
+  full eligibility parity, wallet validation, scheduler requests, and broader
+  Discord member workflows still lack automated browser coverage.
 - Documentation outside the new takeover docs is substantially pre-Phase 3.
   `README.md`, `GUIDE.md`, `docs/VERCEL.md`, deployment/security guides, and
   `.env.example` still emphasize the localhost control API and omit several
@@ -921,6 +922,43 @@ Verification:
 - Production canaries confirmed canonical raffle #57 still returns `200` after
   selecting the new organization field, and signed-out
   `/me/communities?view=all` preserves its login return URL.
+
+### Authenticated community visual regression and OAuth resilience — complete
+
+- Added Playwright with an authenticated global setup that accepts a supplied
+  session cookie/storage-state file or signs a 30-minute ordinary KOS session
+  from external `DASHBOARD_SESSION_TOKEN` + `KOS_E2E_USER_ID` values. Auth
+  state, reports, traces, and failure artifacts are gitignored.
+- Added desktop (1440×1000) and Pixel 7 projects covering **Your communities**,
+  **Discover all**, joined state, responsive cards, and the Branding/X form.
+- Committed six masked visual baselines: mine/all/branding for desktop and
+  mobile. Dynamic counts, live status, images, and stored branding values are
+  masked with a neutral color so content changes do not create noisy failures.
+- The first parallel browser run exposed two real production issues. Discord
+  refresh-token rotation is now serialized across Vercel instances with a
+  transaction-scoped PostgreSQL advisory lock, and transient guild-list calls
+  retry `429`/`5xx` responses.
+- EC2 diagnostics confirmed Discord's `Retry-After: 997` header is milliseconds,
+  not seconds. The retry parser now supports Discord milliseconds, decimal
+  seconds, and JSON `retry_after`, with bounded backoff.
+- Visual projects run serially because both intentionally share one test
+  Discord identity and its rate-limit bucket. This keeps visual comparison
+  deterministic while production retains the concurrency protections above.
+- Dashboard Vitest now passes 19 tests across seven files, including token-lock,
+  consumed-rotation, rate-limit retry, membership, X normalization, sharing,
+  and duplicate tenant-isolation cases.
+
+Verification:
+
+- `corepack pnpm --filter @kos/dashboard test` — 7 files, 19 tests passed.
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- Dashboard production build passes.
+- Baseline generation: `test:e2e:update` — 4 passed.
+- Independent visual comparison: `test:e2e` — 4 passed in 24.5 seconds.
+- Vercel deployments completed successfully for runtime fix `2ba4343`.
+- Commits: `7885db0` (Playwright harness), `ec6820f`/`11ebb03` (distributed
+  token refresh hardening), `f08e963`/`2ba4343` (Discord retry handling), and
+  `ac2c76b` (visual baselines).
 
 ## Confirmed invariants and current product policies
 
