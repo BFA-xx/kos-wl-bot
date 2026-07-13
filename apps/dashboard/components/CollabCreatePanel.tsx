@@ -21,7 +21,7 @@ interface TeamMember {
   role: string;
 }
 
-const STEPS = ["Partner", "Workflow", "Ownership"] as const;
+const STEPS = ["Partner", "Workflow", "Team"] as const;
 
 export function CollabCreatePanel({
   team,
@@ -58,7 +58,9 @@ export function CollabCreatePanel({
     discordUsername: "",
     telegram: "",
     email: "",
-    ownerId: user.id,
+    ownerId: team.some((member) => member.id === user.id)
+      ? user.id
+      : (team[0]?.id ?? ""),
     assignedToId: "",
     reviewerId: "",
     tags: "",
@@ -326,7 +328,7 @@ export function CollabCreatePanel({
                 placeholder="team@project.xyz"
               />
               <div>
-                <label className="kos-label">Owner</label>
+                <label className="kos-label">Team lead</label>
                 <select
                   className="kos-input"
                   value={form.ownerId}

@@ -7,6 +7,7 @@ import { upload as uploadBlob } from "@vercel/blob/client";
 import useSWR from "swr";
 import { Empty, SectionTitle } from "./ui";
 import { NewRaffleModal } from "./NewRaffleModal";
+import { PartnerMark, RaffleBanner } from "./CollabMedia";
 import {
   IconCheck,
   IconClose,
@@ -18,6 +19,7 @@ import {
 } from "./icons";
 import { useCan } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
+import { partnerDescriptor } from "@/lib/collab-presentation";
 import {
   COLLAB_PRIORITIES,
   COLLAB_PRIORITY_LABELS,
@@ -296,17 +298,11 @@ export function CollabDetail() {
         <div className="p-5 sm:p-7">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex min-w-0 items-start gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/[0.10] bg-white/[0.05] text-lg font-bold sm:h-20 sm:w-20">
-                {collaboration.partner.logoUrl ? (
-                  <img
-                    src={collaboration.partner.logoUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  collaboration.projectName.slice(0, 2).toUpperCase()
-                )}
-              </div>
+              <PartnerMark
+                name={collaboration.projectName}
+                src={collaboration.partner.logoUrl}
+                className="h-16 w-16 rounded-2xl text-lg sm:h-20 sm:w-20"
+              />
               <div className="min-w-0">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <span
@@ -327,8 +323,8 @@ export function CollabDetail() {
                   {collaboration.projectName}
                 </h1>
                 <p className="mt-2 text-sm text-kos-muted">
-                  {collaboration.partner.chain ?? "Multi-chain"} ·{" "}
-                  {collaboration.partner.category ?? "Collaboration partner"}
+                  {partnerDescriptor(collaboration.partner) ||
+                    "Community collaboration"}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {collaboration.tags.map(({ tag }) => (
@@ -396,9 +392,10 @@ export function CollabDetail() {
             value={collaboration.raffles.length}
           />
           <HeaderMetric
-            label="Owner"
+            label="Team lead"
             value={
-              people.get(collaboration.ownerId ?? "")?.name ?? "Unassigned"
+              data.team.find((person) => person.id === collaboration.ownerId)
+                ?.name ?? "Unassigned"
             }
             small
           />
@@ -695,7 +692,7 @@ function OverviewTab({
           {canAssign ? (
             <>
               <TeamSelect
-                label="Owner"
+                label="Team lead"
                 value={form.ownerId}
                 team={data.team}
                 onChange={(value) => set("ownerId", value)}
@@ -766,14 +763,10 @@ function OverviewTab({
           <Detail label="Project" value={c.projectName} />
           <Detail
             label="Chain / Category"
-            value={
-              [c.partner.chain, c.partner.category]
-                .filter(Boolean)
-                .join(" · ") || "Not set"
-            }
+            value={partnerDescriptor(c.partner) || "Not set"}
           />
           <Detail
-            label="Owner"
+            label="Team lead"
             value={
               data.team.find((person) => person.id === c.ownerId)?.name ??
               "Unassigned"
@@ -1247,19 +1240,13 @@ function RafflesTab({
         <div className="grid gap-3 lg:grid-cols-2">
           {data.collaboration.raffles.map(({ raffle }) => (
             <div key={raffle.id} className="kos-card overflow-hidden">
-              <div className="flex gap-4 p-4">
-                {raffle.bannerUrl ? (
-                  <img
-                    src={raffle.bannerUrl}
-                    alt=""
-                    className="h-20 w-28 rounded-xl object-cover"
-                  />
-                ) : (
-                  <div className="flex h-20 w-28 items-center justify-center rounded-xl bg-white/[0.04]">
-                    <IconTicket />
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
+              <RaffleBanner
+                name={raffle.projectName}
+                src={raffle.bannerUrl}
+                className="aspect-video w-full border-b border-white/[0.07]"
+              />
+              <div className="p-4">
+                <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold">
                       #{raffle.id} · {raffle.projectName}

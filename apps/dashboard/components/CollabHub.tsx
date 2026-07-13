@@ -7,6 +7,7 @@ import useSWR from "swr";
 import { motion } from "framer-motion";
 import { Empty, PageTitle, SectionTitle, StatCard, TableShell } from "./ui";
 import { CollabCreatePanel } from "./CollabCreatePanel";
+import { PartnerMark } from "./CollabMedia";
 import {
   IconChart,
   IconCheck,
@@ -17,6 +18,7 @@ import {
 } from "./icons";
 import { useCan } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
+import { partnerDescriptor } from "@/lib/collab-presentation";
 import {
   COLLAB_PRIORITIES,
   COLLAB_PRIORITY_LABELS,
@@ -84,7 +86,7 @@ interface HubData {
     hostingToday: number;
     waitingForWallets: number;
     readyForSubmission: number;
-    completedThisMonth: number;
+    completedAllTime: number;
     totalWlSpots: number;
     unlinkedRaffles: number;
   };
@@ -126,7 +128,7 @@ interface HubData {
     pendingSubmissions: number;
     topPartners: { name: string; count: number }[];
     topTeamMembers: { id: string; name: string; count: number }[];
-    monthlyActivity: { label: string; value: number }[];
+    activityHistory: { key: string; label: string; value: number }[];
   };
 }
 
@@ -148,6 +150,15 @@ interface Partner {
 
 type View = "BOARD" | "TABLE" | "CALENDAR";
 type HubMode = "WORKSPACE" | "PARTNERS";
+
+const BOARD_STATUSES: CollabStatus[] = [
+  "LEAD",
+  "REACHED_OUT",
+  "COMPLETED",
+  ...COLLAB_STATUSES.filter(
+    (status) => !["LEAD", "REACHED_OUT", "COMPLETED"].includes(status),
+  ),
+];
 
 const TABLE_COLUMNS = [
   "project",
@@ -304,7 +315,7 @@ export function CollabHub() {
         "Status",
         "WL spots",
         "Wallet progress",
-        "Owner",
+        "Team lead",
         "Host date",
         "Deadline",
         "Priority",
@@ -651,8 +662,8 @@ export function CollabHub() {
             />
             <StatCard
               label="Completed"
-              value={data?.summary.completedThisMonth ?? "—"}
-              hint="this month"
+              value={data?.summary.completedAllTime ?? "—"}
+              hint="all time"
             />
             <StatCard
               label="WL spots"
@@ -913,7 +924,7 @@ function Board({
   return (
     <>
       <div className="space-y-3 md:hidden">
-        {COLLAB_STATUSES.map((status) => {
+        {BOARD_STATUSES.map((status) => {
           const items = rows.filter((row) => row.status === status);
           if (!items.length) return null;
           return (
@@ -953,7 +964,7 @@ function Board({
 
       <div className="-mx-4 hidden overflow-x-auto px-4 pb-5 sm:-mx-6 sm:px-6 md:block lg:-mx-8 lg:px-8">
         <div className="flex min-w-max gap-3">
-          {COLLAB_STATUSES.map((status) => {
+          {BOARD_STATUSES.map((status) => {
             const items = rows.filter((row) => row.status === status);
             return (
               <div
@@ -1038,7 +1049,8 @@ function BoardCard({
             {row.projectName}
           </div>
           <div className="mt-0.5 truncate text-xs text-kos-muted">
-            {row.partner.chain ?? row.partner.category ?? "Partner"}
+            {partnerDescriptor(row.partner) ||
+              `${row.raffles.length} raffle${row.raffles.length === 1 ? "" : "s"}`}
           </div>
         </div>
         <PriorityDot priority={row.priority} />
@@ -1199,7 +1211,7 @@ function Spreadsheet({
                       setVisible(next);
                     }}
                   />
-                  {column}
+                  {column === "owner" ? "Team lead" : column}
                 </label>
               ))}
             </div>
@@ -1288,7 +1300,7 @@ function Spreadsheet({
                     {...{ sort, direction, onSort }}
                   />
                 ) : null}
-                {visible.has("owner") ? <th>Owner</th> : null}
+                {visible.has("owner") ? <th>Team lead</th> : null}
                 {visible.has("host") ? (
                   <Sortable
                     label="Host date"
@@ -1344,7 +1356,8 @@ function Spreadsheet({
                             {row.projectName}
                           </span>
                           <span className="block max-w-44 truncate text-xs text-kos-muted">
-                            {row.partner.category ?? "Partner"}
+                            {partnerDescriptor(row.partner) ||
+                              `${row.raffles.length} raffle${row.raffles.length === 1 ? "" : "s"}`}
                           </span>
                         </span>
                       </Link>
@@ -1725,35 +1738,37 @@ function AnalyticsPanel({ data }: { data?: HubData }) {
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="kos-card p-4 sm:p-5">
-          <SectionTitle>Monthly activity</SectionTitle>
-          <div className="flex h-40 items-end gap-3">
-            {(analytics?.monthlyActivity ?? []).map((month) => {
-              const monthlyMax = Math.max(
-                1,
-                ...(analytics?.monthlyActivity.map((item) => item.value) ?? [
+          <SectionTitle>All-time activity</SectionTitle>
+          <div className="overflow-x-auto pb-1">
+            <div className="flex h-40 min-w-max items-end gap-3">
+              {(analytics?.activityHistory ?? []).map((month) => {
+                const monthlyMax = Math.max(
                   1,
-                ]),
-              );
-              return (
-                <div
-                  key={month.label}
-                  className="flex h-full flex-1 flex-col justify-end text-center"
-                >
-                  <div className="mb-1 text-[10px] text-kos-muted">
-                    {month.value}
-                  </div>
+                  ...(analytics?.activityHistory.map((item) => item.value) ?? [
+                    1,
+                  ]),
+                );
+                return (
                   <div
-                    className="min-h-1 rounded-t-xl bg-gradient-to-t from-blue-600 to-violet-400 transition-all"
-                    style={{
-                      height: `${Math.max(4, (month.value / monthlyMax) * 100)}%`,
-                    }}
-                  />
-                  <div className="mt-2 text-[10px] uppercase text-kos-muted">
-                    {month.label}
+                    key={month.key}
+                    className="flex h-full w-14 shrink-0 flex-col justify-end text-center"
+                  >
+                    <div className="mb-1 text-[10px] text-kos-muted">
+                      {month.value}
+                    </div>
+                    <div
+                      className="min-h-1 rounded-t-xl bg-gradient-to-t from-blue-600 to-violet-400 transition-all"
+                      style={{
+                        height: `${Math.max(4, (month.value / monthlyMax) * 100)}%`,
+                      }}
+                    />
+                    <div className="mt-2 text-[10px] uppercase text-kos-muted">
+                      {month.label}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
         <div className="kos-card p-4 sm:p-5">
@@ -1804,22 +1819,15 @@ function PartnerDirectory({
       {partners.map((partner) => (
         <div key={partner.id} className="kos-card kos-card-hover p-5">
           <div className="flex items-start gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.05] text-sm font-bold">
-              {partner.logoUrl ? (
-                <img
-                  src={partner.logoUrl}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                partner.name.slice(0, 2).toUpperCase()
-              )}
-            </div>
+            <PartnerMark
+              name={partner.name}
+              src={partner.logoUrl}
+              className="h-12 w-12 rounded-2xl text-sm"
+            />
             <div className="min-w-0 flex-1">
               <h3 className="truncate font-semibold">{partner.name}</h3>
               <p className="text-xs text-kos-muted">
-                {partner.chain ?? "Multi-chain"} ·{" "}
-                {partner.category ?? "Partner"}
+                {partnerDescriptor(partner) || "Multi-chain"}
               </p>
             </div>
             <div className="text-right">
@@ -1901,17 +1909,11 @@ function PartnerDirectory({
 
 function ProjectLogo({ row }: { row: CollabRow }) {
   return (
-    <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] text-[10px] font-bold">
-      {row.partner.logoUrl ? (
-        <img
-          src={row.partner.logoUrl}
-          alt=""
-          className="h-full w-full object-cover"
-        />
-      ) : (
-        row.projectName.slice(0, 2).toUpperCase()
-      )}
-    </div>
+    <PartnerMark
+      name={row.projectName}
+      src={row.partner.logoUrl}
+      className="h-9 w-9 rounded-xl text-[10px]"
+    />
   );
 }
 

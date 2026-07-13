@@ -122,10 +122,8 @@ export const POST = withAccess(async (_req, { params }) => {
             organizationId: org.id,
             name: group.projectName,
             normalizedName: group.normalizedName,
-            logoUrl: sanitizeHttpUrl(group.logoUrl),
             websiteUrl: sanitizeHttpUrl(group.websiteUrl),
             xUrl: sanitizeHttpUrl(group.xUrl),
-            category: "Raffle partner",
             createdById: user.id,
           },
         });
@@ -134,10 +132,8 @@ export const POST = withAccess(async (_req, { params }) => {
           where: { id: partner.id },
           data: {
             name: group.projectName,
-            logoUrl: partner.logoUrl ?? sanitizeHttpUrl(group.logoUrl),
             websiteUrl: partner.websiteUrl ?? sanitizeHttpUrl(group.websiteUrl),
             xUrl: partner.xUrl ?? sanitizeHttpUrl(group.xUrl),
-            category: partner.category ?? "Raffle partner",
           },
         });
       }
@@ -177,7 +173,7 @@ export const POST = withAccess(async (_req, { params }) => {
               submissionStatus: "ACCEPTED",
               whitelistAllocation: group.whitelistAllocation,
               requirements: group.requirements,
-              ownerId: org.ownerId,
+              ownerId: user.id,
               hostAt: group.hostAt,
               completedAt: group.completedAt,
               lastActivityAt: group.completedAt,

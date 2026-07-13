@@ -94,15 +94,11 @@ export const GET = withAccess(async (_req, { params }) => {
         select: { id: true, username: true, globalName: true, avatarUrl: true },
       })
     : [];
-  const [members, owner, availableRaffles] = await Promise.all([
+  const [members, availableRaffles] = await Promise.all([
     prisma.organizationMember.findMany({
       where: { organizationId: org.id, status: "ACTIVE" },
       include: { user: true, role: { select: { name: true } } },
       orderBy: { createdAt: "asc" },
-    }),
-    prisma.user.findUnique({
-      where: { id: org.ownerId },
-      select: { id: true, username: true, globalName: true, avatarUrl: true },
     }),
     prisma.raffle.findMany({
       where: {
@@ -126,14 +122,6 @@ export const GET = withAccess(async (_req, { params }) => {
     string,
     { id: string; name: string; avatarUrl: string | null; role: string }
   >();
-  if (owner) {
-    team.set(owner.id, {
-      id: owner.id,
-      name: owner.globalName ?? owner.username,
-      avatarUrl: owner.avatarUrl,
-      role: "Owner",
-    });
-  }
   for (const member of members) {
     team.set(member.userId, {
       id: member.userId,
@@ -204,8 +192,7 @@ export const PATCH = withAccess(async (req, { params }) => {
     await requireOrgAccess(params.org, PERMISSIONS.COLLAB_ASSIGN);
     const ids = assignmentFields
       .map((field) => text(body[field], 40))
-      .filter(Boolean)
-      .filter((id) => id !== access.org.ownerId);
+      .filter(Boolean);
     if (ids.length) {
       const found = await prisma.organizationMember.count({
         where: {

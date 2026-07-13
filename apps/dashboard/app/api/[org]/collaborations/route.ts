@@ -12,6 +12,7 @@ import {
   toOptionalDate,
 } from "@/lib/collab-shared";
 import { sanitizeHttpUrl } from "@/lib/raffle-input";
+import { buildAllTimeActivityHistory } from "@/lib/collab-presentation";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -212,7 +213,6 @@ export const GET = withAccess(async (req, { params }) => {
 
   const now = new Date();
   const { start, end } = dayBounds(now);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const globalRows = analyticsRows.map((row) => ({
     ...row,
     walletProgress: walletProgress(row.whitelistAllocation, row.wallets),
@@ -232,9 +232,8 @@ export const GET = withAccess(async (req, { params }) => {
     readyForSubmission: globalRows.filter(
       (row) => row.status === "READY_FOR_SUBMISSION",
     ).length,
-    completedThisMonth: globalRows.filter(
-      (row) => row.completedAt && row.completedAt >= monthStart,
-    ).length,
+    completedAllTime: globalRows.filter((row) => row.status === "COMPLETED")
+      .length,
     totalWlSpots: globalRows.reduce(
       (sum, row) => sum + Math.max(0, row.whitelistAllocation),
       0,
@@ -268,21 +267,10 @@ export const GET = withAccess(async (req, { params }) => {
     }),
   ]);
 
-  const ownerUser = await prisma.user.findUnique({
-    where: { id: org.ownerId },
-  });
   const peopleById = new Map<
     string,
     { id: string; name: string; avatarUrl: string | null; role: string }
   >();
-  if (ownerUser) {
-    peopleById.set(ownerUser.id, {
-      id: ownerUser.id,
-      name: ownerUser.globalName ?? ownerUser.username,
-      avatarUrl: ownerUser.avatarUrl,
-      role: "Owner",
-    });
-  }
   for (const member of members) {
     peopleById.set(member.userId, {
       id: member.userId,
@@ -319,16 +307,7 @@ export const GET = withAccess(async (req, { params }) => {
         teamCounts.set(responsibleId, (teamCounts.get(responsibleId) ?? 0) + 1);
     }
   }
-  const monthlyActivity = Array.from({ length: 6 }, (_, index) => {
-    const date = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
-    const next = new Date(date.getFullYear(), date.getMonth() + 1, 1);
-    return {
-      label: date.toLocaleDateString("en", { month: "short" }),
-      value: globalRows.filter(
-        (row) => row.createdAt >= date && row.createdAt < next,
-      ).length,
-    };
-  });
+  const activityHistory = buildAllTimeActivityHistory(globalRows, now);
 
   return NextResponse.json({
     collaborations: rows,
@@ -375,7 +354,7 @@ export const GET = withAccess(async (req, { params }) => {
         }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 5),
-      monthlyActivity,
+      activityHistory,
     },
   });
 });
@@ -406,11 +385,8 @@ export const POST = withAccess(async (req, { params }) => {
   }
   const status = isCollabStatus(body.status) ? body.status : "LEAD";
   const priority = isCollabPriority(body.priority) ? body.priority : "MEDIUM";
-  const assignmentIds = [
-    body.ownerId,
-    body.assignedToId,
-    body.reviewerId,
-  ].filter(
+  const teamLeadId = text(body.ownerId, 40) || user.id;
+  const assignmentIds = [teamLeadId, body.assignedToId, body.reviewerId].filter(
     (value): value is string => typeof value === "string" && Boolean(value),
   );
   if (assignmentIds.length) {
@@ -418,12 +394,11 @@ export const POST = withAccess(async (req, { params }) => {
     const activeMembers = await prisma.organizationMember.count({
       where: {
         organizationId: org.id,
-        userId: { in: assignmentIds.filter((id) => id !== org.ownerId) },
+        userId: { in: [...new Set(assignmentIds)] },
         status: "ACTIVE",
       },
     });
-    const expected = new Set(assignmentIds.filter((id) => id !== org.ownerId))
-      .size;
+    const expected = new Set(assignmentIds).size;
     if (activeMembers !== expected) {
       return NextResponse.json(
         { error: "Every assignee must be an active team member." },
@@ -526,7 +501,7 @@ export const POST = withAccess(async (req, { params }) => {
         discordUsername: text(body.discordUsername, 120) || null,
         telegram: text(body.telegram, 120) || null,
         email: text(body.email, 254) || null,
-        ownerId: text(body.ownerId, 40) || user.id,
+        ownerId: teamLeadId,
         assignedToId: text(body.assignedToId, 40) || null,
         reviewerId: text(body.reviewerId, 40) || null,
         hostAt,
