@@ -82,7 +82,10 @@
   Future Phase 4 schema/runtime changes must retain migration-before-runtime
   ordering and deploy both surfaces together.
 - X engagement verification is link-and-attest, not real API verification.
-- Wallet verification is format-only; no signature or on-chain ownership check.
+- Wallet verification is format-only; no signature or on-chain ownership
+  check. Robinhood Chain is a distinct selectable registry/raffle chain using
+  the same EVM address format as Ethereum/Base. New chains must ship through
+  the shared Prisma enum, bot, dashboard API, and member wallet editor.
 - Paid billing and campaigns are not live. Points, rewards, and weighted draws
   have first production slices and must remain Discord + web parity features.
 - `/c/*` community pages require sign-in. `/r/:id` is the only anonymous raffle

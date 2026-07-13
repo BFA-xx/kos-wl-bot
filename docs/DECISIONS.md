@@ -433,3 +433,29 @@ source for host attribution. Raffle banners are campaign assets rather than
 partner identity, and Discord interaction attachment URLs expire, so promoting
 them to logos creates repeated labels, cropped images, and broken project
 branding.
+
+## D041 — Discord raffle banners become durable before publication
+
+**Status:** Accepted
+**Decision:** When a raffle uses a Discord attachment banner, download and
+validate the image before publishing, store its bytes in the one-to-one
+`RaffleBannerAsset`, and replace `Raffle.bannerUrl` with the versioned public
+`/r/:id/banner` route. Restrict ingestion to Discord attachment hosts,
+supported image MIME types, a 5 MB streamed limit, and a bounded timeout.
+Dashboard Vercel Blob uploads remain unchanged.
+**Why:** Discord interaction attachment URLs expire. Persisting before the
+Discord post makes every new banner portable across EC2 and Vercel while
+preventing untrusted proxying or unbounded database writes.
+
+## D042 — Wallet chains are explicit shared registry identities
+
+**Status:** Accepted
+**Decision:** Store Robinhood Chain as the distinct `ROBINHOOD` `WalletChain`
+value and present it as `Robinhood Chain (RH)` in web and Discord. Validate it
+as an EVM `0x` address, but do not treat an Ethereum or Base profile as an RH
+profile. Team raffle selection, member registration, entry eligibility,
+winner collection, exports, and duplication all use the same enum-backed
+identity.
+**Why:** The same address format does not mean the same payout network. An
+explicit chain prevents ambiguous winner exports and keeps Discord/web entry
+rules identical without introducing paid or on-chain verification.

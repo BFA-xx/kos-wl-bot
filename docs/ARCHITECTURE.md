@@ -240,9 +240,13 @@ Discord surfaces:
 
 ## Wallets and encryption
 
-Ethereum/Base, Solana, and Bitcoin addresses receive format-only validation.
-`WalletProfile` is shared between Discord and web. Winner exports prefer a
-raffle-specific `Wallet`, then fall back to a matching reusable profile.
+Ethereum/Base/Robinhood Chain, Solana, and Bitcoin addresses receive
+format-only validation. Robinhood Chain is stored as the distinct
+`ROBINHOOD` enum value but uses EVM `0x` validation and normalization. This
+lets a team require or collect the exact network without conflating it with a
+member's Ethereum/Base record. `WalletProfile` is shared between Discord and
+web. Winner exports prefer a raffle-specific `Wallet`, then fall back to a
+matching reusable profile.
 
 OAuth tokens and wallet addresses use AES-256-GCM with
 `WALLET_ENCRYPTION_KEY`. If the key is absent, current helpers permit plaintext

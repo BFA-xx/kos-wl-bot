@@ -3,7 +3,7 @@
 Last updated: 2026-07-13
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `3fa9204`
+Audited application commit: `85b82e8`
 
 ## Current state
 
@@ -54,6 +54,13 @@ Phase 3 is implemented through S2.5:
   zero WL allocation, KUON's early raffle is attached to the existing KUONnft
   collaboration, and the cancelled retries are attached to NUTSY instead of
   creating duplicate partner records.
+- New hosted raffles now enter Collab Hub automatically after Discord accepts
+  the post. Discord attachment banners are made durable before publication,
+  history import has an explicit exceptional-row preview, Active is a real
+  pipeline filter, and deletion removes untouched auto-created Hub residue.
+- Robinhood Chain (`RH`) is deployed as a first-class wallet chain across team
+  raffle create/edit, member web/Discord registration, eligibility, winner
+  collection, duplication, and exports.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -179,10 +186,9 @@ Production release evidence:
   yet a partner merge/split review tool.
 - Forty historical raffle banners were stored as Discord interaction
   `ephemeral-attachments` URLs and have expired. Their original bytes cannot be
-  recovered from those URLs or the published Discord embeds. The UI now shows
-  a project-branded fallback and valid Vercel Blob banners render uncropped,
-  but future Discord attachment uploads still need durable shared persistence
-  at creation time.
+  recovered from those URLs or the published Discord embeds. The UI shows a
+  project-branded fallback; migration `20260713230000_raffle_banner_assets`
+  and pre-publication persistence prevent this historical gap from growing.
 
 The previously listed Phase 4 release-blocking implementation debt remains
 closed; the historical review workflow above is the current follow-up.
@@ -252,7 +258,7 @@ closed; the historical review workflow above is the current follow-up.
   at `/:org/tasks`; members complete standalone point tasks at `/me/points` and
   raffle-specific tasks at `/me/raffles`.
 
-### Collab project-banner presentation — implemented locally
+### Collab project-banner presentation — production verified
 
 - Collab Hub list responses now include each attached raffle's `bannerUrl` and
   `endAt`. Board cards render the project's linked raffle banner as full-width
@@ -265,10 +271,10 @@ closed; the historical review workflow above is the current follow-up.
 - Partner directory marks still use `CollaborationPartner.logoUrl`; raffle
   banners remain raffle media and are not copied into partner branding.
 - Focused presentation tests, dashboard TypeScript, the production dashboard
-  build, and `git diff --check` pass. This dashboard change has not been
-  committed, pushed, or deployed yet.
+  build, and `git diff --check` pass. The change is included in production
+  commit `61d605b`.
 
-### Automatic hosted-raffle connection — implemented locally
+### Automatic hosted-raffle connection — production verified
 
 - A successful Discord post now calls the bot-side Collab Hub linker after the
   raffle `messageId` is stored. This covers Discord-created raffles, dashboard
@@ -290,12 +296,13 @@ closed; the historical review workflow above is the current follow-up.
   collaboration relationships. Repeated GTD/FCFS rounds—and any relationship
   records outside the current unarchived workspace—explain why those totals are
   intentionally different.
-- Bot tests now cover collaboration project normalization, GTD/FCFS tagging,
-  and safe X-profile extraction. All 5 bot tests and all 43 dashboard tests,
-  both typechecks, both production builds, and `git diff --check` pass. These
-  bot/dashboard changes have not been committed, pushed, or deployed yet.
+- Bot tests cover collaboration project normalization, GTD/FCFS tagging, safe
+  X-profile extraction, and protected auto-cleanup classification. Production
+  smoke raffle #63 proved the Discord publish boundary creates the Hub link;
+  dashboard deletion then removed the raffle, auto-created collaboration, and
+  unused partner without touching manual CRM records.
 
-### Collab debt closure — migration applied, deployment pending
+### Collab debt closure and RH wallets — production verified
 
 - New Discord attachment banners are now persisted before publication in the
   one-to-one `RaffleBannerAsset` table. The bot accepts only Discord attachment
@@ -312,10 +319,22 @@ closed; the historical review workflow above is the current follow-up.
 - The Active summary card is now keyboard-accessible and toggles the complete
   active-status filter. The status selector exposes the same Active pipeline
   option.
-- All 7 bot tests and all 45 dashboard tests pass. DB/bot/dashboard typechecks,
-  Prisma validation, DB/bot builds, the dashboard production build, and
-  `git diff --check` pass. Dashboard/bot deployment and the controlled
-  publish-to-Hub smoke test remain pending.
+- The Robinhood Chain migration
+  `20260713234500_robinhood_wallet_chain` is applied. Teams can select
+  `Robinhood Chain (RH)` on web or Discord raffle creation/editing; members can
+  register the exact chain on web or with `/wallet`, and EVM format validation
+  is shared by both runtimes.
+- All 10 bot tests and all 47 dashboard tests pass. DB/bot/dashboard
+  typechecks, Prisma validation, DB/bot builds, the dashboard production
+  build, and `git diff --check` pass.
+- Commits `61d605b`, `9ae01fb`, `d52e25c`, and `85b82e8` are pushed to
+  `origin/main`. Both additive migrations are applied, the EC2 bot is online
+  with the compiled cleanup/RH code, and production dashboard QA shows RH in
+  both the team raffle builder and member wallet editor.
+- Controlled no-ping smoke raffle #63 stored `ROBINHOOD`, published to Discord,
+  and appeared as `KOS System QA` while the Hub moved from 59 to 60 connected
+  raffles. Dashboard deletion returned the Hub to 59 and production database
+  verification found no raffle, collaboration, or unused partner residue.
 
 Current assumptions:
 
@@ -333,20 +352,23 @@ Current assumptions:
   is retained for future mixed-host history.
 - A raffle banner remains attached-raffle media and is not inferred to be a
   partner logo.
+- Robinhood Chain is treated as an EVM network for address formatting only;
+  KOS does not perform signature or on-chain ownership verification.
 
 Current technical debt:
 
-- The 40 already-expired Discord interaction banners are an irrecoverable
-  historical data gap; the branded fallback remains their permanent
-  presentation. New Discord uploads are durable, so the gap no longer grows.
-- The publish-to-Collab database transaction still needs its controlled
-  production post/publish smoke test after the bot/dashboard release.
+- No actionable release debt remains from this hardening slice. The 40
+  already-expired Discord interaction banners are an irrecoverable historical
+  data limitation; their branded fallback is permanent and new uploads are
+  durable.
+- Historical partner grouping is still heuristic. The existing deterministic
+  rules and tenant boundaries are tested, but a manual partner merge/split
+  review surface would make exceptional identity changes self-service.
 
 Recommended next task:
 
-- Deploy the dashboard and bot together, verify a controlled no-ping raffle
-  automatically appears in Collab Hub, then delete the smoke-test raffle and
-  confirm the source-link cleanup completes.
+- Add a tenant-scoped partner merge/split review workflow with a dry-run impact
+  preview, source-raffle reassignment, audit entries, and undo-safe validation.
 
 - Git worktree was clean before documentation changes.
 - Prisma schema validates with Prisma 5.22.0.

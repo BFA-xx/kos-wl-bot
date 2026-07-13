@@ -128,7 +128,10 @@ Task verification behavior:
   Reward redemptions spend points through negative ledger rows and refunds use
   positive refund rows.
 
-Wallet validation is format-only for Ethereum/Base, Solana, and Bitcoin.
+Wallet validation is format-only for Ethereum/Base/Robinhood Chain, Solana,
+and Bitcoin. Robinhood Chain (`ROBINHOOD`, shown as `Robinhood Chain (RH)`) is
+an EVM chain and therefore uses the same normalized `0x` address rules as
+Ethereum and Base.
 Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 `WALLET_ENCRYPTION_KEY`. Bot and dashboard must share the same key.
 
@@ -141,6 +144,11 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   raffle post, winners, and proof. The bot `/config channels` command exposes
   the same defaults, and Discord/web raffle creation should use them as
   prefilled defaults.
+- Wallet-chain additions are shared product changes: update the Prisma
+  `WalletChain` enum with an additive migration, bot `ALL_CHAINS` validation
+  and labels, dashboard validation/registration, and raffle create/edit API
+  allowlists together. A team-selected chain gates that exact reusable member
+  wallet on both Discord and web.
 - Member profile IA is split deliberately:
   - `/me/raffles` is the raffle-entry panel with live raffle cards,
     `EntryPanel` checklists, and focused `/me/raffles?raffle=N` task/entry
