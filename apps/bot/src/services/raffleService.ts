@@ -21,7 +21,10 @@ import { audit } from "./auditService.js";
 import { ensureGuild } from "./userService.js";
 import { logger } from "../logger.js";
 import type { EntryRequirements } from "../types.js";
-import { ensureCollaborationForRaffle } from "./collaborationService.js";
+import {
+  cleanupCollaborationAfterRaffleDelete,
+  ensureCollaborationForRaffle,
+} from "./collaborationService.js";
 import { persistDiscordRaffleBanner } from "./raffleBannerService.js";
 
 export interface CreateRaffleInput {
@@ -313,6 +316,10 @@ export async function deleteRaffle(
     where: { raffleId },
     select: { pdfPath: true, csvPath: true, cardPath: true },
   });
+  const collaborationLink = await prisma.collaborationRaffle.findUnique({
+    where: { raffleId },
+    select: { collaborationId: true },
+  });
 
   // Best-effort cleanup of the live message.
   if (client && raffle.channelId && raffle.messageId) {
@@ -334,6 +341,12 @@ export async function deleteRaffle(
     actorId,
   });
   await prisma.raffle.delete({ where: { id: raffleId } });
+  if (collaborationLink) {
+    await cleanupCollaborationAfterRaffleDelete(
+      collaborationLink.collaborationId,
+      raffleId,
+    );
+  }
 
   const proofPaths = [proof?.pdfPath, proof?.csvPath, proof?.cardPath].filter(
     (value): value is string => Boolean(value),

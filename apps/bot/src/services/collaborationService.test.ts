@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   cleanProjectName,
+  isAutoManagedCollaboration,
   normalizedProjectName,
   projectKey,
   raffleVariant,
@@ -28,4 +29,17 @@ test("accepts project X profiles but rejects unrelated and unsafe URLs", () => {
   assert.equal(xProfileUrl("https://x.com/intent/follow"), null);
   assert.equal(xProfileUrl("https://example.com/KUONnft"), null);
   assert.equal(xProfileUrl("javascript:alert(1)"), null);
+});
+
+test("only untouched auto-linked campaigns qualify for deletion cleanup", () => {
+  assert.equal(isAutoManagedCollaboration(["RAFFLE_AUTO_LINKED"]), true);
+  assert.equal(
+    isAutoManagedCollaboration(["RAFFLE_AUTO_LINKED", "AUTOMATION_STATUS"]),
+    true,
+  );
+  assert.equal(
+    isAutoManagedCollaboration(["RAFFLE_AUTO_LINKED", "COLLABORATION_UPDATED"]),
+    false,
+  );
+  assert.equal(isAutoManagedCollaboration([]), false);
 });

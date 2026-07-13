@@ -32,6 +32,10 @@ const TAG_COLORS = {
   FCFS: "#3B82F6",
   WL: "#10B981",
 } as const;
+const AUTO_MANAGED_ACTIONS = new Set([
+  "RAFFLE_AUTO_LINKED",
+  "AUTOMATION_STATUS",
+]);
 const RESERVED_X_PATHS = new Set([
   "home",
   "i",
@@ -74,6 +78,13 @@ export function raffleVariant(projectName: string, title: string) {
   if (/\bfcfs\b/.test(value)) return "FCFS" as const;
   if (/\bgtds?\b/.test(value)) return "GTD" as const;
   return "WL" as const;
+}
+
+export function isAutoManagedCollaboration(actions: string[]): boolean {
+  return (
+    actions.includes("RAFFLE_AUTO_LINKED") &&
+    actions.every((action) => AUTO_MANAGED_ACTIONS.has(action))
+  );
 }
 
 function httpUrl(value: string | null): string | null {
@@ -344,6 +355,87 @@ export async function syncCollaborationForRaffle(
   const collaborationId =
     existing?.collaborationId ?? (await ensureCollaborationForRaffle(raffleId));
   if (collaborationId) await syncCollaboration(collaborationId);
+}
+
+/**
+ * Reconcile an automatically-created Hub campaign after its source raffle is
+ * deleted. User-edited/imported CRM records are deliberately retained.
+ */
+export async function cleanupCollaborationAfterRaffleDelete(
+  collaborationId: string,
+  raffleId: number,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const collaboration = await tx.collaboration.findUnique({
+      where: { id: collaborationId },
+      select: {
+        id: true,
+        partnerId: true,
+        requirements: true,
+        activities: { select: { action: true } },
+        raffles: {
+          select: {
+            raffle: {
+              select: { spots: true, startAt: true, endAt: true },
+            },
+          },
+        },
+      },
+    });
+    if (
+      !collaboration ||
+      !isAutoManagedCollaboration(
+        collaboration.activities.map((activity) => activity.action),
+      )
+    ) {
+      return;
+    }
+
+    if (collaboration.raffles.length === 0) {
+      await tx.collaboration.delete({ where: { id: collaboration.id } });
+      const partner = await tx.collaborationPartner.findUnique({
+        where: { id: collaboration.partnerId },
+        select: {
+          _count: { select: { collaborations: true, contacts: true } },
+        },
+      });
+      if (
+        partner &&
+        partner._count.collaborations === 0 &&
+        partner._count.contacts === 0
+      ) {
+        await tx.collaborationPartner.delete({
+          where: { id: collaboration.partnerId },
+        });
+      }
+      return;
+    }
+
+    const starts = collaboration.raffles.map((link) => link.raffle.startAt);
+    const ends = collaboration.raffles.map((link) => link.raffle.endAt);
+    const requirements =
+      collaboration.requirements
+        ?.split("\n")
+        .filter(
+          (line) => !line.startsWith(`Auto-linked raffle #${raffleId} `),
+        )
+        .join("\n") || null;
+    await tx.collaboration.update({
+      where: { id: collaboration.id },
+      data: {
+        whitelistAllocation: collaboration.raffles.reduce(
+          (total, link) => total + Math.max(0, link.raffle.spots),
+          0,
+        ),
+        hostAt: new Date(Math.min(...starts.map((date) => date.getTime()))),
+        hostingDeadline: new Date(
+          Math.max(...ends.map((date) => date.getTime())),
+        ),
+        requirements,
+        lastActivityAt: new Date(),
+      },
+    });
+  });
 }
 
 async function syncCollaboration(collaborationId: string): Promise<void> {
