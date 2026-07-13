@@ -178,12 +178,13 @@ Production release evidence:
   Handles shared across more projects are treated as community-wide signals,
   not partner identity.
 
-### Current technical debt
+### Current historical limitations
 
 - Historical grouping is deterministic but heuristic. A partner that changed
-  both its project name and X identity will remain split; two truly distinct
-  names that share one X identity could require a manual split. There is not
-  yet a partner merge/split review tool.
+  both its project name and X identity can remain split; two truly distinct
+  names that share one X identity can require a manual split. The recommended
+  partner merge/split workflow is a new operator feature, not release debt in
+  the current import/linking engine.
 - Forty historical raffle banners were stored as Discord interaction
   `ephemeral-attachments` URLs and have expired. Their original bytes cannot be
   recovered from those URLs or the published Discord embeds. The UI shows a
@@ -366,9 +367,6 @@ Current technical debt:
   already-expired Discord interaction banners are an irrecoverable historical
   data limitation; their branded fallback is permanent and new uploads are
   durable.
-- Historical partner grouping is still heuristic. The existing deterministic
-  rules and tenant boundaries are tested, but a manual partner merge/split
-  review surface would make exceptional identity changes self-service.
 
 Recommended next task:
 
