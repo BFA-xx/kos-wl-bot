@@ -83,7 +83,7 @@ export class Scheduler {
         await processCollaborationAutomations().catch((err) =>
           logger.warn({ err }, "Collab Hub automation sweep failed"),
         );
-        await backfillProofArtifacts().catch((err) =>
+        await backfillProofArtifacts(this.client).catch((err) =>
           logger.warn({ err }, "proof artifact backfill failed"),
         );
       }

@@ -88,7 +88,9 @@ availability described below.
 - Notes now use a sanitized visual rich-text editor. Wallet Collection accepts
   CSV/TXT reconciliation against registered member wallets with row feedback.
 - Proof PDF/CSV/PNG packages now have encrypted database copies for authorized
-  dashboard downloads, plus bounded legacy EC2 artifact backfill.
+  dashboard downloads, plus bounded legacy EC2 artifact backfill. If an older
+  row points at a path from another host, the bot regenerates the package from
+  raffle data without sending another Discord proof message.
 - Active collaboration automation uses a durable keyset cursor and reminder
   batches continue under a time budget instead of silently stopping at a fixed
   first page.

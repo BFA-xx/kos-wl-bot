@@ -289,7 +289,8 @@ reads stream through the collaboration attachment route. Generated proof
 PDF/CSV/PNG buffers are base64 encoded, AES-256-GCM encrypted with the shared
 wallet key, and copied into nullable `Proof` byte columns. Bot-local paths
 remain for cleanup; authorized Collab Hub routes serve the portable encrypted
-copies, and a bounded bot backfill covers older local artifacts.
+copies. A bounded bot backfill covers older artifacts and regenerates them from
+raffle/winner data without reposting when a legacy absolute path is missing.
 
 The bot scheduler sweeps active collaborations once per minute. A durable
 `SystemStatus` keyset cursor continues active-record batches across ticks, and

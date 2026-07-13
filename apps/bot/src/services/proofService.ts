@@ -27,6 +27,7 @@ export async function generateAndDeliverProof(
   client: Client,
   raffleId: number,
   messageLink: string | null,
+  options: { deliver?: boolean } = {},
 ): Promise<void> {
   const raffle = await getRaffle(raffleId);
   if (!raffle) return;
@@ -132,7 +133,7 @@ export async function generateAndDeliverProof(
   // 4. Deliver to proof channel.
   const channelId =
     raffle.proofChannelId ?? raffle.announceChannelId ?? raffle.channelId;
-  if (channelId) {
+  if (options.deliver !== false && channelId) {
     const channel = await fetchTextChannel(client, channelId);
     if (channel) {
       const embed = buildProofEmbed({
@@ -173,9 +174,16 @@ export async function generateAndDeliverProof(
     guildId: raffle.guildId,
     raffleId,
     category: LogCategory.SYSTEM,
-    action: "PROOF_GENERATED",
-    message: `Generated proof package for raffle #${raffleId}`,
-    metadata: { winners: winnerRows.length },
+    action:
+      options.deliver === false ? "PROOF_ARTIFACTS_REBUILT" : "PROOF_GENERATED",
+    message:
+      options.deliver === false
+        ? `Rebuilt portable proof artifacts for raffle #${raffleId}`
+        : `Generated proof package for raffle #${raffleId}`,
+    metadata: {
+      winners: winnerRows.length,
+      delivered: options.deliver !== false,
+    },
   });
 }
 
@@ -184,8 +192,11 @@ export async function generateAndDeliverProof(
  * pre-Phase-4 proof packages downloadable from Vercel without exposing the bot
  * host or requiring another shared storage credential.
  */
-export async function backfillProofArtifacts(limit = 10): Promise<number> {
-  const retryBefore = new Date(Date.now() - 24 * 60 * 60 * 1000);
+export async function backfillProofArtifacts(
+  client: Client,
+  limit = 10,
+): Promise<number> {
+  const retryBefore = new Date(Date.now() - 5 * 60 * 1000);
   const proofs = await prisma.proof.findMany({
     where: {
       artifactsStoredAt: null,
@@ -200,6 +211,7 @@ export async function backfillProofArtifacts(limit = 10): Promise<number> {
     select: {
       id: true,
       raffleId: true,
+      messageLink: true,
       pdfPath: true,
       csvPath: true,
       cardPath: true,
@@ -227,17 +239,31 @@ export async function backfillProofArtifacts(limit = 10): Promise<number> {
         },
       });
       stored += 1;
-    } catch (err) {
-      await prisma.proof
-        .update({
-          where: { id: proof.id },
-          data: { artifactSyncAttemptedAt: attemptedAt },
-        })
-        .catch(() => undefined);
-      logger.warn(
-        { err, raffleId: proof.raffleId },
-        "legacy proof artifact backfill failed",
-      );
+    } catch (readError) {
+      try {
+        await generateAndDeliverProof(
+          client,
+          proof.raffleId,
+          proof.messageLink,
+          { deliver: false },
+        );
+        stored += 1;
+        logger.info(
+          { raffleId: proof.raffleId },
+          "regenerated missing legacy proof artifacts",
+        );
+      } catch (rebuildError) {
+        await prisma.proof
+          .update({
+            where: { id: proof.id },
+            data: { artifactSyncAttemptedAt: attemptedAt },
+          })
+          .catch(() => undefined);
+        logger.warn(
+          { readError, rebuildError, raffleId: proof.raffleId },
+          "legacy proof artifact backfill and regeneration failed",
+        );
+      }
     }
   }
   return stored;

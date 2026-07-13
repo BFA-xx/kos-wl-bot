@@ -220,7 +220,9 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   health page considers it online for three minutes.
 - Proof files live on the bot host and are delivered to Discord. Encrypted
   database copies make them portable to the authorized dashboard; the bot
-  backfills existing local artifacts in bounded batches.
+  backfills existing local artifacts in bounded batches and regenerates them
+  from raffle data without Discord delivery when a legacy stored path is no
+  longer valid on EC2.
 - Dashboard Vitest covers public raffle policy, duplication, tenant isolation,
   community membership, X branding, and Discord OAuth concurrency/rate-limit
   handling. Authenticated Playwright coverage includes desktop/mobile
