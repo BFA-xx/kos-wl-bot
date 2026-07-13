@@ -50,6 +50,10 @@
 - Collaboration wallet rows track workflow state only. Plaintext wallet
   addresses may exist transiently inside a `collab:export` response but must
   not be copied into collaboration models, logs, activities, or client JSON.
+- Historical Collab Hub imports must be limited to the organization's connected
+  guilds and eligible unlinked ended raffles. Preserve the source raffle link,
+  exclude cancelled/empty/test records, and never turn an import into a copy of
+  participant, winner, proof, or wallet-address data.
 
 ## Delivery
 

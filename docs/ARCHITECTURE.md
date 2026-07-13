@@ -268,6 +268,16 @@ Collab Hub passes `collaborationId` through the existing dashboard raffle
 builder, writes the normal DRAFT raffle, and attaches it without duplicating
 entry/draw data.
 
+`POST /api/:org/collaborations/import-history` provides an idempotent bootstrap
+for existing tenants. It only reads unlinked ENDED raffles with at least one
+entry from the organization's connected guilds, excludes test records, and
+groups repeat rounds by normalized project name or a narrowly shared X task
+identity. GTD and FCFS variants attach to one completed collaboration; older
+unlabeled rounds paired with explicit FCFS are inferred as GTD. The importer
+creates partner/CRM workflow rows and unique `CollaborationRaffle` links while
+leaving participant, winner, proof, and encrypted wallet sources in their
+existing tables.
+
 `CollaborationWallet` stores only per-user workflow state (`WAITING`,
 `COLLECTED`, `SUBMITTED`, or `REJECTED`) plus a winner reference and detected
 chain. It never copies wallet addresses. Permission-checked CSV/XLSX/TXT
@@ -305,6 +315,12 @@ Collab Hub permissions are `collab:view`, `collab:create`, `collab:edit`,
 permission strings; the Phase 4 migration grants expected access to existing
 Admin, Moderator, Collab Manager, and Viewer system roles without changing
 custom roles.
+
+The same collaboration records have breakpoint-specific projections. Desktop
+uses the draggable horizontal board and month grid; mobile uses status-grouped
+cards and an agenda so neither requires a forced wide canvas. The mobile filter
+bar participates in normal document flow, and its advanced controls expand on
+demand.
 
 ## Deployment
 

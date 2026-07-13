@@ -32,7 +32,7 @@ Campaigns are still planned and not implemented.
 
 The actual repository is `/Users/adebayodaniel/KOS RAF`. The remote is
 `BFA-xx/kos-wl-bot`; the latest production verification was performed on
-`main` at `609bbd4`.
+`main` at `7030fd2`.
 
 ## Runtime and repository map
 
@@ -240,6 +240,19 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   `guildId` belongs to the organization's connected guilds.
 - Collab Hub wallet exports require `collab:export`. Never persist or return a
   plaintext wallet address from general collaboration/detail APIs.
+- Collab Hub history bootstrap is tenant-scoped and source-linking only. It
+  imports eligible ended raffles with entries, excludes cancelled/empty/test
+  records, groups repeated partner rounds by normalized project name or a
+  narrowly shared X task identity, and attaches the original raffles. It must
+  never copy participants, winners, proofs, or wallet addresses into CRM data.
+- The historical pairing heuristic treats an unlabeled same-project round as
+  GTD when it is paired with an explicit FCFS round. A shared X handle may only
+  bridge two normalized project-name variants so a community account cannot
+  collapse unrelated partners.
+- Collab Hub mobile views are intentionally distinct: the board is a stacked
+  status feed, the spreadsheet stays horizontally scrollable, and the calendar
+  is an agenda. The filter bar is not sticky below the desktop breakpoint, and
+  the workspace switcher dismisses on scroll, resize, or Escape.
 - Collaboration file downloads require `collab:view`; uploads/deletes require
   `collab:edit`. Store files as private Blob objects and never return their raw
   storage URL. Wallet CSV proof artifacts additionally require `collab:export`.

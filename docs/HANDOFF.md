@@ -3,7 +3,7 @@
 Last updated: 2026-07-13
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `609bbd4`
+Audited application commit: `7030fd2`
 
 ## Current state
 
@@ -36,6 +36,11 @@ Phase 3 is implemented through S2.5:
   Production migration `20260713100000_collab_hub` was applied on 2026-07-13,
   both Vercel dashboard projects report a successful deployment, and the EC2
   bot is healthy in two guilds.
+- Collab Hub is populated from existing KOS raffle history: 50 eligible ended
+  raffles are linked into 34 completed partner collaborations. Fourteen are
+  multi-raffle groups, with same-partner GTD/FCFS rounds combined. Its
+  responsive workspace polish and scroll-dismiss workspace switcher are
+  deployed on the dashboard.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -95,7 +100,7 @@ availability described below.
   batches continue under a time budget instead of silently stopping at a fixed
   first page.
 - Added focused tenant-isolation, workflow, wallet-import, and rich-text tests.
-  Dashboard suite is 33 tests across 13 files; bot presentation suite remains
+  Dashboard suite is 39 tests across 14 files; bot presentation suite remains
   2 tests.
 - Prisma validates; dashboard and bot typechecks pass; DB, bot, and Next.js
   production builds pass; `git diff --check` passes.
@@ -115,7 +120,53 @@ Production release evidence:
    responsive breakpoint, found no horizontal overflow after layout settled,
    and recorded zero browser console errors.
 
-The previously listed Phase 4 implementation debt is closed in this release.
+### Collab Hub history and mobile hardening — production verified
+
+- Removed the `Phase 4 · Relationship operations` eyebrow and the `1/2/3`
+  labels from Board, Spreadsheet, and Calendar. View controls now expose their
+  selected state accessibly and render visibly different projections even on
+  small screens.
+- The filter bar is only sticky on desktop. Mobile uses an on-demand two-column
+  filter panel, equal-width view controls, a stacked status board, and a
+  calendar agenda. Production QA at a narrow viewport measured no horizontal
+  overflow and `position: relative` for the filter bar.
+- The organization workspace switcher now dismisses on any captured scroll,
+  resize, or Escape. Production QA confirmed a scroll closes the switcher while
+  leaving the mobile navigation drawer open.
+- Added the permission-checked, tenant-scoped
+  `POST /api/:org/collaborations/import-history` bootstrap. A production dry
+  run found 50 eligible raffles and 34 partner groups; the live import created
+  34 partners, 34 completed collaborations, 50 source-raffle links, 34 import
+  activities, and 376 address-free wallet workflow rows.
+- Fourteen groups contain repeated raffle rounds. Verified pairs include
+  VOLTOADS, PIXELATOR, GomeJpeg, SESAME, Mochimons, NUTSY, and others; each
+  pair/group resolves to one collaboration. Cancelled raffles #59/#60,
+  zero-entry raffles, and test records were not linked.
+- Application commits `cbb12c3`, `432d2cb`, and `7030fd2` are on `origin/main`.
+  Both Vercel dashboard projects report successful deployments for the audited
+  application commit.
+- Dashboard validation passes: 39 tests across 14 files, TypeScript, the
+  production Next.js build, and `git diff --check`.
+
+### Current assumptions
+
+- An ended raffle with at least one entry represents useful collaboration
+  history; cancelled, empty, and explicitly named test raffles do not.
+- An older unlabeled raffle paired with an explicit same-project FCFS round is
+  the GTD half of that relationship.
+- A shared X task identity may bridge at most two normalized project names.
+  Handles shared across more projects are treated as community-wide signals,
+  not partner identity.
+
+### Current technical debt
+
+- Historical grouping is deterministic but heuristic. A partner that changed
+  both its project name and X identity will remain split; two truly distinct
+  names that share one X identity could require a manual split. There is not
+  yet a partner merge/split review tool.
+
+The previously listed Phase 4 release-blocking implementation debt remains
+closed; the historical review workflow above is the current follow-up.
 
 - Git worktree was clean before documentation changes.
 - Prisma schema validates with Prisma 5.22.0.
@@ -227,17 +278,19 @@ precision points:
 
 ## Recommended next task
 
-Run a controlled Phase 4 operational acceptance pass with one real partner
-record, then automate that path:
+Add a lightweight historical-partner review and merge/split workflow, then run
+the controlled Phase 4 operational acceptance pass:
 
-1. create a collaboration, assign a teammate, add a sanitized note and private
+1. review the 34 imported partners, merge genuine brand/name aliases, split any
+   false social match, and preserve all unique source-raffle links;
+2. create a collaboration, assign a teammate, add a sanitized note and private
    attachment, attach/create a raffle, and exercise the reminder workflow;
-2. complete the raffle, reconcile a registered member wallet, export the
+3. complete the raffle, reconcile a registered member wallet, export the
    submission file, and download all three portable proof artifacts;
-3. convert the acceptance path into authenticated browser/API tests covering
+4. convert the acceptance path into authenticated browser/API tests covering
    tenant isolation, private file authorization, wallet conflicts, and status
    automation;
-4. after acceptance, start the full Campaigns layer while keeping points,
+5. after acceptance, start the full Campaigns layer while keeping points,
    rewards, raffles, and Discord/web participation on the shared ledgers.
 
 ## Member activity and private proof hardening — committed/deployed

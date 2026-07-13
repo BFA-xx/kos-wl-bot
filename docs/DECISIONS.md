@@ -401,3 +401,18 @@ import, and never copy the address into a collaboration model or audit record.
 **Why:** Teams need a fast reconciliation workflow, but organization staff must
 not silently replace member-owned payout identities or create a second wallet
 source of truth.
+
+## D039 — Historical raffle bootstrap links and groups source records
+
+**Status:** Accepted
+**Decision:** Bootstrap Collab Hub from an organization's unlinked ENDED
+raffles that have entries. Exclude cancelled, empty, and test records; group
+repeat rounds by normalized project name or a narrowly shared X task identity;
+attach every original raffle to one completed collaboration. Infer an unlabeled
+same-project round as GTD only when it is paired with explicit FCFS. Do not copy
+participants, winners, proofs, or wallet addresses.
+**Why:** Existing raffle history already contains the useful partner, social,
+allocation, winner, and date signals. Linking preserves those source tables and
+tenant boundaries while giving teams a useful CRM immediately; the narrow
+social heuristic avoids merging unrelated raffles that mention the community's
+own X account.
