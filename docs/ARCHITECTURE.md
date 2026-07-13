@@ -245,6 +245,66 @@ OAuth tokens and wallet addresses use AES-256-GCM with
 `WALLET_ENCRYPTION_KEY`. If the key is absent, current helpers permit plaintext
 storage for development. Bot and dashboard must share the same key.
 
+## Phase 4 Collab Hub
+
+Collab Hub is an organization-native whitelist collaboration CRM at
+`/:org/collabs`. It has three operational projections over the same records:
+a drag-and-drop pipeline board, a sortable/filterable spreadsheet, and a
+deadline/reminder calendar. The landing workspace also returns global summary
+metrics, recent activity/notes, deadlines, saved filters, partner performance,
+team performance, and monthly activity.
+
+The tenant root is `Collaboration.organizationId`. Durable relationship data
+belongs to `CollaborationPartner`; each pipeline record snapshots its working
+project name, assignment, allocation, requirements, priority, dates, and
+status. Contacts belong to a partner and can be scoped to a collaboration.
+Notes, comments, files, activities, reminders, tags, and saved filters are
+organization-private collaboration data.
+
+`CollaborationRaffle` attaches one existing raffle to at most one
+collaboration. The dashboard validates both the collaboration's
+`organizationId` and the raffle's connected `guildId`. Creating a raffle from
+Collab Hub passes `collaborationId` through the existing dashboard raffle
+builder, writes the normal DRAFT raffle, and attaches it without duplicating
+entry/draw data.
+
+`CollaborationWallet` stores only per-user workflow state (`WAITING`,
+`COLLECTED`, `SUBMITTED`, or `REJECTED`) plus a winner reference and detected
+chain. It never copies wallet addresses. Permission-checked CSV/XLSX/TXT
+exports resolve the existing encrypted winner wallet or reusable wallet
+profile, decrypt it in the server response, then mark the exported rows and
+collaboration submitted.
+
+Manual wallet-list import accepts CSV/TXT data but does not create a second
+wallet registry. Each row must identify an existing KOS user and exactly match
+that user's registered encrypted `WalletProfile` for the selected chain.
+Accepted rows only create/update `CollaborationWallet` workflow state;
+conflicts are rejected with row-level feedback and addresses are excluded from
+activity/audit metadata.
+
+Collaboration notes use sanitized rich HTML with an allowlisted visual editor.
+Attachments upload directly to private Vercel Blob objects with short-lived,
+path-restricted tokens. The detail API omits raw Blob URLs and authorized file
+reads stream through the collaboration attachment route. Generated proof
+PDF/CSV/PNG buffers are base64 encoded, AES-256-GCM encrypted with the shared
+wallet key, and copied into nullable `Proof` byte columns. Bot-local paths
+remain for cleanup; authorized Collab Hub routes serve the portable encrypted
+copies, and a bounded bot backfill covers older local artifacts.
+
+The bot scheduler sweeps active collaborations once per minute. A durable
+`SystemStatus` keyset cursor continues active-record batches across ticks, and
+due reminders drain in bounded batches under a per-sweep time budget. Raffle draws
+and the sweep reconcile winners/wallet profiles, move records to Hosting,
+Collecting wallets, or Ready for submission, and deliver due reminder/inactive
+notifications to the organization owner plus active members with
+`collab:view`. Manual status changes remain available in the dashboard.
+
+Collab Hub permissions are `collab:view`, `collab:create`, `collab:edit`,
+`collab:assign`, `collab:export`, and `collab:archive`. Owners bypass explicit
+permission strings; the Phase 4 migration grants expected access to existing
+Admin, Moderator, Collab Manager, and Viewer system roles without changing
+custom roles.
+
 ## Deployment
 
 - Dashboard: Vercel, rooted at `apps/dashboard`; pushes to `main` trigger
@@ -253,8 +313,9 @@ storage for development. Bot and dashboard must share the same key.
   DB/bot, registers slash commands, restarts PM2, and checks localhost health.
 - Database: shared managed PostgreSQL/Neon. Migrations are additive Prisma SQL
   migrations under `packages/db/prisma/migrations`.
-- Proof files: generated on the bot host under `PROOF_OUTPUT_DIR` and posted to
-  Discord. The dashboard does not serve those local paths.
+- Proof files: generated on the bot host under `PROOF_OUTPUT_DIR`, posted to
+  Discord, and copied in encrypted form to PostgreSQL for tenant-authorized
+  dashboard downloads. The dashboard never attempts to read EC2-local paths.
 
 ## Verification posture
 

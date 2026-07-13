@@ -12,6 +12,12 @@ export const PERMISSIONS = {
   RAFFLE_DELETE: "raffle:delete",
   RAFFLE_REROLL: "raffle:reroll",
   RAFFLE_END: "raffle:end",
+  COLLAB_VIEW: "collab:view",
+  COLLAB_CREATE: "collab:create",
+  COLLAB_EDIT: "collab:edit",
+  COLLAB_ASSIGN: "collab:assign",
+  COLLAB_EXPORT: "collab:export",
+  COLLAB_ARCHIVE: "collab:archive",
   PARTICIPANT_VIEW: "participant:view",
   WALLET_VIEW: "wallet:view",
   WALLET_EXPORT: "wallet:export",
@@ -38,6 +44,12 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "raffle:delete": "Delete raffles",
   "raffle:reroll": "Reroll winners",
   "raffle:end": "End raffles",
+  "collab:view": "View collaborations",
+  "collab:create": "Create collaborations",
+  "collab:edit": "Edit collaborations",
+  "collab:assign": "Assign collaborations",
+  "collab:export": "Export collaboration wallets",
+  "collab:archive": "Archive collaborations",
   "participant:view": "View participants",
   "wallet:view": "View wallets",
   "wallet:export": "Export wallets",
@@ -53,41 +65,53 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "org:delete": "Delete organization",
 };
 
-export const PERMISSION_GROUPS: { label: string; permissions: Permission[] }[] = [
-  {
-    label: "Raffles",
-    permissions: [
-      PERMISSIONS.RAFFLE_CREATE,
-      PERMISSIONS.RAFFLE_EDIT,
-      PERMISSIONS.RAFFLE_DELETE,
-      PERMISSIONS.RAFFLE_REROLL,
-      PERMISSIONS.RAFFLE_END,
-    ],
-  },
-  {
-    label: "Data",
-    permissions: [
-      PERMISSIONS.PARTICIPANT_VIEW,
-      PERMISSIONS.WALLET_VIEW,
-      PERMISSIONS.WALLET_EXPORT,
-      PERMISSIONS.ANALYTICS_VIEW,
-      PERMISSIONS.REPORT_VIEW,
-      PERMISSIONS.REPORT_EXPORT,
-    ],
-  },
-  {
-    label: "Organization",
-    permissions: [
-      PERMISSIONS.MEMBER_MANAGE,
-      PERMISSIONS.BRANDING_EDIT,
-      PERMISSIONS.SETTINGS_EDIT,
-      PERMISSIONS.BILLING_MANAGE,
-      PERMISSIONS.GUILD_CONNECT,
-      PERMISSIONS.ORG_TRANSFER,
-      PERMISSIONS.ORG_DELETE,
-    ],
-  },
-];
+export const PERMISSION_GROUPS: { label: string; permissions: Permission[] }[] =
+  [
+    {
+      label: "Collab Hub",
+      permissions: [
+        PERMISSIONS.COLLAB_VIEW,
+        PERMISSIONS.COLLAB_CREATE,
+        PERMISSIONS.COLLAB_EDIT,
+        PERMISSIONS.COLLAB_ASSIGN,
+        PERMISSIONS.COLLAB_EXPORT,
+        PERMISSIONS.COLLAB_ARCHIVE,
+      ],
+    },
+    {
+      label: "Raffles",
+      permissions: [
+        PERMISSIONS.RAFFLE_CREATE,
+        PERMISSIONS.RAFFLE_EDIT,
+        PERMISSIONS.RAFFLE_DELETE,
+        PERMISSIONS.RAFFLE_REROLL,
+        PERMISSIONS.RAFFLE_END,
+      ],
+    },
+    {
+      label: "Data",
+      permissions: [
+        PERMISSIONS.PARTICIPANT_VIEW,
+        PERMISSIONS.WALLET_VIEW,
+        PERMISSIONS.WALLET_EXPORT,
+        PERMISSIONS.ANALYTICS_VIEW,
+        PERMISSIONS.REPORT_VIEW,
+        PERMISSIONS.REPORT_EXPORT,
+      ],
+    },
+    {
+      label: "Organization",
+      permissions: [
+        PERMISSIONS.MEMBER_MANAGE,
+        PERMISSIONS.BRANDING_EDIT,
+        PERMISSIONS.SETTINGS_EDIT,
+        PERMISSIONS.BILLING_MANAGE,
+        PERMISSIONS.GUILD_CONNECT,
+        PERMISSIONS.ORG_TRANSFER,
+        PERMISSIONS.ORG_DELETE,
+      ],
+    },
+  ];
 
 const P = PERMISSIONS;
 
@@ -112,11 +136,19 @@ export const BUILTIN_ROLES: { name: string; permissions: Permission[] }[] = [
       P.ANALYTICS_VIEW,
       P.REPORT_VIEW,
       P.REPORT_EXPORT,
+      P.COLLAB_VIEW,
+      P.COLLAB_EDIT,
     ],
   },
   {
     name: "Collab Manager",
     permissions: [
+      P.COLLAB_VIEW,
+      P.COLLAB_CREATE,
+      P.COLLAB_EDIT,
+      P.COLLAB_ASSIGN,
+      P.COLLAB_EXPORT,
+      P.COLLAB_ARCHIVE,
       P.RAFFLE_CREATE,
       P.RAFFLE_EDIT,
       P.PARTICIPANT_VIEW,
@@ -127,6 +159,7 @@ export const BUILTIN_ROLES: { name: string; permissions: Permission[] }[] = [
   {
     name: "Viewer",
     permissions: [
+      P.COLLAB_VIEW,
       P.PARTICIPANT_VIEW,
       P.WALLET_VIEW,
       P.ANALYTICS_VIEW,

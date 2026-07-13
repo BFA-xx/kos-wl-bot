@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { OrgProvider, type OrgClientContext } from "@/lib/org-context";
 import { OrgSidebarContent } from "./OrgSidebar";
 import { ThemeToggle } from "./ThemeToggle";
 import { AnnouncementBanner, type BannerItem } from "./AnnouncementBanner";
 import { IconMenu, IconClose, IconSearch, IconChevron } from "./icons";
+import { NotificationsBell } from "./NotificationsBell";
 
 export function OrgShell({
   ctx,
@@ -22,6 +23,7 @@ export function OrgShell({
   const [collapsed, setCollapsed] = useState(false);
   const [q, setQ] = useState("");
   const router = useRouter();
+  const pathname = usePathname();
 
   function search(e: React.FormEvent) {
     e.preventDefault();
@@ -34,6 +36,12 @@ export function OrgShell({
       home: "dashboard",
       campaign: "campaigns",
       campaigns: "campaigns",
+      collab: "collabs",
+      collabs: "collabs",
+      collaboration: "collabs",
+      collaborations: "collabs",
+      partner: "collabs",
+      partners: "collabs",
       raffle: "raffles",
       raffles: "raffles",
       task: "tasks",
@@ -60,9 +68,11 @@ export function OrgShell({
       router.push(`/${ctx.slug}/${jump}`);
     } else {
       router.push(
-        /^\d+$/.test(n)
-          ? `/${ctx.slug}/raffles/${n}`
-          : `/${ctx.slug}/raffles?q=${encodeURIComponent(t)}`,
+        pathname.startsWith(`/${ctx.slug}/collabs`)
+          ? `/${ctx.slug}/collabs?q=${encodeURIComponent(t)}`
+          : /^\d+$/.test(n)
+            ? `/${ctx.slug}/raffles/${n}`
+            : `/${ctx.slug}/raffles?q=${encodeURIComponent(t)}`,
       );
     }
     setOpen(false);
@@ -141,7 +151,7 @@ export function OrgShell({
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search raffle #, project, or jump…"
+                  placeholder="Search raffle #, project, collab, or jump…"
                   className="kos-input h-10 pl-9"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-md border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-kos-muted sm:block">
@@ -149,6 +159,7 @@ export function OrgShell({
                 </span>
               </form>
               <div className="ml-auto flex items-center gap-2">
+                <NotificationsBell />
                 <Link
                   href="/me"
                   className="kos-btn hidden h-10 px-3 text-xs sm:inline-flex"
@@ -181,7 +192,6 @@ export function OrgShell({
             <AnnouncementBanner items={announcements} />
             <div className="kos-fade">{children}</div>
           </main>
-
         </div>
       </div>
     </OrgProvider>

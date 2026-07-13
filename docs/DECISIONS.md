@@ -323,3 +323,81 @@ requests are idempotent.
 **Why:** Vercel cannot clean EC2-local proof artifacts and should not bypass the
 bot's ownership of Discord side effects. Immediate cancellation closes entry
 and draw races while the bot completes destructive cleanup on its next tick.
+
+## D032 — Collab Hub is organization-native and links existing raffle data
+
+**Status:** Accepted
+**Decision:** Store collaboration/partner/CRM records under `organizationId`.
+Attach an existing raffle through a unique `CollaborationRaffle` link only
+after validating its guild belongs to the same organization. Do not copy
+participants, winners, proofs, or raffle lifecycle state into the CRM.
+**Why:** The organization is the CRM tenant, while raffles already have a
+trusted guild ownership anchor and remain the source of truth for execution.
+Linking avoids drift and preserves multi-tenant isolation.
+
+## D033 — Collaboration wallet tracking does not duplicate addresses
+
+**Status:** Accepted
+**Decision:** `CollaborationWallet` stores a winner/user reference, detected
+chain, and workflow status only. CSV/XLSX/TXT exports resolve and decrypt the
+existing `Winner.wallet` or `WalletProfile` under `collab:export`, then mark
+the submission state.
+**Why:** Copying encrypted or plaintext wallet addresses into a second model
+would create conflicting registries, expand sensitive-data exposure, and make
+member wallet updates invisible to the collaboration workflow.
+
+## D034 — Collab Hub automations run in the existing bot scheduler
+
+**Status:** Accepted
+**Decision:** Reconcile attached raffle outcomes and wallet progress after a
+draw and in a throttled one-minute scheduler sweep. The same sweep creates
+inactive reminders and fans due reminders into existing in-app notifications.
+Manual pipeline movement stays available.
+**Why:** Raffle completion and reliable background reminders require the
+always-on runtime. PostgreSQL remains the dashboard/bot coordination boundary,
+consistent with D004 and D005.
+
+## D035 — Collab Hub has independent granular permissions
+
+**Status:** Accepted
+**Decision:** Use `collab:view`, `collab:create`, `collab:edit`,
+`collab:assign`, `collab:export`, and `collab:archive`. The additive migration
+grants these to the appropriate existing system roles but does not mutate
+custom roles.
+**Why:** Relationship notes, assignments, files, and plaintext export responses
+have different risk profiles. Separate permissions let organizations delegate
+daily collaboration work without granting wallet export or destructive access.
+
+## D036 — Collaboration files are private and application-gated
+
+**Status:** Accepted
+**Decision:** Upload CRM attachments directly to private Vercel Blob objects
+using short-lived path-restricted tokens. Never return raw Blob URLs from the
+collaboration detail API. Stream reads through a route that rechecks
+`collab:view`; require `collab:edit` for upload registration and deletion.
+**Why:** Agreements, wallet lists, and partner documents are organization data,
+not public branding assets. Application-gated streaming preserves the existing
+role system and supports 15 MB files without exceeding Vercel request limits.
+
+## D037 — Proof artifacts have encrypted portable copies
+
+**Status:** Accepted
+**Decision:** Keep EC2-local proof paths for bot cleanup and Discord delivery,
+and also store base64/AES-256-GCM encrypted PDF/CSV/PNG copies in nullable
+`Proof` byte columns. Serve them only through tenant-scoped Collab Hub routes;
+winner CSV downloads require `collab:export`. Backfill legacy local artifacts
+in bounded scheduler batches.
+**Why:** Vercel cannot access bot-local files, while Discord links alone are not
+a durable application storage boundary. Encrypted copies make proof access
+portable without adding a new shared infrastructure secret to EC2.
+
+## D038 — Manual wallet import reconciles member-owned wallet profiles
+
+**Status:** Accepted
+**Decision:** CSV/TXT wallet imports may create collaboration workflow rows only
+when the Discord ID and normalized address match an existing encrypted
+`WalletProfile`. Never create or overwrite a member wallet from an organization
+import, and never copy the address into a collaboration model or audit record.
+**Why:** Teams need a fast reconciliation workflow, but organization staff must
+not silently replace member-owned payout identities or create a second wallet
+source of truth.

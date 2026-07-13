@@ -28,6 +28,13 @@ export const IconTicket = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const IconTag = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M20 13 13 20a2 2 0 0 1-2.8 0L4 13.8V4h9.8L20 10.2a2 2 0 0 1 0 2.8Z" />
+    <circle cx="9" cy="9" r="1.2" />
+  </svg>
+);
+
 export const IconWallet = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1" />

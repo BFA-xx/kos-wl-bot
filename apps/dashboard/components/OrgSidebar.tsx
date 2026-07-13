@@ -20,6 +20,7 @@ import {
   IconCheck,
   IconPlus,
   IconCard,
+  IconTag,
 } from "./icons";
 
 const NAV: {
@@ -30,6 +31,7 @@ const NAV: {
 }[] = [
   { seg: "dashboard", label: "Dashboard", Icon: IconGrid },
   { seg: "campaigns", label: "Campaigns", Icon: IconMegaphone },
+  { seg: "collabs", label: "Collab Hub", Icon: IconTag },
   { seg: "raffles", label: "Raffles", Icon: IconTicket },
   { seg: "tasks", label: "Tasks", Icon: IconCheck },
   { seg: "participants", label: "Participants", Icon: IconUsers },
@@ -61,7 +63,12 @@ export function OrgSidebarContent({
       <OrgSwitcher onNavigate={onNavigate} collapsed={collapsed} />
 
       <nav className="mt-6 flex flex-1 flex-col gap-1 overflow-y-auto">
-        {NAV.map(({ seg, label, Icon, soon }) => {
+        {NAV.filter(
+          (item) =>
+            item.seg !== "collabs" ||
+            org.isOwner ||
+            org.permissions.includes("collab:view"),
+        ).map(({ seg, label, Icon, soon }) => {
           const active = isActive(seg);
           const cls = `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
             active

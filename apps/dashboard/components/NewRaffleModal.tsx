@@ -59,9 +59,19 @@ function toLocal(iso: string): string {
 export function NewRaffleModal({
   onClose,
   duplicate,
+  collaborationId,
+  prefill,
 }: {
   onClose: () => void;
   duplicate?: DuplicateRaffleRequest;
+  collaborationId?: string;
+  prefill?: {
+    projectName?: string;
+    description?: string;
+    bannerUrl?: string;
+    externalUrl?: string;
+    spots?: number;
+  };
 }) {
   const { slug } = useOrg();
   const router = useRouter();
@@ -79,10 +89,10 @@ export function NewRaffleModal({
     };
   } | null>(null);
 
-  const [projectName, setProjectName] = useState("");
+  const [projectName, setProjectName] = useState(prefill?.projectName ?? "");
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [spots, setSpots] = useState(5);
+  const [description, setDescription] = useState(prefill?.description ?? "");
+  const [spots, setSpots] = useState(prefill?.spots ?? 5);
   const [channelId, setChannelId] = useState("");
   const [announceChannelId, setAnnounceChannelId] = useState("");
   const [proofChannelId, setProofChannelId] = useState("");
@@ -98,8 +108,8 @@ export function NewRaffleModal({
   const [requireWallet, setRequireWallet] = useState(false);
   const [useRoleWeights, setUseRoleWeights] = useState(false);
   const [chains, setChains] = useState<string[]>(["ETHEREUM"]);
-  const [bannerUrl, setBannerUrl] = useState("");
-  const [externalUrl, setExternalUrl] = useState("");
+  const [bannerUrl, setBannerUrl] = useState(prefill?.bannerUrl ?? "");
+  const [externalUrl, setExternalUrl] = useState(prefill?.externalUrl ?? "");
   const [roleWeights, setRoleWeights] = useState<
     { guildId: string; roleId: string }[]
   >([]);
@@ -247,6 +257,7 @@ export function NewRaffleModal({
         proofChannelId,
         tasks: tasks.filter((t) => t.label.trim()),
         verificationTaskIds,
+        collaborationId,
       }),
     });
     const body = await res.json().catch(() => ({}));

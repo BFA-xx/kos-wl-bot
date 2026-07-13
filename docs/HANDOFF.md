@@ -1,9 +1,9 @@
 # Engineering Handoff
 
-Last updated: 2026-07-12
+Last updated: 2026-07-13
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `5533012`
+Audited application commit: `872f39d`
 
 ## Current state
 
@@ -32,6 +32,10 @@ Phase 3 is implemented through S2.5:
 - The member Raffles tab now includes read-only ended history, and team raffle
   deletion is implemented through the database-mediated bot cleanup flow.
   Both dashboard projects and the EC2 bot are deployed.
+- Phase 4 Collab Hub is implemented and verified. Production migration
+  `20260713100000_collab_hub` was applied on 2026-07-13; application commit,
+  push, dashboard deployment, bot deployment, and live smoke testing are the
+  remaining release steps.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -51,6 +55,60 @@ verified the points/weighted migration, EC2 bot deployment, and Vercel route
 availability described below.
 
 ## Verified locally
+
+### Phase 4 Collab Hub — migration applied, runtime release pending
+
+- Added organization-scoped collaboration and partner CRM models, pipeline/
+  priority/submission/wallet/reminder enums, contacts, notes, comments,
+  attachments, activities, reminders, custom tags, saved filters, raffle
+  links, and wallet workflow rows.
+- Added `collab:view/create/edit/assign/export/archive` permissions and migrated
+  expected grants for existing system roles without changing custom roles.
+- Added `/:org/collabs` with six headline metrics, search/filter/saved-filter
+  controls, drag-and-drop board, responsive spreadsheet, calendar, bulk
+  actions, CSV export, partner directory, recent activity/deadlines/notes, and
+  collaboration analytics.
+- Added `/:org/collabs/:id` with editable Overview, Timeline, Requirements,
+  Wallet Collection, Raffles & Proof, Contacts, Notes, Files, Activity, and
+  Comments sections. Notes/comments/contacts can be added, edited, and removed;
+  comments support team mentions, notes can be pinned, and supported files are
+  stored in Vercel Blob.
+- Raffles can be attached or created from a collaboration. New raffles still
+  use the existing DRAFT/database-mediated publish path and automatically move
+  their collaboration to Hosting.
+- Winner and reusable wallet data is reconciled without copying addresses.
+  CSV/XLSX/TXT exports require `collab:export`, resolve the encrypted source at
+  response time, and move exported wallet rows/the collaboration to Submitted.
+- The bot performs a throttled collaboration sweep, syncs after raffle draws,
+  advances Hosting → Collecting Wallets → Ready for Submission, creates
+  inactivity reminders, and sends due reminders through existing in-app
+  notifications.
+- Collaboration files now use private Vercel Blob uploads and authorized
+  streaming downloads; raw storage URLs are omitted from detail responses.
+- Notes now use a sanitized visual rich-text editor. Wallet Collection accepts
+  CSV/TXT reconciliation against registered member wallets with row feedback.
+- Proof PDF/CSV/PNG packages now have encrypted database copies for authorized
+  dashboard downloads, plus bounded legacy EC2 artifact backfill.
+- Active collaboration automation uses a durable keyset cursor and reminder
+  batches continue under a time budget instead of silently stopping at a fixed
+  first page.
+- Added focused tenant-isolation, workflow, wallet-import, and rich-text tests.
+  Dashboard suite is 33 tests across 13 files; bot presentation suite remains
+  2 tests.
+- Prisma validates; dashboard and bot typechecks pass; DB, bot, and Next.js
+  production builds pass; `git diff --check` passes.
+
+Release sequence in progress:
+
+1. Production migration applied and `prisma migrate status` reports current.
+2. Commit and push the application/migration/docs changes.
+3. Deploy the EC2 bot with `./scripts/deploy-ec2.sh` and confirm PM2/health.
+4. Confirm both Vercel production deployments and smoke-test a disposable
+   collaboration on desktop and mobile.
+
+The previously listed Phase 4 debt is closed in this release. Authenticated
+desktop/mobile live QA remains part of the deployment step rather than an open
+implementation gap.
 
 - Git worktree was clean before documentation changes.
 - Prisma schema validates with Prisma 5.22.0.

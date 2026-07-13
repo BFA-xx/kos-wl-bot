@@ -44,6 +44,12 @@
 - Preserve database uniqueness constraints and transactional counter updates.
 - Applied migrations are immutable; new schema work gets a new additive
   migration.
+- Collab Hub records are organization-native and must always be queried with
+  `organizationId`. Attaching a raffle also requires the existing connected
+  guild tenant check; a raw raffle ID is never authorization.
+- Collaboration wallet rows track workflow state only. Plaintext wallet
+  addresses may exist transiently inside a `collab:export` response but must
+  not be copied into collaboration models, logs, activities, or client JSON.
 
 ## Delivery
 
@@ -58,7 +64,9 @@
 
 ## Current product boundaries
 
-- Phase 3 S2.5 is the latest implemented stage.
+- Phase 4 Collab Hub migration `20260713100000_collab_hub` is applied in
+  production. The corresponding dashboard/bot revision must be deployed
+  together before the release is considered complete.
 - X engagement verification is link-and-attest, not real API verification.
 - Wallet verification is format-only; no signature or on-chain ownership check.
 - Paid billing and campaigns are not live. Points, rewards, and weighted draws

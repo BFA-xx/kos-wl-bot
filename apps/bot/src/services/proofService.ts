@@ -12,6 +12,11 @@ import { renderProofPdf } from "../proof/pdf.js";
 import { renderWinnerCard } from "../proof/card.js";
 import { winnersCsv } from "../proof/csv.js";
 import { buildProofEmbed } from "../embeds/proofEmbed.js";
+import { encryptSecret } from "../utils/crypto.js";
+
+function encryptedArtifact(data: Buffer): Buffer {
+  return Buffer.from(encryptSecret(data.toString("base64")), "utf8");
+}
 
 /**
  * Generate the full proof package (PDF + CSV + PNG card), persist artifacts to
@@ -98,12 +103,28 @@ export async function generateAndDeliverProof(
   // 3. Record proof row.
   await prisma.proof.upsert({
     where: { raffleId },
-    create: { raffleId, messageLink, pdfPath, csvPath, cardPath },
+    create: {
+      raffleId,
+      messageLink,
+      pdfPath,
+      csvPath,
+      cardPath,
+      pdfData: encryptedArtifact(pdf),
+      csvData: encryptedArtifact(Buffer.from(csv, "utf8")),
+      cardData: encryptedArtifact(card),
+      artifactsStoredAt: new Date(),
+      artifactSyncAttemptedAt: new Date(),
+    },
     update: {
       messageLink: messageLink ?? undefined,
       pdfPath,
       csvPath,
       cardPath,
+      pdfData: encryptedArtifact(pdf),
+      csvData: encryptedArtifact(Buffer.from(csv, "utf8")),
+      cardData: encryptedArtifact(card),
+      artifactsStoredAt: new Date(),
+      artifactSyncAttemptedAt: new Date(),
       generatedAt: new Date(),
     },
   });
@@ -156,6 +177,70 @@ export async function generateAndDeliverProof(
     message: `Generated proof package for raffle #${raffleId}`,
     metadata: { winners: winnerRows.length },
   });
+}
+
+/**
+ * Copy legacy EC2 proof files into PostgreSQL in small batches. This makes
+ * pre-Phase-4 proof packages downloadable from Vercel without exposing the bot
+ * host or requiring another shared storage credential.
+ */
+export async function backfillProofArtifacts(limit = 10): Promise<number> {
+  const retryBefore = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const proofs = await prisma.proof.findMany({
+    where: {
+      artifactsStoredAt: null,
+      pdfPath: { not: null },
+      csvPath: { not: null },
+      cardPath: { not: null },
+      OR: [
+        { artifactSyncAttemptedAt: null },
+        { artifactSyncAttemptedAt: { lt: retryBefore } },
+      ],
+    },
+    select: {
+      id: true,
+      raffleId: true,
+      pdfPath: true,
+      csvPath: true,
+      cardPath: true,
+    },
+    orderBy: { generatedAt: "asc" },
+    take: Math.max(1, Math.min(50, limit)),
+  });
+  let stored = 0;
+  for (const proof of proofs) {
+    const attemptedAt = new Date();
+    try {
+      const [pdfData, csvData, cardData] = await Promise.all([
+        fs.readFile(proof.pdfPath!),
+        fs.readFile(proof.csvPath!),
+        fs.readFile(proof.cardPath!),
+      ]);
+      await prisma.proof.update({
+        where: { id: proof.id },
+        data: {
+          pdfData: encryptedArtifact(pdfData),
+          csvData: encryptedArtifact(csvData),
+          cardData: encryptedArtifact(cardData),
+          artifactsStoredAt: attemptedAt,
+          artifactSyncAttemptedAt: attemptedAt,
+        },
+      });
+      stored += 1;
+    } catch (err) {
+      await prisma.proof
+        .update({
+          where: { id: proof.id },
+          data: { artifactSyncAttemptedAt: attemptedAt },
+        })
+        .catch(() => undefined);
+      logger.warn(
+        { err, raffleId: proof.raffleId },
+        "legacy proof artifact backfill failed",
+      );
+    }
+  }
+  return stored;
 }
 
 const logoCache = new Map<string, Buffer | null>();

@@ -6,8 +6,9 @@ agent taking over KOS.
 ## Project snapshot
 
 KOS is a Discord-first whitelist raffle platform evolving into a reusable
-community-engagement platform. The implemented product is Phase 3 S2.5 plus
-the first S3/S4 slices:
+community-engagement platform. The production product is Phase 3 S2.5 plus
+the first S3/S4 slices. Phase 4 Collab Hub is implemented and its additive
+production migration is applied; the application release is in progress:
 
 - Discord raffle creation, entry, scheduling, winner draws, rerolls, wallet
   collection, announcements, and PDF/CSV/PNG proofs.
@@ -22,6 +23,10 @@ the first S3/S4 slices:
 - Rewards store with web and Discord redemption flows.
 - Role-weighted raffles with participant weight snapshots and deterministic
   weighted draws.
+- Organization-scoped Collab Hub CRM with overview analytics, Kanban/table/
+  calendar views, partner directory, contacts, notes/comments, reminders,
+  attachments, linked raffles, wallet submission tracking, exports, and bot
+  automations.
 
 Campaigns are still planned and not implemented.
 
@@ -78,6 +83,19 @@ Platform models are `Organization`, membership/role/invite models,
 and `SystemStatus`. Phase 3 adds `ConnectedAccount`, `TaskDefinition`,
 `TaskCompletion`, `RaffleTask`, `Notification`, `PointsLedger`, `RoleWeight`,
 `Reward`, and `RewardRedemption`.
+
+Phase 4 adds organization-native `Collaboration`, `CollaborationPartner`,
+`CollaborationRaffle`, `CollaborationWallet`, contacts, notes, comments,
+attachments, activities, reminders, tags, and saved filters. A collaboration
+links existing raffle/winner/wallet/proof records rather than copying them.
+Wallet workflow rows store submission state and source references only; wallet
+addresses remain encrypted in `Wallet`/`WalletProfile` and are resolved only
+inside permission-checked exports. Manual wallet-list imports only reconcile
+addresses that already match the member's registered encrypted profile; they
+never overwrite member wallets. CRM attachments are private Vercel Blob
+objects streamed through a tenant-checked API, and raw Blob URLs are omitted
+from collaboration JSON. Proof PDF/CSV/PNG copies are encrypted before storage
+in PostgreSQL and downloaded through organization-authorized artifact routes.
 
 Discord and web entry converge on unique `(raffleId, userId)` participants and
 transactional `entryCount` updates. Gates cover blacklist, guild membership,
@@ -200,7 +218,9 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   X ownership or engagement verification.
 - `SystemStatus["bot-heartbeat"]` is updated about once per minute; the admin
   health page considers it online for three minutes.
-- Proof files live on the bot host and are also delivered to Discord.
+- Proof files live on the bot host and are delivered to Discord. Encrypted
+  database copies make them portable to the authorized dashboard; the bot
+  backfills existing local artifacts in bounded batches.
 - Dashboard Vitest covers public raffle policy, duplication, tenant isolation,
   community membership, X branding, and Discord OAuth concurrency/rate-limit
   handling. Authenticated Playwright coverage includes desktop/mobile
@@ -209,6 +229,17 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Root `pnpm build` quotes workspace filters and builds DB, bot, and dashboard.
 - Older public setup/deployment docs and `.env.example` lag Phase 2/3 and still
   emphasize the legacy internal API.
+- Collab Hub additive migration `20260713100000_collab_hub` was applied before
+  the dashboard/bot release. Preserve that migration-before-runtime ordering
+  for future Collab Hub schema changes.
+- Collab Hub is organization-native. Every read/write must include
+  `organizationId`; attached raffle reads must additionally prove the raffle's
+  `guildId` belongs to the organization's connected guilds.
+- Collab Hub wallet exports require `collab:export`. Never persist or return a
+  plaintext wallet address from general collaboration/detail APIs.
+- Collaboration file downloads require `collab:view`; uploads/deletes require
+  `collab:edit`. Store files as private Blob objects and never return their raw
+  storage URL. Wallet CSV proof artifacts additionally require `collab:export`.
 
 ## Before changing code
 

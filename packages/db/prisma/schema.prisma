@@ -109,11 +109,12 @@ model User {
   memberships OrganizationMember[]
 
   // Phase 3: linked external accounts (X, etc).
-  connectedAccounts ConnectedAccount[]
-  TaskCompletion    TaskCompletion[]
-  pointsLedger      PointsLedger[]
-  rewardRedemptions RewardRedemption[]
-  notifications     Notification[]
+  connectedAccounts    ConnectedAccount[]
+  TaskCompletion       TaskCompletion[]
+  pointsLedger         PointsLedger[]
+  rewardRedemptions    RewardRedemption[]
+  notifications        Notification[]
+  collaborationWallets CollaborationWallet[]
 
   /// Last time the user opened their notification feed (announcement unread
   /// counts are computed against this instead of materializing rows).
@@ -210,13 +211,14 @@ model Raffle {
   endedAt         DateTime?
   drawnAt         DateTime?
 
-  guild         Guild         @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  eligibleRoles RaffleRole[]
-  participants  Participant[]
-  winners       Winner[]
-  proof         Proof?
-  logs          Log[]
-  RaffleTask    RaffleTask[]
+  guild             Guild                @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  eligibleRoles     RaffleRole[]
+  participants      Participant[]
+  winners           Winner[]
+  proof             Proof?
+  logs              Log[]
+  RaffleTask        RaffleTask[]
+  collaborationLink CollaborationRaffle?
 
   @@index([guildId, status])
   @@index([status, endAt])
@@ -295,10 +297,11 @@ model Winner {
   replaced      Boolean  @default(false)
   participantId Int?     @unique
 
-  raffle      Raffle       @relation(fields: [raffleId], references: [id], onDelete: Cascade)
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  participant Participant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
-  wallet      Wallet?
+  raffle              Raffle               @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  participant         Participant?         @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  wallet              Wallet?
+  collaborationWallet CollaborationWallet?
 
   @@index([raffleId])
   @@index([raffleId, userId])
@@ -340,13 +343,18 @@ model Blacklist {
 
 /// Generated proof package for a completed raffle.
 model Proof {
-  id          Int      @id @default(autoincrement())
-  raffleId    Int      @unique
-  messageLink String?
-  pdfPath     String?
-  csvPath     String?
-  cardPath    String?
-  generatedAt DateTime @default(now())
+  id                      Int       @id @default(autoincrement())
+  raffleId                Int       @unique
+  messageLink             String?
+  pdfPath                 String?
+  csvPath                 String?
+  cardPath                String?
+  pdfData                 Bytes?
+  csvData                 Bytes?
+  cardData                Bytes?
+  artifactsStoredAt       DateTime?
+  artifactSyncAttemptedAt DateTime?
+  generatedAt             DateTime  @default(now())
 
   raffle Raffle @relation(fields: [raffleId], references: [id], onDelete: Cascade)
 
@@ -404,6 +412,56 @@ enum AnnouncementLevel {
   CRITICAL
 }
 
+// ---------------------------------------------------------------------------
+// Phase 4 — Collab Hub
+// ---------------------------------------------------------------------------
+
+enum CollaborationStatus {
+  LEAD
+  REACHED_OUT
+  NEGOTIATING
+  CONFIRMED
+  SCHEDULED
+  HOSTING
+  COLLECTING_WALLETS
+  READY_FOR_SUBMISSION
+  SUBMITTED
+  COMPLETED
+  CANCELLED
+}
+
+enum CollaborationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum CollaborationSubmissionStatus {
+  NOT_STARTED
+  COLLECTING
+  READY
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+}
+
+enum CollaborationWalletStatus {
+  WAITING
+  COLLECTED
+  SUBMITTED
+  REJECTED
+}
+
+enum CollaborationReminderType {
+  HOSTING
+  WALLET_SUBMISSION
+  COLLABORATION_DEADLINE
+  FOLLOW_UP
+  INACTIVE
+  CUSTOM
+}
+
 /// A community/tenant. Owns all of its resources (via connected guilds).
 model Organization {
   id          String    @id @default(cuid())
@@ -421,18 +479,22 @@ model Organization {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  owner            User                 @relation("OrgOwner", fields: [ownerId], references: [id])
-  members          OrganizationMember[]
-  roles            OrganizationRole[]
-  invites          OrganizationInvite[]
-  guildConnections GuildConnection[]
-  subscription     Subscription?
-  auditLogs        AuditLog[]
-  TaskDefinition   TaskDefinition[]
-  pointsLedger     PointsLedger[]
-  roleWeights      RoleWeight[]
-  rewards          Reward[]
-  rewardRedemptions RewardRedemption[]
+  owner                     User                       @relation("OrgOwner", fields: [ownerId], references: [id])
+  members                   OrganizationMember[]
+  roles                     OrganizationRole[]
+  invites                   OrganizationInvite[]
+  guildConnections          GuildConnection[]
+  subscription              Subscription?
+  auditLogs                 AuditLog[]
+  TaskDefinition            TaskDefinition[]
+  pointsLedger              PointsLedger[]
+  roleWeights               RoleWeight[]
+  rewards                   Reward[]
+  rewardRedemptions         RewardRedemption[]
+  collaborations            Collaboration[]
+  collaborationPartners     CollaborationPartner[]
+  collaborationTags         CollaborationTag[]
+  collaborationSavedFilters CollaborationSavedFilter[]
 
   @@index([ownerId])
   @@map("organizations")
@@ -547,6 +609,287 @@ model AuditLog {
 
   @@index([organizationId, createdAt])
   @@map("audit_logs")
+}
+
+/// A project/community this organization has collaborated with. Partner data
+/// is durable across individual collaboration records and becomes the
+/// organization-private relationship directory.
+model CollaborationPartner {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  normalizedName String
+  logoUrl        String?
+  websiteUrl     String?
+  discordUrl     String?
+  xUrl           String?
+  chain          String?
+  category       String?
+  privateNotes   String?
+  trustRating    Int?
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  collaborations Collaboration[]
+  contacts       CollaborationContact[]
+
+  @@unique([organizationId, normalizedName])
+  @@index([organizationId, updatedAt])
+  @@map("collaboration_partners")
+}
+
+/// One organization-owned whitelist collaboration. Operational state lives
+/// here while raffle entries, winners, wallets, and proofs remain in their
+/// existing source-of-truth tables and are linked through CollaborationRaffle.
+model Collaboration {
+  id                       String                        @id @default(cuid())
+  organizationId           String
+  partnerId                String
+  projectName              String
+  status                   CollaborationStatus           @default(LEAD)
+  priority                 CollaborationPriority         @default(MEDIUM)
+  submissionStatus         CollaborationSubmissionStatus @default(NOT_STARTED)
+  whitelistAllocation      Int                           @default(0)
+  requirements             String?
+  primaryContactName       String?
+  discordUsername          String?
+  telegram                 String?
+  email                    String?
+  ownerId                  String?
+  assignedToId             String?
+  reviewerId               String?
+  hostAt                   DateTime?
+  hostingDeadline          DateTime?
+  walletSubmissionDeadline DateTime?
+  collaborationDeadline    DateTime?
+  followUpAt               DateTime?
+  noResponseDays           Int                           @default(5)
+  lastActivityAt           DateTime                      @default(now())
+  exportedAt               DateTime?
+  completedAt              DateTime?
+  cancelledAt              DateTime?
+  archivedAt               DateTime?
+  createdById              String
+  createdAt                DateTime                      @default(now())
+  updatedAt                DateTime                      @updatedAt
+
+  organization Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  partner      CollaborationPartner         @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  raffles      CollaborationRaffle[]
+  wallets      CollaborationWallet[]
+  contacts     CollaborationContact[]
+  notes        CollaborationNote[]
+  comments     CollaborationComment[]
+  attachments  CollaborationAttachment[]
+  activities   CollaborationActivity[]
+  reminders    CollaborationReminder[]
+  tags         CollaborationTagAssignment[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, hostAt])
+  @@index([organizationId, walletSubmissionDeadline])
+  @@index([organizationId, updatedAt])
+  @@index([partnerId])
+  @@map("collaborations")
+}
+
+/// Configuration-only link between a collaboration and an existing raffle.
+/// A raffle can belong to at most one collaboration, preventing split wallet
+/// submission state across two CRM records.
+model CollaborationRaffle {
+  id              String   @id @default(cuid())
+  collaborationId String
+  raffleId        Int      @unique
+  attachedById    String
+  createdAt       DateTime @default(now())
+
+  collaboration Collaboration @relation(fields: [collaborationId], references: [id], onDelete: Cascade)
+  raffle        Raffle        @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+
+  @@unique([collaborationId, raffleId])
+  @@index([collaborationId])
+  @@map("collaboration_raffles")
+}
+
+/// Per-member submission state for an attached raffle winner. Wallet address
+/// data is deliberately not copied; exports resolve the existing encrypted
+/// Winner.wallet or WalletProfile at read time.
+model CollaborationWallet {
+  id              String                    @id @default(cuid())
+  collaborationId String
+  userId          String
+  winnerId        Int?                      @unique
+  chain           WalletChain?
+  status          CollaborationWalletStatus @default(WAITING)
+  rejectionReason String?
+  submittedAt     DateTime?
+  updatedById     String?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  collaboration Collaboration @relation(fields: [collaborationId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  winner        Winner?       @relation(fields: [winnerId], references: [id], onDelete: SetNull)
+
+  @@unique([collaborationId, userId])
+  @@index([collaborationId, status])
+  @@index([userId])
+  @@map("collaboration_wallets")
+}
+
+model CollaborationContact {
+  id              String   @id @default(cuid())
+  partnerId       String
+  collaborationId String?
+  name            String
+  role            String?
+  discord         String?
+  telegram        String?
+  xUrl            String?
+  email           String?
+  notes           String?
+  conversation    String?
+  isPrimary       Boolean  @default(false)
+  createdById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  partner       CollaborationPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  collaboration Collaboration?       @relation(fields: [collaborationId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId])
+  @@index([collaborationId])
+  @@map("collaboration_contacts")
+}
+
+model CollaborationNote {
+  id              String   @id @default(cuid())
+  collaborationId String
+  authorId        String
+  body            String
+  pinned          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  collaboration Collaboration @relation(fields: [collaborationId], references: [id], onDelete: Cascade)
+
+  @@index([collaborationId, pinned, createdAt])
+  @@map("collaboration_notes")
+}
+
+model CollaborationComment {
+  id               String   @id @default(cuid())
+  collaborationId  String
+  authorId         String
+  body             String
+  mentionedUserIds String[] @default([])
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  collaboration Collaboration @relation(fields: [collaborationId], references: [id], onDelete: Cascade)
+
+  @@index([collaborationId, createdAt])
+  @@map("collaboration_comments")
+}
+
+model CollaborationAttachment {
+  id              String   @id @default(cuid())
+  collaborationId String
+  name            String
+  url             String   @unique
+  mimeType        String?
+  size            Int?
+  kind            String?
+  uploadedById    String
+  createdAt       DateTime @default(now())
+
+  collaboration Collaboration @relation(fields: [collaborationId], references: [id], onDelete: Cascade)
+
+  @@index([collaborationId, createdAt])
+  @@map("collaboration_attachments")
+}
+
+model CollaborationActivity {
+  id              String   @id @default(cuid())
+  collaborationId String
+  actorId         String?
+  action          String
+  title           String
+  body            String?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  collaboration Collaboration @relation(fields: [collaborationId], references: [id], onDelete: Cascade)
+
+  @@index([collaborationId, createdAt])
+  @@map("collaboration_activities")
+}
+
+model CollaborationReminder {
+  id              String                    @id @default(cuid())
+  collaborationId String
+  type            CollaborationReminderType
+  title           String
+  dueAt           DateTime
+  automatic       Boolean                   @default(false)
+  completedAt     DateTime?
+  notifiedAt      DateTime?
+  createdById     String?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  collaboration Collaboration @relation(fields: [collaborationId], references: [id], onDelete: Cascade)
+
+  @@index([collaborationId, dueAt])
+  @@index([dueAt, notifiedAt])
+  @@map("collaboration_reminders")
+}
+
+model CollaborationTag {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  normalizedName String
+  color          String   @default("#3B82F6")
+  createdAt      DateTime @default(now())
+
+  organization Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignments  CollaborationTagAssignment[]
+
+  @@unique([organizationId, normalizedName])
+  @@index([organizationId, name])
+  @@map("collaboration_tags")
+}
+
+model CollaborationTagAssignment {
+  collaborationId String
+  tagId           String
+
+  collaboration Collaboration    @relation(fields: [collaborationId], references: [id], onDelete: Cascade)
+  tag           CollaborationTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([collaborationId, tagId])
+  @@index([tagId])
+  @@map("collaboration_tag_assignments")
+}
+
+model CollaborationSavedFilter {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  view           String   @default("TABLE")
+  criteria       Json
+  createdById    String
+  shared         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@map("collaboration_saved_filters")
 }
 
 /// Tiny key-value store for service liveness (e.g. the bot heartbeat the

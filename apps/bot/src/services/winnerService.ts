@@ -19,6 +19,7 @@ import { isBlacklisted } from "./blacklistService.js";
 import { audit } from "./auditService.js";
 import { generateAndDeliverProof } from "./proofService.js";
 import { logger } from "../logger.js";
+import { syncCollaborationForRaffle } from "./collaborationService.js";
 
 interface DrawnWinner {
   userId: string;
@@ -142,6 +143,10 @@ export async function closeAndDraw(
   // Proof generation + delivery.
   await generateAndDeliverProof(client, raffleId, messageLink).catch((err) =>
     logger.error({ err, raffleId }, "proof generation failed"),
+  );
+
+  await syncCollaborationForRaffle(raffleId).catch((err) =>
+    logger.warn({ err, raffleId }, "Collab Hub sync failed"),
   );
 }
 

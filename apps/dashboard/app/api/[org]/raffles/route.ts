@@ -108,11 +108,11 @@ export async function POST(
     const announceChannelId =
       "announceChannelId" in b
         ? inScope(b.announceChannelId)
-        : guildDefaults?.defaultAnnounceChannelId ?? null;
+        : (guildDefaults?.defaultAnnounceChannelId ?? null);
     const proofChannelId =
       "proofChannelId" in b
         ? inScope(b.proofChannelId)
-        : guildDefaults?.defaultProofChannelId ?? null;
+        : (guildDefaults?.defaultProofChannelId ?? null);
     const projectName = String(b.projectName ?? "").trim();
     const title = String(b.title ?? "").trim();
     const spots = Number(b.spots);
@@ -164,6 +164,24 @@ export async function POST(
           .filter((x: unknown) => typeof x === "string")
           .slice(0, 20)
       : [];
+    const collaborationId =
+      typeof b.collaborationId === "string" ? b.collaborationId.trim() : "";
+    const collaboration = collaborationId
+      ? await prisma.collaboration.findFirst({
+          where: {
+            id: collaborationId,
+            organizationId: org.id,
+            archivedAt: null,
+          },
+          select: { id: true },
+        })
+      : null;
+    if (collaborationId && !collaboration) {
+      return NextResponse.json(
+        { error: "That collaboration doesn't belong to this organization." },
+        { status: 403 },
+      );
+    }
     const validTasks = taskIds.length
       ? await prisma.taskDefinition.findMany({
           where: { id: { in: taskIds }, organizationId: org.id, active: true },
@@ -212,6 +230,31 @@ export async function POST(
           required: true,
         })),
       });
+    }
+    if (collaboration) {
+      await prisma.$transaction([
+        prisma.collaborationRaffle.create({
+          data: {
+            collaborationId: collaboration.id,
+            raffleId: raffle.id,
+            attachedById: user.id,
+          },
+        }),
+        prisma.collaboration.update({
+          where: { id: collaboration.id },
+          data: { status: "HOSTING", lastActivityAt: new Date() },
+        }),
+        prisma.collaborationActivity.create({
+          data: {
+            collaborationId: collaboration.id,
+            actorId: user.id,
+            action: "RAFFLE_CREATED",
+            title: `Raffle #${raffle.id} created and attached`,
+            body: raffle.projectName,
+            metadata: { raffleId: raffle.id },
+          },
+        }),
+      ]);
     }
     await logAudit(org.id, user.id, "RAFFLE_CREATE", {
       targetType: "raffle",

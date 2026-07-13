@@ -14,6 +14,8 @@ import {
   type RerollMode,
 } from "./winnerService.js";
 import { audit } from "./auditService.js";
+import { processCollaborationAutomations } from "./collaborationService.js";
+import { backfillProofArtifacts } from "./proofService.js";
 
 /**
  * Sweep-based scheduler. A single interval drives all raffle state machines,
@@ -28,6 +30,7 @@ export class Scheduler {
   private transitionTimer?: NodeJS.Timeout;
   private running = false;
   private lastHeartbeat = 0;
+  private lastCollaborationSweep = 0;
 
   constructor(private readonly client: Client) {}
 
@@ -75,6 +78,15 @@ export class Scheduler {
       // requests. This is how the Vercel dashboard drives the bot (they share
       // only the DB — the dashboard can't reach the bot's local API).
       await this.heartbeat();
+      if (Date.now() - this.lastCollaborationSweep >= 60_000) {
+        this.lastCollaborationSweep = Date.now();
+        await processCollaborationAutomations().catch((err) =>
+          logger.warn({ err }, "Collab Hub automation sweep failed"),
+        );
+        await backfillProofArtifacts().catch((err) =>
+          logger.warn({ err }, "proof artifact backfill failed"),
+        );
+      }
       await this.processDeleteRequests();
       await this.publishDashboardRaffles();
       await this.processRerollRequests();
