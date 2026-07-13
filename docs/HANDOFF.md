@@ -3,7 +3,7 @@
 Last updated: 2026-07-13
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `85b82e8`
+Audited application commit: `d922ac0`
 
 ## Current state
 
@@ -335,6 +335,11 @@ closed; the historical review workflow above is the current follow-up.
   and appeared as `KOS System QA` while the Hub moved from 59 to 60 connected
   raffles. Dashboard deletion returned the Hub to 59 and production database
   verification found no raffle, collaboration, or unused partner residue.
+- A production-log audit found repeated entry clicks were correctly handled as
+  duplicates but still caused noisy Prisma P2002 messages. Commit `d922ac0`
+  replaces exception-driven inserts with transactional conflict skipping on
+  both Discord and web. Only the winning insert increments `entryCount`; every
+  raced repeat keeps the existing “already entered” response.
 
 Current assumptions:
 

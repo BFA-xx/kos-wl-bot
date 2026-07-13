@@ -176,7 +176,10 @@ processes those requests.
 ### Entry
 
 Discord and web entry write the same `Participant` table and maintain
-`Raffle.entryCount` transactionally.
+`Raffle.entryCount` transactionally. Both insert with conflict skipping; only
+the transaction that creates the unique `(raffleId, userId)` participant
+increments the count. Concurrent repeats return the existing entered state
+without using a unique-constraint exception as normal control flow.
 
 Both paths enforce blacklist, guild membership, eligible roles, additional
 roles, account/server age, wallet requirements, and verified `RaffleTask`s.

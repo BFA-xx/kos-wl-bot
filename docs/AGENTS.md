@@ -99,7 +99,10 @@ from collaboration JSON. Proof PDF/CSV/PNG copies are encrypted before storage
 in PostgreSQL and downloaded through organization-authorized artifact routes.
 
 Discord and web entry converge on unique `(raffleId, userId)` participants and
-transactional `entryCount` updates. Gates cover blacklist, guild membership,
+transactional `entryCount` updates. Duplicate/concurrent entry attempts use
+`createMany(..., skipDuplicates: true)` inside the transaction and must return
+the existing “already entered” state without emitting a handled Prisma P2002
+as a production error. Gates cover blacklist, guild membership,
 ANY/ALL eligible roles, extra roles, account/server age, wallets, and verified
 raffle tasks. Reactions remain Discord-only. The bot can auto-verify same-guild
 Discord tasks inline; the web uses Discord REST with the bot token. Live

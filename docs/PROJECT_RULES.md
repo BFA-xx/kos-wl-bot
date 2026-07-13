@@ -93,6 +93,9 @@
   hidden entry counts.
 - Public raffle IDs are positive PostgreSQL integers. Only UPCOMING, LIVE, and
   ENDED records may resolve publicly; DRAFT and CANCELLED never do.
+- Participant uniqueness is normal product state, not an error path. Discord
+  and web entry must conflict-skip duplicate `(raffleId, userId)` inserts and
+  increment `Raffle.entryCount` only when a new participant row is created.
 - Raffle duplicate source queries must include both the raffle ID and the
   requesting organization's connected guild IDs. Duplicates remain in their
   source guild unless a future cross-organization flow performs independent
