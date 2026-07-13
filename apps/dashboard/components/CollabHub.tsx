@@ -315,7 +315,7 @@ export function CollabHub() {
         "Status",
         "WL spots",
         "Wallet progress",
-        "Team lead",
+        "Hosted by",
         "Host date",
         "Deadline",
         "Priority",
@@ -1211,7 +1211,7 @@ function Spreadsheet({
                       setVisible(next);
                     }}
                   />
-                  {column === "owner" ? "Team lead" : column}
+                  {column === "owner" ? "Hosted by" : column}
                 </label>
               ))}
             </div>
@@ -1300,7 +1300,7 @@ function Spreadsheet({
                     {...{ sort, direction, onSort }}
                   />
                 ) : null}
-                {visible.has("owner") ? <th>Team lead</th> : null}
+                {visible.has("owner") ? <th>Hosted by</th> : null}
                 {visible.has("host") ? (
                   <Sortable
                     label="Host date"

@@ -42,10 +42,11 @@ export const POST = withAccess(async (_req, { params }) => {
       status: true,
       spots: true,
       entryCount: true,
+      createdAt: true,
       startAt: true,
       endAt: true,
       endedAt: true,
-      bannerUrl: true,
+      createdById: true,
       externalUrl: true,
       requirements: true,
       RaffleTask: {
@@ -64,6 +65,22 @@ export const POST = withAccess(async (_req, { params }) => {
   );
   if (!groups.length) {
     return NextResponse.json({ collaborations: 0, raffles: 0 });
+  }
+
+  const activeTeam = await prisma.organizationMember.findMany({
+    where: { organizationId: org.id, status: "ACTIVE" },
+    select: { userId: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const activeTeamIds = new Set(activeTeam.map((member) => member.userId));
+  const fallbackHostId = activeTeamIds.has(user.id)
+    ? user.id
+    : activeTeam[0]?.userId;
+  if (!fallbackHostId) {
+    return NextResponse.json(
+      { error: "Add an active team member before importing raffle history." },
+      { status: 409 },
+    );
   }
 
   const raffleIds = groups.flatMap((group) => group.raffleIds);
@@ -104,6 +121,9 @@ export const POST = withAccess(async (_req, { params }) => {
 
   const importedIds: string[] = [];
   for (const group of groups) {
+    const hostedById = activeTeamIds.has(group.hostedById)
+      ? group.hostedById
+      : fallbackHostId;
     const collaborationId = await prisma.$transaction(async (tx) => {
       const partnerMatch: Prisma.CollaborationPartnerWhereInput = {
         organizationId: org.id,
@@ -161,6 +181,7 @@ export const POST = withAccess(async (_req, { params }) => {
               hostAt: earlier(existing.hostAt, group.hostAt),
               completedAt: later(existing.completedAt, group.completedAt),
               lastActivityAt: later(existing.lastActivityAt, group.completedAt),
+              ownerId: hostedById,
             },
           })
         : await tx.collaboration.create({
@@ -173,7 +194,7 @@ export const POST = withAccess(async (_req, { params }) => {
               submissionStatus: "ACCEPTED",
               whitelistAllocation: group.whitelistAllocation,
               requirements: group.requirements,
-              ownerId: user.id,
+              ownerId: hostedById,
               hostAt: group.hostAt,
               completedAt: group.completedAt,
               lastActivityAt: group.completedAt,

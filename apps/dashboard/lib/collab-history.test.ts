@@ -18,6 +18,8 @@ const raffle = (
   status: "ENDED",
   spots: title.toLowerCase().includes("fcfs") ? 7 : 3,
   entryCount: 20,
+  createdById: "admin-a",
+  createdAt: new Date("2026-07-01T00:00:00Z"),
   startAt: new Date("2026-07-01T00:00:00Z"),
   endAt: new Date("2026-07-02T00:00:00Z"),
   requirements: taskUrl ? { tasks: [{ label: "Follow", url: taskUrl }] } : null,
@@ -35,7 +37,18 @@ describe("historical Collab Hub import", () => {
       raffleIds: [1, 2],
       variants: ["GTD", "FCFS"],
       whitelistAllocation: 10,
+      hostedById: "admin-a",
     });
+  });
+
+  it("attributes a grouped collaboration to the admin who hosted its raffles", () => {
+    const groups = groupHistoricalRaffles([
+      raffle(21, "Project", "GTD"),
+      raffle(22, "Project", "FCFS"),
+      { ...raffle(23, "Project", "Bonus"), createdById: "admin-b" },
+    ]);
+
+    expect(groups[0]?.hostedById).toBe("admin-a");
   });
 
   it("uses a shared X identity to join punctuation and naming variants", () => {

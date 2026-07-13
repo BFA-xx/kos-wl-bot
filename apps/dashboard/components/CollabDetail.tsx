@@ -392,7 +392,7 @@ export function CollabDetail() {
             value={collaboration.raffles.length}
           />
           <HeaderMetric
-            label="Team lead"
+            label="Hosted by"
             value={
               data.team.find((person) => person.id === collaboration.ownerId)
                 ?.name ?? "Unassigned"
@@ -692,7 +692,7 @@ function OverviewTab({
           {canAssign ? (
             <>
               <TeamSelect
-                label="Team lead"
+                label="Hosting admin"
                 value={form.ownerId}
                 team={data.team}
                 onChange={(value) => set("ownerId", value)}
@@ -766,7 +766,7 @@ function OverviewTab({
             value={partnerDescriptor(c.partner) || "Not set"}
           />
           <Detail
-            label="Team lead"
+            label="Hosted by"
             value={
               data.team.find((person) => person.id === c.ownerId)?.name ??
               "Unassigned"

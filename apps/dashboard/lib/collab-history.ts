@@ -11,10 +11,11 @@ export interface HistoricalRaffle {
   status: string;
   spots: number;
   entryCount: number;
+  createdAt: Date | string;
   startAt: Date | string;
   endAt: Date | string;
   endedAt?: Date | string | null;
-  bannerUrl?: string | null;
+  createdById: string;
   externalUrl?: string | null;
   requirements?: unknown;
   tasks?: HistoricalRaffleTask[];
@@ -32,8 +33,8 @@ export interface HistoricalCollaborationGroup {
   hostAt: Date;
   completedAt: Date;
   requirements: string;
+  hostedById: string;
   xUrl: string | null;
-  logoUrl: string | null;
   websiteUrl: string | null;
 }
 
@@ -178,6 +179,34 @@ function uniqueLabels(raffles: HistoricalRaffle[]): string[] {
   return [...labels.values()].slice(0, 24);
 }
 
+function resolveHistoricalHost(raffles: HistoricalRaffle[]): string {
+  const hosts = new Map<
+    string,
+    { id: string; count: number; latestRaffleAt: number }
+  >();
+  for (const raffle of raffles) {
+    const current = hosts.get(raffle.createdById) ?? {
+      id: raffle.createdById,
+      count: 0,
+      latestRaffleAt: 0,
+    };
+    hosts.set(raffle.createdById, {
+      ...current,
+      count: current.count + 1,
+      latestRaffleAt: Math.max(
+        current.latestRaffleAt,
+        asDate(raffle.createdAt).getTime(),
+      ),
+    });
+  }
+  return [...hosts.values()].sort(
+    (left, right) =>
+      right.count - left.count ||
+      right.latestRaffleAt - left.latestRaffleAt ||
+      left.id.localeCompare(right.id),
+  )[0]!.id;
+}
+
 export function groupHistoricalRaffles(
   input: HistoricalRaffle[],
 ): HistoricalCollaborationGroup[] {
@@ -285,9 +314,6 @@ export function groupHistoricalRaffles(
       ]
         .filter(Boolean)
         .join("\n");
-      const latestWithBanner = [...ordered]
-        .reverse()
-        .find((raffle) => raffle.bannerUrl?.trim());
       const latestWithWebsite = [...ordered]
         .reverse()
         .find((raffle) => raffle.externalUrl?.trim());
@@ -315,8 +341,8 @@ export function groupHistoricalRaffles(
         }, asDate(ordered[0]!.startAt)),
         completedAt,
         requirements,
+        hostedById: resolveHistoricalHost(ordered),
         xUrl: primaryHandle ? `https://x.com/${primaryHandle}` : null,
-        logoUrl: latestWithBanner?.bannerUrl?.trim() || null,
         websiteUrl: latestWithWebsite?.externalUrl?.trim() || null,
       };
     })

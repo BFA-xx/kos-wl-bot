@@ -328,7 +328,7 @@ export function CollabCreatePanel({
                 placeholder="team@project.xyz"
               />
               <div>
-                <label className="kos-label">Team lead</label>
+                <label className="kos-label">Hosting admin</label>
                 <select
                   className="kos-input"
                   value={form.ownerId}
