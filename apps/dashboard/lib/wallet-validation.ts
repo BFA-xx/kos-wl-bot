@@ -3,6 +3,7 @@ import type { WalletChain } from "@prisma/client";
 export const WALLET_CHAINS = [
   "ETHEREUM",
   "BASE",
+  "ROBINHOOD",
   "SOLANA",
   "BITCOIN",
 ] as const satisfies readonly WalletChain[];
@@ -25,6 +26,7 @@ export function validateWalletAddress(
   switch (chain) {
     case "ETHEREUM":
     case "BASE":
+    case "ROBINHOOD":
       return ETH_RE.test(address)
         ? { ok: true, normalized: address.toLowerCase() }
         : {
@@ -40,5 +42,20 @@ export function validateWalletAddress(
         BTC_BECH32_RE.test(address.toLowerCase())
         ? { ok: true, normalized: address }
         : { ok: false, error: "Expected a valid legacy or bech32 address." };
+  }
+}
+
+export function walletChainLabel(chain: WalletChain): string {
+  switch (chain) {
+    case "ETHEREUM":
+      return "Ethereum";
+    case "BASE":
+      return "Base";
+    case "ROBINHOOD":
+      return "Robinhood Chain (RH)";
+    case "SOLANA":
+      return "Solana";
+    case "BITCOIN":
+      return "Bitcoin";
   }
 }

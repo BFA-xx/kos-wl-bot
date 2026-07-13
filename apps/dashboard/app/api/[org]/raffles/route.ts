@@ -13,7 +13,7 @@ import { sanitizeHttpUrl, sanitizeLegacyRaffleTasks } from "@/lib/raffle-input";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const CHAINS = ["ETHEREUM", "BASE", "SOLANA", "BITCOIN"];
+const CHAINS = ["ETHEREUM", "BASE", "ROBINHOOD", "SOLANA", "BITCOIN"];
 
 export async function GET(
   req: NextRequest,

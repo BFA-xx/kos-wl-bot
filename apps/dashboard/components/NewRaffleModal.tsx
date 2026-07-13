@@ -8,9 +8,10 @@ import { useOrg } from "@/lib/org-context";
 import type { DuplicateVariant } from "@/lib/raffle-share";
 import { ImageDrop } from "./ImageDrop";
 import { IconClose } from "./icons";
+import { WALLET_CHAINS, walletChainLabel } from "@/lib/wallet-validation";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
-const CHAINS = ["ETHEREUM", "BASE", "SOLANA", "BITCOIN"];
+const CHAINS = [...WALLET_CHAINS];
 
 interface Named {
   id: string;
@@ -654,7 +655,7 @@ export function NewRaffleModal({
                         checked={chains.includes(c)}
                         onChange={() => toggle(chains, c, setChains)}
                       />
-                      {c.slice(0, 3)}
+                      {walletChainLabel(c)}
                     </label>
                   ))}
                 </div>

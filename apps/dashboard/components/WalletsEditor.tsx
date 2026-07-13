@@ -3,12 +3,14 @@
 import useSWR from "swr";
 import { useState } from "react";
 import { Empty } from "@/components/ui";
+import { walletChainLabel } from "@/lib/wallet-validation";
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json());
 
 const CHAINS = [
   { key: "ETHEREUM", label: "Ethereum", hint: "0x…" },
   { key: "BASE", label: "Base", hint: "0x…" },
+  { key: "ROBINHOOD", label: walletChainLabel("ROBINHOOD"), hint: "0x…" },
   { key: "SOLANA", label: "Solana", hint: "base58 address" },
   { key: "BITCOIN", label: "Bitcoin", hint: "bc1… / 1… / 3…" },
 ];

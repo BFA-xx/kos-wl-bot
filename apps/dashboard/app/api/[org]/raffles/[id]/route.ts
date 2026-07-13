@@ -9,7 +9,7 @@ import { parsePublicRaffleId } from "@/lib/raffle-share";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const CHAINS = ["ETHEREUM", "BASE", "SOLANA", "BITCOIN"];
+const CHAINS = ["ETHEREUM", "BASE", "ROBINHOOD", "SOLANA", "BITCOIN"];
 
 export async function GET(
   _req: Request,

@@ -25,7 +25,8 @@ export function validateWallet(
   switch (chain) {
     case WalletChain.ETHEREUM:
     case WalletChain.BASE:
-      // Base is an Ethereum L2 — same 0x address format.
+    case WalletChain.ROBINHOOD:
+      // Base and Robinhood Chain are EVM networks — same 0x address format.
       return ETH_RE.test(address)
         ? { valid: true, normalized: address.toLowerCase() }
         : { valid: false, error: `Invalid ${chainLabel(chain)} address (expected 0x + 40 hex).` };
@@ -51,6 +52,8 @@ export function chainLabel(chain: WalletChain): string {
       return "Ethereum";
     case WalletChain.BASE:
       return "Base";
+    case WalletChain.ROBINHOOD:
+      return "Robinhood Chain (RH)";
     case WalletChain.SOLANA:
       return "Solana";
     case WalletChain.BITCOIN:
@@ -64,6 +67,7 @@ export function chainLabel(chain: WalletChain): string {
 export const ALL_CHAINS: WalletChain[] = [
   WalletChain.ETHEREUM,
   WalletChain.BASE,
+  WalletChain.ROBINHOOD,
   WalletChain.SOLANA,
   WalletChain.BITCOIN,
 ];

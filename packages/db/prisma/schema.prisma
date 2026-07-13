@@ -33,6 +33,7 @@ enum RoleMatchMode {
 enum WalletChain {
   ETHEREUM
   BASE
+  ROBINHOOD
   SOLANA
   BITCOIN
 }

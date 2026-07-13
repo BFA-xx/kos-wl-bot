@@ -7,8 +7,9 @@ import { useOrg, useCan } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
 import { ImageDrop } from "./ImageDrop";
 import { IconClose } from "./icons";
+import { WALLET_CHAINS, walletChainLabel } from "@/lib/wallet-validation";
 
-const CHAINS = ["ETHEREUM", "BASE", "SOLANA", "BITCOIN"];
+const CHAINS = [...WALLET_CHAINS];
 const fetcher = (u: string) => fetch(u).then((r) => r.json());
 
 export interface EditableRaffle {
@@ -445,7 +446,7 @@ function EditModal({
                         checked={chains.includes(c)}
                         onChange={() => toggle(chains, c, setChains)}
                       />
-                      {c.slice(0, 3)}
+                      {walletChainLabel(c)}
                     </label>
                   ))}
                 </div>
