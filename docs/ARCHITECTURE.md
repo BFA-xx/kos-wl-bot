@@ -309,7 +309,7 @@ custom roles.
 ## Deployment
 
 - Dashboard: Vercel, rooted at `apps/dashboard`; pushes to `main` trigger
-  deployment.
+  deployment. The primary production origin is `https://raffle.koslabs.app`.
 - Bot: EC2 under PM2 as `kos-bot`; `scripts/deploy-ec2.sh` rsyncs code, builds
   DB/bot, registers slash commands, restarts PM2, and checks localhost health.
 - Database: shared managed PostgreSQL/Neon. Migrations are additive Prisma SQL
@@ -328,4 +328,8 @@ organization Branding/X form on desktop and mobile, including committed visual
 baselines. Its global setup signs a short-lived ordinary session from external
 credentials and never adds a test authentication route. Draws, full eligibility
 parity, and broader Discord workflows still need automated browser coverage.
+An authenticated production smoke test also covers the Collab Hub landing
+page, creation panel, mobile navigation, responsive overflow, and browser
+console. It is intentionally non-mutating; the recommended next acceptance
+pass in `docs/HANDOFF.md` exercises a controlled real collaboration lifecycle.
 See `docs/HANDOFF.md` for the latest verified commands and known gaps.

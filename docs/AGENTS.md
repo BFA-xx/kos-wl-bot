@@ -7,8 +7,8 @@ agent taking over KOS.
 
 KOS is a Discord-first whitelist raffle platform evolving into a reusable
 community-engagement platform. The production product is Phase 3 S2.5 plus
-the first S3/S4 slices. Phase 4 Collab Hub is implemented and its additive
-production migration is applied; the application release is in progress:
+the first S3/S4 slices. Phase 4 Collab Hub and its additive migration are live
+on the production dashboard and EC2 bot:
 
 - Discord raffle creation, entry, scheduling, winner draws, rerolls, wallet
   collection, announcements, and PDF/CSV/PNG proofs.
@@ -31,7 +31,8 @@ production migration is applied; the application release is in progress:
 Campaigns are still planned and not implemented.
 
 The actual repository is `/Users/adebayodaniel/KOS RAF`. The remote is
-`BFA-xx/kos-wl-bot`; the takeover audit was performed on `main` at `2542f6c`.
+`BFA-xx/kos-wl-bot`; the latest production verification was performed on
+`main` at `609bbd4`.
 
 ## Runtime and repository map
 

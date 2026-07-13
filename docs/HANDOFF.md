@@ -3,7 +3,7 @@
 Last updated: 2026-07-13
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `872f39d`
+Audited application commit: `609bbd4`
 
 ## Current state
 
@@ -32,10 +32,10 @@ Phase 3 is implemented through S2.5:
 - The member Raffles tab now includes read-only ended history, and team raffle
   deletion is implemented through the database-mediated bot cleanup flow.
   Both dashboard projects and the EC2 bot are deployed.
-- Phase 4 Collab Hub is implemented and verified. Production migration
-  `20260713100000_collab_hub` was applied on 2026-07-13; application commit,
-  push, dashboard deployment, bot deployment, and live smoke testing are the
-  remaining release steps.
+- Phase 4 Collab Hub is implemented, migrated, committed, pushed, and deployed.
+  Production migration `20260713100000_collab_hub` was applied on 2026-07-13,
+  both Vercel dashboard projects report a successful deployment, and the EC2
+  bot is healthy in two guilds.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -56,7 +56,7 @@ availability described below.
 
 ## Verified locally
 
-### Phase 4 Collab Hub — migration applied, runtime release pending
+### Phase 4 Collab Hub — production release verified
 
 - Added organization-scoped collaboration and partner CRM models, pipeline/
   priority/submission/wallet/reminder enums, contacts, notes, comments,
@@ -100,17 +100,22 @@ availability described below.
 - Prisma validates; dashboard and bot typechecks pass; DB, bot, and Next.js
   production builds pass; `git diff --check` passes.
 
-Release sequence in progress:
+Production release evidence:
 
-1. Production migration applied and `prisma migrate status` reports current.
-2. Commit and push the application/migration/docs changes.
-3. Deploy the EC2 bot with `./scripts/deploy-ec2.sh` and confirm PM2/health.
-4. Confirm both Vercel production deployments and smoke-test a disposable
-   collaboration on desktop and mobile.
+1. Production migration is applied and `prisma migrate status` reports current.
+2. Application commits `ab5d995` and `609bbd4` are pushed to `origin/main`.
+3. Both Vercel commit statuses succeeded and the primary production route is
+   `https://raffle.koslabs.app/:org/collabs`.
+4. The EC2 bot rebuilt, registered seven slash commands, restarted under PM2,
+   returned `{"ok":true,"ready":true}`, and reported two connected guilds.
+5. All 57 production proof rows now contain portable encrypted artifacts; no
+   proof row remains pending backfill.
+6. Authenticated production QA loaded the Collab Hub, opened the three-step
+   creation flow without writing a record, verified the mobile navigation and
+   responsive breakpoint, found no horizontal overflow after layout settled,
+   and recorded zero browser console errors.
 
-The previously listed Phase 4 debt is closed in this release. Authenticated
-desktop/mobile live QA remains part of the deployment step rather than an open
-implementation gap.
+The previously listed Phase 4 implementation debt is closed in this release.
 
 - Git worktree was clean before documentation changes.
 - Prisma schema validates with Prisma 5.22.0.
@@ -207,7 +212,9 @@ precision points:
 
 ### Operational
 
-- Proof artifacts live only on EC2 local disk plus Discord delivery.
+- Proof artifacts retain an EC2-local cleanup copy and Discord delivery, but
+  every production proof now also has a portable encrypted database copy for
+  tenant-authorized dashboard downloads.
 - Raffle deletion removes the live raffle post and EC2 proof files, but cannot
   remove the previously delivered proof-channel message because its Discord
   message ID is not stored.
@@ -220,19 +227,18 @@ precision points:
 
 ## Recommended next task
 
-The next workstream should harden the shipped S3/S4 points, rewards, and
-weighted-draw foundations:
+Run a controlled Phase 4 operational acceptance pass with one real partner
+record, then automate that path:
 
-1. run an authenticated end-to-end smoke test with a real Discord user:
-   configure points channel, verify a task from web and Discord, earn points,
-   redeem a limited-stock reward, then fulfill/refund it;
-2. add focused automated tests for points idempotency, reward stock concurrency,
-   ledger refunds, role-weight snapshots, and weighted draws/rerolls;
-3. decide whether rewards need automated delivery actions (role grants,
-   allowlist exports, wallet claims) or remain manual fulfillment;
-4. persist and expose reroll proof data, correct upload authorization, and
-   refresh setup/deployment documentation before adding the full campaigns
-   layer.
+1. create a collaboration, assign a teammate, add a sanitized note and private
+   attachment, attach/create a raffle, and exercise the reminder workflow;
+2. complete the raffle, reconcile a registered member wallet, export the
+   submission file, and download all three portable proof artifacts;
+3. convert the acceptance path into authenticated browser/API tests covering
+   tenant isolation, private file authorization, wallet conflicts, and status
+   automation;
+4. after acceptance, start the full Campaigns layer while keeping points,
+   rewards, raffles, and Discord/web participation on the shared ledgers.
 
 ## Member activity and private proof hardening — committed/deployed
 

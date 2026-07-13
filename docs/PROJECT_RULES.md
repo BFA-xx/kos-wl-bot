@@ -64,9 +64,10 @@
 
 ## Current product boundaries
 
-- Phase 4 Collab Hub migration `20260713100000_collab_hub` is applied in
-  production. The corresponding dashboard/bot revision must be deployed
-  together before the release is considered complete.
+- Phase 4 Collab Hub migration `20260713100000_collab_hub` and application
+  commit `609bbd4` are deployed in production across the dashboard and bot.
+  Future Phase 4 schema/runtime changes must retain migration-before-runtime
+  ordering and deploy both surfaces together.
 - X engagement verification is link-and-attest, not real API verification.
 - Wallet verification is format-only; no signature or on-chain ownership check.
 - Paid billing and campaigns are not live. Points, rewards, and weighted draws
