@@ -298,19 +298,21 @@ export async function recordWebEntry(
   user: User,
   raffle: RaffleWithRoles,
   member: RestMember,
-): Promise<number> {
+): Promise<number | null> {
   const weight = await entryWeightForRoles(raffle, member.roles);
   const entryCount = await prisma.$transaction(async (tx) => {
-    await tx.participant.create({
-      data: {
+    const inserted = await tx.participant.createMany({
+      data: [{
         raffleId: raffle.id,
         userId: user.id,
         username: user.username,
         accountCreatedAt: snowflakeDate(user.id),
         joinedGuildAt: member.joined_at ? new Date(member.joined_at) : null,
         weight,
-      },
+      }],
+      skipDuplicates: true,
     });
+    if (inserted.count === 0) return null;
     const updated = await tx.raffle.update({
       where: { id: raffle.id },
       data: { entryCount: { increment: 1 }, editRequestedAt: new Date() },
@@ -318,6 +320,8 @@ export async function recordWebEntry(
     });
     return updated.entryCount;
   });
+
+  if (entryCount === null) return null;
 
   await prisma.log
     .create({

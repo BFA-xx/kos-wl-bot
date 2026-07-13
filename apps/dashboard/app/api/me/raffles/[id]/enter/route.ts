@@ -42,12 +42,11 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
 
   try {
     const entryCount = await recordWebEntry(user, raffle, member);
-    return NextResponse.json({ ok: true, entryCount });
-  } catch (err) {
-    // Unique violation = raced duplicate — treat as already entered.
-    if ((err as { code?: string }).code === "P2002") {
+    if (entryCount === null) {
       return NextResponse.json({ ok: true, already: true });
     }
+    return NextResponse.json({ ok: true, entryCount });
+  } catch (err) {
     console.error("web entry failed", err);
     return NextResponse.json({ error: "Entry failed — try again." }, { status: 500 });
   }

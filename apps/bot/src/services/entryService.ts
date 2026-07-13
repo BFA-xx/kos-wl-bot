@@ -2,7 +2,6 @@ import { type GuildMember } from "discord.js";
 import {
   prisma,
   LogCategory,
-  Prisma,
   RaffleStatus,
   type WalletChain,
 } from "@kos/db";
@@ -110,8 +109,8 @@ export async function enterRaffle(
   try {
     const weight = await entryWeightForMember(raffle, member);
     const entryCount = await prisma.$transaction(async (tx) => {
-      await tx.participant.create({
-        data: {
+      const inserted = await tx.participant.createMany({
+        data: [{
           raffleId,
           userId: member.id,
           username: member.user.username,
@@ -124,8 +123,10 @@ export async function enterRaffle(
             ? eligibility.flags.join(", ")
             : null,
           weight,
-        },
+        }],
+        skipDuplicates: true,
       });
+      if (inserted.count === 0) return null;
       const updated = await tx.raffle.update({
         where: { id: raffleId },
         data: { entryCount: { increment: 1 } },
@@ -133,6 +134,7 @@ export async function enterRaffle(
       });
       return updated.entryCount;
     });
+    if (entryCount === null) return { status: "duplicate" };
 
     await audit({
       guildId: raffle.guildId,
@@ -159,13 +161,6 @@ export async function enterRaffle(
 
     return { status: "entered", entryCount, missingWalletChains };
   } catch (err) {
-    // Unique violation = already entered (race-safe duplicate guard).
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === "P2002"
-    ) {
-      return { status: "duplicate" };
-    }
     logger.error({ err, raffleId, userId: member.id }, "enterRaffle failed");
     return { status: "error" };
   }
