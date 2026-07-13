@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useOrg } from "@/lib/org-context";
 import {
   IconGrid,
@@ -191,10 +191,29 @@ function OrgSwitcher({
   const org = useOrg();
   const [open, setOpen] = useState(false);
 
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
         className={`flex w-full items-center gap-3 rounded-2xl border border-white/[0.09] bg-white/[0.04] px-2.5 py-2 text-left shadow-[0_1px_0_rgba(255,255,255,0.05)_inset] transition-colors hover:bg-white/[0.065] ${collapsed ? "justify-center" : ""}`}
         title={collapsed ? org.name : undefined}
       >
