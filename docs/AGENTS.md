@@ -32,7 +32,7 @@ Campaigns are still planned and not implemented.
 
 The actual repository is `/Users/adebayodaniel/KOS RAF`. The remote is
 `BFA-xx/kos-wl-bot`; the latest production verification was performed on
-`main` at `110300a`.
+`main` at `3fa9204`.
 
 ## Runtime and repository map
 
@@ -253,10 +253,11 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   status feed, the spreadsheet stays horizontally scrollable, and the calendar
   is an agenda. The filter bar is not sticky below the desktop breakpoint, and
   the workspace switcher dismisses on scroll, resize, or Escape.
-- Collab Hub presents `Collaboration.ownerId` as **Team lead**. Assignment
+- Collab Hub presents `Collaboration.ownerId` as **Hosted by**. Assignment
   choices must be active organization team members; the organization owner is
   not implicitly an operational collaboration assignee. Historical imports use
-  the admin who ran the import as team lead.
+  the attached raffle's `createdById`, so the displayed admin is the person who
+  actually hosted the raffle rather than the person who ran the import.
 - Historical raffle banners are media for the attached raffle, not partner
   logos or partner categories. Do not seed `CollaborationPartner.logoUrl` from
   a raffle banner or add a generic `Raffle partner` label. Raffle media uses a

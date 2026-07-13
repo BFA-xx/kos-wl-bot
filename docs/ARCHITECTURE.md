@@ -324,10 +324,12 @@ bar participates in normal document flow, and its advanced controls expand on
 demand.
 
 `Collaboration.ownerId` is the persisted compatibility field for the
-operational team lead. Collab Hub APIs expose active organization members as
-the assignment team; organization ownership alone does not add someone to that
-list. Historical imports assign the authenticated importing admin rather than
-`Organization.ownerId`.
+collaboration's hosting admin. Collab Hub APIs expose active organization
+members as the assignment team; organization ownership alone does not add
+someone to that list. Historical imports derive this field from the attached
+raffles' `createdById`. If a grouped campaign has multiple hosts, the importer
+chooses the admin with the most rounds, then the admin on the most recently
+created round.
 
 Partner identity media and raffle campaign media remain separate. A partner
 logo is an explicitly supplied `CollaborationPartner.logoUrl`; historical

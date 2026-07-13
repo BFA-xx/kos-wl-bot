@@ -3,7 +3,7 @@
 Last updated: 2026-07-13
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `110300a`
+Audited application commit: `3fa9204`
 
 ## Current state
 
@@ -42,11 +42,11 @@ Phase 3 is implemented through S2.5:
   responsive workspace polish and scroll-dismiss workspace switcher are
   deployed on the dashboard.
 - Collab Hub history presentation is hardened and deployed: organization
-  ownership is no longer shown as the collaboration assignee, imported records
-  use the importing admin as **Team lead**, completed/activity analytics cover
-  all time, Completed is the third board column, generic partner labels are
-  removed, and attached raffle media uses complete 16:9 display with branded
-  fallbacks for unavailable historical assets.
+  ownership is no longer shown as the collaboration host, imported records use
+  the admin who created/hosted their attached raffle, completed/activity
+  analytics cover all time, Completed is the third board column, generic
+  partner labels are removed, and attached raffle media uses complete 16:9
+  display with branded fallbacks for unavailable historical assets.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -180,16 +180,17 @@ Production release evidence:
 The previously listed Phase 4 release-blocking implementation debt remains
 closed; the historical review workflow above is the current follow-up.
 
-### Collab Hub team, history, and media hardening — production verified
+### Collab Hub host, history, and media hardening — production verified
 
-- Renamed every collaboration-facing Owner label to Team lead and restricted
+- Renamed every collaboration-facing Owner label to Hosted by and restricted
   assignment choices/validation to active organization members. The
   organization owner keeps authorization ownership but is not silently added
   to the operational team list.
 - Applied data migration `20260713190000_collab_team_import_cleanup`. All 34
-  imported collaborations now use their importing admin as team lead; all 34
   generic `Raffle partner` categories and banner-derived partner logos were
-  removed without touching manually supplied branding.
+  removed without touching manually supplied branding. Follow-up migration
+  `20260713200000_collab_raffle_host_assignment` attributes all 34 imported
+  collaborations to the active admin stored on their attached raffle.
 - Completed summary now reports all-time completed records, and the activity
   chart spans the first collaboration month through the current month with
   year-qualified labels and horizontal overflow for long histories.
@@ -201,20 +202,26 @@ closed; the historical review workflow above is the current follow-up.
   to project initials. Attached raffle banners render in a full 16:9 frame with
   `object-contain`; failed/expired sources render a branded archive fallback
   rather than a broken image.
-- Dashboard Vitest passes 41 tests across 15 files. Dashboard TypeScript,
+- Dashboard Vitest passes 42 tests across 15 files. Dashboard TypeScript,
   Prisma schema validation, the production Next.js build with
   `NODE_ENV=production`, and `git diff --check` pass.
-- Application commit `110300a` is pushed to `origin/main`; both connected
-  Vercel deployments completed successfully. Signed-in production QA verified
-  `Completed 29 · all time`, Completed in the first three board columns,
-  Outis as team lead, removal of generic partner labels, zero horizontal
-  overflow at a 772 px viewport, expired KUONnft media fallback, and two valid
-  1500x500 Mochimons banners rendered with `object-fit: contain`.
+- Application commits `110300a` and `3fa9204` are pushed to `origin/main`.
+  Both connected Vercel deployments completed successfully for `3fa9204`.
+  Production database verification found zero host mismatches across 34
+  imported records: BigOhms hosts 22, H A S H R Y hosts 9, and Outis hosts 3.
+  Signed-in QA confirmed the Spreadsheet header says Hosted by, row-level host
+  names vary by raffle creator, and KUONnft now shows `Hosted by · BigOhms` in
+  both its header and overview. The earlier presentation QA also verified
+  `Completed 29 · all time`, Completed in the first three board columns, zero
+  horizontal overflow at a 772 px viewport, the expired KUONnft media fallback,
+  and two valid 1500x500 Mochimons banners rendered with
+  `object-fit: contain`.
 
 Current assumptions:
 
-- The admin who executes the historical import is the correct operational team
-  lead for the records created by that import.
+- `Raffle.createdById` identifies the team admin who hosted an imported raffle.
+- Current production groups have one host each; the majority/recent tiebreaker
+  is retained for future mixed-host history.
 - A raffle banner should remain attached-raffle media and must not be inferred
   to be a partner logo.
 
