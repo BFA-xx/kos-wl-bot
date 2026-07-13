@@ -47,6 +47,13 @@ Phase 3 is implemented through S2.5:
   analytics cover all time, Completed is the third board column, generic
   partner labels are removed, and attached raffle media uses complete 16:9
   display with branded fallbacks for unavailable historical assets.
+- The KOS production Collab Hub now links every retained raffle record. All 57
+  ended raffles and both cancelled NUTSY repost attempts are attached to a
+  collaboration (59/59 retained records); empty and test-era ended raffles were
+  included on the owner's explicit request. Empty/cancelled records contribute
+  zero WL allocation, KUON's early raffle is attached to the existing KUONnft
+  collaboration, and the cancelled retries are attached to NUTSY instead of
+  creating duplicate partner records.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -217,19 +224,129 @@ closed; the historical review workflow above is the current follow-up.
   and two valid 1500x500 Mochimons banners rendered with
   `object-fit: contain`.
 
+### Complete KOS raffle archive import — production verified
+
+- The earlier bootstrap deliberately left nine records unlinked: five ended
+  raffles with zero entries, two ended test-era raffles, and two cancelled
+  NUTSY repost attempts. On 2026-07-13, the owner explicitly requested the
+  complete archive, so all nine were imported or attached.
+- Production now has zero unlinked retained raffle records across `ENDED` and
+  `CANCELLED`: 59 linked out of 59. The six newly represented partner records
+  are neonbaby, neonflash, vermie, PILLAS, Test test, and testy. The early KUON
+  raffle was merged into KUONnft, while both NUTSY cancellations were attached
+  to the existing NUTSY record.
+- Empty and cancelled records do not increase `whitelistAllocation`. The two
+  ended test-era raffles retain their one delivered spot and winner workflow
+  row each. The import wrote tenant-scoped collaboration activities and the
+  `COLLABORATION_FULL_HISTORY_IMPORT` organization audit event.
+- The historical import verification confirmed 38 collaboration records, 35
+  completed records, three active records, and 458 collected WL spots at that
+  time. NUTSY showed four attached raffles with allocation still seven, and
+  KUONnft showed two attached raffles with allocation still three. A later
+  signed-in browser check showed 32 unarchived grouped relationships in the
+  current Hub view while the source archive still contained all 59 raffles.
+- The Collab Hub `Active · 3` metric is collaboration pipeline state, not the
+  reusable task count. At verification time the active records were the manual
+  `test` lead, submitted JEETErS, and submitted KUONnft. Production currently
+  has zero active reusable `TaskDefinition` rows. Team task management remains
+  at `/:org/tasks`; members complete standalone point tasks at `/me/points` and
+  raffle-specific tasks at `/me/raffles`.
+
+### Collab project-banner presentation — implemented locally
+
+- Collab Hub list responses now include each attached raffle's `bannerUrl` and
+  `endAt`. Board cards render the project's linked raffle banner as full-width
+  media, while spreadsheet/mobile rows use a compact horizontal banner
+  thumbnail instead of treating the banner as a square partner logo.
+- Banner selection prefers the newest ended raffle over cancelled attempts and
+  retries older attached banner sources automatically when the preferred URL
+  fails. When every historical Discord attachment has expired, the existing
+  project-branded archive fallback remains in place.
+- Partner directory marks still use `CollaborationPartner.logoUrl`; raffle
+  banners remain raffle media and are not copied into partner branding.
+- Focused presentation tests, dashboard TypeScript, the production dashboard
+  build, and `git diff --check` pass. This dashboard change has not been
+  committed, pushed, or deployed yet.
+
+### Automatic hosted-raffle connection — implemented locally
+
+- A successful Discord post now calls the bot-side Collab Hub linker after the
+  raffle `messageId` is stored. This covers Discord-created raffles, dashboard
+  DRAFT publication, scheduled raffles, and successful reposts through the same
+  `publishRaffleMessage` boundary.
+- The linker resolves the organization from the raffle's unique guild
+  connection, matches partner identity by normalized project name/project X
+  URL, reuses a non-terminal campaign, or creates a new Scheduled/Hosting
+  collaboration. Terminal completed/submitted/cancelled relationships are not
+  reopened for a later campaign.
+- The once-per-minute bot automation sweep retries up to 50 published
+  UPCOMING/LIVE/ENDED raffles that remain unlinked, so a transient database
+  error after Discord publication is self-healing. Draw-time reconciliation
+  also ensures the link before syncing winners and wallets.
+- Collab Hub now reports the all-time connected-raffle count independently of
+  grouped collaboration cards and provides a `View all N raffles` link to the
+  organization raffle archive. A fresh production browser check counted all 59
+  rows in `/:org/raffles` while the Hub reported 32 visible grouped
+  collaboration relationships. Repeated GTD/FCFS rounds—and any relationship
+  records outside the current unarchived workspace—explain why those totals are
+  intentionally different.
+- Bot tests now cover collaboration project normalization, GTD/FCFS tagging,
+  and safe X-profile extraction. All 5 bot tests and all 43 dashboard tests,
+  both typechecks, both production builds, and `git diff --check` pass. These
+  bot/dashboard changes have not been committed, pushed, or deployed yet.
+
+### Collab debt closure — migration applied, deployment pending
+
+- New Discord attachment banners are now persisted before publication in the
+  one-to-one `RaffleBannerAsset` table. The bot accepts only Discord attachment
+  hosts and supported image types, enforces a 5 MB streamed limit, and rewrites
+  `Raffle.bannerUrl` to the versioned public `/r/:id/banner` endpoint before
+  Discord receives the post. Dashboard Vercel Blob uploads are unchanged.
+- Migration `20260713230000_raffle_banner_assets` was applied successfully to
+  production Neon on 2026-07-13. It is additive and cascades asset deletion
+  with its source raffle.
+- History import now opens a tenant-scoped preview showing unlinked, standard,
+  selected, and grouped totals. Empty ended raffles, cancelled attempts, and
+  test-named records are explicit opt-ins; exceptional attempts contribute no
+  allocation unless they are ended records with entries.
+- The Active summary card is now keyboard-accessible and toggles the complete
+  active-status filter. The status selector exposes the same Active pipeline
+  option.
+- All 7 bot tests and all 45 dashboard tests pass. DB/bot/dashboard typechecks,
+  Prisma validation, DB/bot builds, the dashboard production build, and
+  `git diff --check` pass. Dashboard/bot deployment and the controlled
+  publish-to-Hub smoke test remain pending.
+
 Current assumptions:
 
+- “All raffle history” means every retained ended/cancelled raffle row. Deleted
+  raffle records cannot be reconstructed from the current database.
+- Cancelled repost attempts belong to the successful partner relationship for
+  audit visibility but are not additional allocations or completed campaigns.
+- “Hosted” begins only after Discord accepts the raffle post. A DRAFT row or a
+  failed publish does not represent a real hosted collaboration.
+- Multiple concurrently active raffles for the same normalized partner belong
+  to one campaign; a raffle published after that relationship becomes terminal
+  starts a new campaign for the same durable partner.
 - `Raffle.createdById` identifies the team admin who hosted an imported raffle.
 - Current production groups have one host each; the majority/recent tiebreaker
   is retained for future mixed-host history.
-- A raffle banner should remain attached-raffle media and must not be inferred
-  to be a partner logo.
+- A raffle banner remains attached-raffle media and is not inferred to be a
+  partner logo.
+
+Current technical debt:
+
+- The 40 already-expired Discord interaction banners are an irrecoverable
+  historical data gap; the branded fallback remains their permanent
+  presentation. New Discord uploads are durable, so the gap no longer grows.
+- The publish-to-Collab database transaction still needs its controlled
+  production post/publish smoke test after the bot/dashboard release.
 
 Recommended next task:
 
-- Persist Discord-uploaded raffle banners durably at creation/edit time, then
-  serve the durable media to both Discord and the dashboard so future
-  interaction attachment expiry cannot create another historical gap.
+- Deploy the dashboard and bot together, verify a controlled no-ping raffle
+  automatically appears in Collab Hub, then delete the smoke-test raffle and
+  confirm the source-link cleanup completes.
 
 - Git worktree was clean before documentation changes.
 - Prisma schema validates with Prisma 5.22.0.

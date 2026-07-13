@@ -23,6 +23,33 @@ export function partnerDescriptor({
     .join(" · ");
 }
 
+export function collaborationBannerUrls(
+  raffles: {
+    raffle: {
+      status: string;
+      bannerUrl?: string | null;
+      endAt?: Date | string | null;
+    };
+  }[],
+) {
+  const ordered = [...raffles].sort((left, right) => {
+    const leftEnded = left.raffle.status === "ENDED" ? 1 : 0;
+    const rightEnded = right.raffle.status === "ENDED" ? 1 : 0;
+    if (leftEnded !== rightEnded) return rightEnded - leftEnded;
+    return (
+      new Date(right.raffle.endAt ?? 0).getTime() -
+      new Date(left.raffle.endAt ?? 0).getTime()
+    );
+  });
+  return [
+    ...new Set(
+      ordered
+        .map(({ raffle }) => raffle.bannerUrl?.trim())
+        .filter((url): url is string => Boolean(url)),
+    ),
+  ];
+}
+
 export function buildAllTimeActivityHistory(
   rows: { createdAt: Date }[],
   now = new Date(),

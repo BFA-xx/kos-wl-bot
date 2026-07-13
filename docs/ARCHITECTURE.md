@@ -135,7 +135,8 @@ membership claim.
 
 1. `/raffle create` opens a modal and an in-memory setup draft (15-minute TTL).
 2. `createRaffle` writes LIVE or UPCOMING state and role/requirement data.
-3. The bot posts the Discord embed and stores `messageId`.
+3. The bot posts the Discord embed, stores `messageId`, and ensures the raffle
+   is connected to the tenant's Collab Hub.
 4. The scheduler transitions UPCOMING to LIVE and LIVE to ENDED.
 
 ### Dashboard-created raffle
@@ -143,7 +144,9 @@ membership claim.
 1. `POST /api/:org/raffles` validates tenant scope and writes status DRAFT.
 2. The bot scheduler finds DRAFT rows with a channel, chooses LIVE/UPCOMING,
    and posts the embed.
-3. A failed Discord post changes the raffle to CANCELLED and logs the reason.
+3. A successful post automatically creates or reuses the matching active
+   Collab Hub campaign; a failed post changes the raffle to CANCELLED and logs
+   the reason without creating a CRM record.
 
 Dashboard edits set `editRequestedAt`; end-now sets LIVE with `endAt = now`;
 rerolls set `rerollRequest` and `rerollRequestedAt`. The scheduler clears and
@@ -269,14 +272,23 @@ Collab Hub passes `collaborationId` through the existing dashboard raffle
 builder, writes the normal DRAFT raffle, and attaches it without duplicating
 entry/draw data.
 
-`POST /api/:org/collaborations/import-history` provides an idempotent bootstrap
-for existing tenants. It only reads unlinked ENDED raffles with at least one
-entry from the organization's connected guilds, excludes test records, and
-groups repeat rounds by normalized project name or a narrowly shared X task
-identity. GTD and FCFS variants attach to one completed collaboration; older
-unlabeled rounds paired with explicit FCFS are inferred as GTD. The importer
-creates partner/CRM workflow rows and unique `CollaborationRaffle` links while
-leaving participant, winner, proof, and encrypted wallet sources in their
+Successful Discord publication is also an automatic Collab Hub boundary. The
+bot resolves the organization from the raffle guild, matches a partner by
+normalized project identity or project X URL, reuses an active campaign when
+available, and otherwise creates a new Scheduled/Hosting collaboration. The
+publish hook writes the source link immediately; the minute automation sweep
+retries any published UPCOMING/LIVE/ENDED row that remains unlinked. Terminal
+relationships stay historical, so a later campaign for the same partner gets a
+new collaboration instead of reopening an accepted/submitted record.
+
+`GET /api/:org/collaborations/import-history` previews the tenant's unlinked
+ended/cancelled archive and classifies standard, empty, cancelled, and
+test-named records. `POST` applies the selected policy; standard ended records
+remain the default, while exceptional categories require explicit opt-in. GTD
+and FCFS variants attach to one completed collaboration; older unlabeled rounds
+paired with explicit FCFS are inferred as GTD. Empty/cancelled attempts do not
+increase allocation, cancelled-only groups stay cancelled, and the importer
+leaves participant, winner, proof, and encrypted wallet sources in their
 existing tables.
 
 `CollaborationWallet` stores only per-user workflow state (`WAITING`,
@@ -303,7 +315,8 @@ remain for cleanup; authorized Collab Hub routes serve the portable encrypted
 copies. A bounded bot backfill covers older artifacts and regenerates them from
 raffle/winner data without reposting when a legacy absolute path is missing.
 
-The bot scheduler sweeps active collaborations once per minute. A durable
+The bot scheduler auto-links missed hosted raffles and sweeps active
+collaborations once per minute. A durable
 `SystemStatus` keyset cursor continues active-record batches across ticks, and
 due reminders drain in bounded batches under a per-sweep time budget. Raffle draws
 and the sweep reconcile winners/wallet profiles, move records to Hosting,
@@ -336,6 +349,18 @@ logo is an explicitly supplied `CollaborationPartner.logoUrl`; historical
 imports do not promote `Raffle.bannerUrl` into that field. Attached raffle
 cards display the banner in a contained 16:9 frame and fall back to a branded
 project treatment when the source is absent or expired.
+
+New Discord-uploaded raffle banners cross a durable-media boundary before
+publication. The bot accepts only Discord attachment hosts and supported image
+types, reads at most 5 MB, stores the bytes in the one-to-one
+`RaffleBannerAsset`, and changes `Raffle.bannerUrl` to a versioned
+`/r/:id/banner` URL. The public route serves the immutable copy to Discord and
+the dashboard. Dashboard-originated uploads continue to use Vercel Blob; the
+40 already-expired historical attachment URLs cannot be reconstructed.
+
+The Hub reports relationship cards and source raffles as distinct totals.
+Repeated GTD/FCFS rounds can share one collaboration, while the organization
+Raffles page remains the one-row-per-raffle archive.
 
 ## Deployment
 

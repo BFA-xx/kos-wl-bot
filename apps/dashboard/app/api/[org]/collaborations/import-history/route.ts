@@ -3,7 +3,11 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { logAudit, requireOrgAccess, withAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
-import { groupHistoricalRaffles } from "@/lib/collab-history";
+import {
+  groupHistoricalRaffles,
+  previewHistoricalRaffles,
+  type HistoricalImportOptions,
+} from "@/lib/collab-history";
 import { sanitizeHttpUrl } from "@/lib/raffle-input";
 
 export const dynamic = "force-dynamic";
@@ -21,50 +25,82 @@ const earlier = (left: Date | null, right: Date) =>
 const later = (left: Date | null, right: Date) =>
   !left || right > left ? right : left;
 
-export const POST = withAccess(async (_req, { params }) => {
+const raffleSelect = {
+  id: true,
+  projectName: true,
+  title: true,
+  status: true,
+  spots: true,
+  entryCount: true,
+  createdAt: true,
+  startAt: true,
+  endAt: true,
+  endedAt: true,
+  createdById: true,
+  externalUrl: true,
+  requirements: true,
+  RaffleTask: {
+    include: {
+      task: { select: { title: true, type: true, config: true } },
+    },
+  },
+} satisfies Prisma.RaffleSelect;
+
+function importOptions(value: unknown): HistoricalImportOptions {
+  const body =
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+  return {
+    includeEmpty: body.includeEmpty === true,
+    includeCancelled: body.includeCancelled === true,
+    includeTests: body.includeTests === true,
+  };
+}
+
+async function loadHistoricalRaffles(guildIds: string[]) {
+  const rows = await prisma.raffle.findMany({
+    where: {
+      guildId: { in: guildIds },
+      status: { in: ["ENDED", "CANCELLED"] },
+      collaborationLink: { is: null },
+    },
+    orderBy: { id: "asc" },
+    select: raffleSelect,
+  });
+  return rows.map(({ RaffleTask, ...raffle }) => ({
+    ...raffle,
+    tasks: RaffleTask.map(({ task }) => task),
+  }));
+}
+
+export const GET = withAccess(async (req, { params }) => {
+  const { guildIds } = await requireOrgAccess(
+    params.org,
+    PERMISSIONS.COLLAB_CREATE,
+  );
+  const url = new URL(req.url);
+  const options = importOptions({
+    includeEmpty: url.searchParams.get("includeEmpty") === "1",
+    includeCancelled: url.searchParams.get("includeCancelled") === "1",
+    includeTests: url.searchParams.get("includeTests") === "1",
+  });
+  const raffles = await loadHistoricalRaffles(guildIds);
+  return NextResponse.json(previewHistoricalRaffles(raffles, options));
+});
+
+export const POST = withAccess(async (req, { params }) => {
   const { org, user, guildIds } = await requireOrgAccess(
     params.org,
     PERMISSIONS.COLLAB_CREATE,
   );
 
-  const raffles = await prisma.raffle.findMany({
-    where: {
-      guildId: { in: guildIds },
-      status: "ENDED",
-      entryCount: { gt: 0 },
-      collaborationLink: { is: null },
-    },
-    orderBy: { id: "asc" },
-    select: {
-      id: true,
-      projectName: true,
-      title: true,
-      status: true,
-      spots: true,
-      entryCount: true,
-      createdAt: true,
-      startAt: true,
-      endAt: true,
-      endedAt: true,
-      createdById: true,
-      externalUrl: true,
-      requirements: true,
-      RaffleTask: {
-        include: {
-          task: { select: { title: true, type: true, config: true } },
-        },
-      },
-    },
-  });
-
-  const groups = groupHistoricalRaffles(
-    raffles.map(({ RaffleTask, ...raffle }) => ({
-      ...raffle,
-      tasks: RaffleTask.map(({ task }) => task),
-    })),
-  );
+  const options = importOptions(await req.json().catch(() => ({})));
+  const raffles = await loadHistoricalRaffles(guildIds);
+  const preview = previewHistoricalRaffles(raffles, options);
+  const groups = groupHistoricalRaffles(raffles, options);
   if (!groups.length) {
-    return NextResponse.json({ collaborations: 0, raffles: 0 });
+    return NextResponse.json({ collaborations: 0, raffles: 0, preview });
   }
 
   const activeTeam = await prisma.organizationMember.findMany({
@@ -171,15 +207,28 @@ export const POST = withAccess(async (_req, { params }) => {
             where: { id: existing.id },
             data: {
               projectName: group.projectName,
-              status: "COMPLETED",
-              submissionStatus: "ACCEPTED",
+              status:
+                existing.status === "COMPLETED" || group.status === "COMPLETED"
+                  ? "COMPLETED"
+                  : "CANCELLED",
+              submissionStatus:
+                existing.status === "COMPLETED" || group.status === "COMPLETED"
+                  ? "ACCEPTED"
+                  : existing.submissionStatus,
               whitelistAllocation:
                 existing.whitelistAllocation + group.whitelistAllocation,
               requirements: [existing.requirements, group.requirements]
                 .filter(Boolean)
                 .join("\n"),
               hostAt: earlier(existing.hostAt, group.hostAt),
-              completedAt: later(existing.completedAt, group.completedAt),
+              completedAt:
+                group.status === "COMPLETED"
+                  ? later(existing.completedAt, group.completedAt)
+                  : existing.completedAt,
+              cancelledAt:
+                group.status === "CANCELLED"
+                  ? later(existing.cancelledAt, group.completedAt)
+                  : existing.cancelledAt,
               lastActivityAt: later(existing.lastActivityAt, group.completedAt),
               ownerId: hostedById,
             },
@@ -189,14 +238,18 @@ export const POST = withAccess(async (_req, { params }) => {
               organizationId: org.id,
               partnerId: partner.id,
               projectName: group.projectName,
-              status: "COMPLETED",
+              status: group.status,
               priority: "MEDIUM",
-              submissionStatus: "ACCEPTED",
+              submissionStatus:
+                group.status === "COMPLETED" ? "ACCEPTED" : "NOT_STARTED",
               whitelistAllocation: group.whitelistAllocation,
               requirements: group.requirements,
               ownerId: hostedById,
               hostAt: group.hostAt,
-              completedAt: group.completedAt,
+              completedAt:
+                group.status === "COMPLETED" ? group.completedAt : null,
+              cancelledAt:
+                group.status === "CANCELLED" ? group.completedAt : null,
               lastActivityAt: group.completedAt,
               createdById: user.id,
               createdAt: group.hostAt,
@@ -251,7 +304,7 @@ export const POST = withAccess(async (_req, { params }) => {
           actorId: user.id,
           action: "RAFFLE_HISTORY_IMPORTED",
           title: "Raffle history imported",
-          body: `${group.raffleIds.length} ended raffle${group.raffleIds.length === 1 ? "" : "s"} grouped by project name and shared X tasks.`,
+          body: `${group.raffleIds.length} historical raffle${group.raffleIds.length === 1 ? "" : "s"} grouped by project name and shared X tasks.`,
           metadata: {
             raffleIds: group.raffleIds,
             variants: group.variants,
@@ -269,11 +322,17 @@ export const POST = withAccess(async (_req, { params }) => {
     metadata: {
       collaborations: new Set(importedIds).size,
       raffles: raffleIds.length,
+      options: {
+        includeEmpty: Boolean(options.includeEmpty),
+        includeCancelled: Boolean(options.includeCancelled),
+        includeTests: Boolean(options.includeTests),
+      },
     },
   });
 
   return NextResponse.json({
     collaborations: new Set(importedIds).size,
     raffles: raffleIds.length,
+    preview,
   });
 });

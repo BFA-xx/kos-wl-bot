@@ -216,6 +216,7 @@ model Raffle {
   participants      Participant[]
   winners           Winner[]
   proof             Proof?
+  bannerAsset       RaffleBannerAsset?
   logs              Log[]
   RaffleTask        RaffleTask[]
   collaborationLink CollaborationRaffle?
@@ -224,6 +225,22 @@ model Raffle {
   @@index([status, endAt])
   @@index([status, startAt])
   @@map("raffles")
+}
+
+/// Durable copy of a Discord-uploaded raffle banner. Discord interaction
+/// attachment URLs expire, so the bot stores the bytes before publication and
+/// both runtimes serve the shared copy through the public raffle origin.
+model RaffleBannerAsset {
+  raffleId    Int      @id
+  sourceUrl   String?
+  contentType String
+  byteLength  Int
+  data        Bytes
+  storedAt    DateTime @default(now()) @updatedAt
+
+  raffle Raffle @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+
+  @@map("raffle_banner_assets")
 }
 
 /// A role that is eligible to enter a given raffle.

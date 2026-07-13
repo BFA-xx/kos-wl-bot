@@ -240,11 +240,22 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   `guildId` belongs to the organization's connected guilds.
 - Collab Hub wallet exports require `collab:export`. Never persist or return a
   plaintext wallet address from general collaboration/detail APIs.
-- Collab Hub history bootstrap is tenant-scoped and source-linking only. It
-  imports eligible ended raffles with entries, excludes cancelled/empty/test
-  records, groups repeated partner rounds by normalized project name or a
-  narrowly shared X task identity, and attaches the original raffles. It must
-  never copy participants, winners, proofs, or wallet addresses into CRM data.
+- Collab Hub history bootstrap is tenant-scoped and source-linking only. Its
+  preview defaults to eligible ended raffles with entries and lets an
+  authorized team explicitly opt into empty, cancelled, or test-named records.
+  It groups repeated partner rounds by normalized project name or a narrowly
+  shared X task identity and attaches the original raffles. Exceptional rows
+  contribute no allocation unless they are ended, non-empty wins. It must never
+  copy participants, winners, proofs, or wallet addresses into CRM data.
+- Successfully published raffles in connected guilds must automatically gain a
+  `CollaborationRaffle` link. The bot reuses an active same-partner campaign or
+  creates a new tenant-scoped collaboration, and its minute sweep retries any
+  published UPCOMING/LIVE/ENDED raffle missed by the immediate publish hook.
+  Failed Discord publishes must not create collaboration records.
+- Collab Hub is a relationship view, so repeated GTD/FCFS rounds may appear as
+  one grouped collaboration card. Surface the all-time connected-raffle count
+  separately and link teams to `/:org/raffles` when they need the one-row-per-
+  raffle archive.
 - The historical pairing heuristic treats an unlabeled same-project round as
   GTD when it is paired with an explicit FCFS round. A shared X handle may only
   bridge two normalized project-name variants so a community account cannot
@@ -264,10 +275,11 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   full-frame `object-contain` presentation and a branded fallback when its
   source is unavailable.
 - Discord interaction attachment URLs under `ephemeral-attachments` expire.
-  Older expired files cannot be recovered from their stored URL; never rely on
-  one as durable dashboard media. Dashboard-uploaded banners use Vercel Blob,
-  while durable persistence for future Discord-uploaded banners remains a
-  separate hardening task.
+  Older expired files cannot be recovered from their stored URL. Before a new
+  Discord-uploaded banner is published, the bot must validate and copy at most
+  5 MB into `RaffleBannerAsset`, replace `Raffle.bannerUrl` with the versioned
+  public `/r/:id/banner` URL, and only then send the raffle post. Dashboard
+  uploads continue to use Vercel Blob.
 - Collaboration file downloads require `collab:view`; uploads/deletes require
   `collab:edit`. Store files as private Blob objects and never return their raw
   storage URL. Wallet CSV proof artifacts additionally require `collab:export`.

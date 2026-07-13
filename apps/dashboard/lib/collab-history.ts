@@ -23,6 +23,22 @@ export interface HistoricalRaffle {
 
 export type HistoricalRaffleVariant = "GTD" | "FCFS" | "WL";
 
+export interface HistoricalImportOptions {
+  includeEmpty?: boolean;
+  includeCancelled?: boolean;
+  includeTests?: boolean;
+}
+
+export interface HistoricalImportPreview {
+  totalUnlinked: number;
+  defaultEligible: number;
+  empty: number;
+  cancelled: number;
+  test: number;
+  selected: number;
+  groups: number;
+}
+
 export interface HistoricalCollaborationGroup {
   key: string;
   projectName: string;
@@ -36,6 +52,7 @@ export interface HistoricalCollaborationGroup {
   hostedById: string;
   xUrl: string | null;
   websiteUrl: string | null;
+  status: "COMPLETED" | "CANCELLED";
 }
 
 const RESERVED_X_PATHS = new Set([
@@ -123,9 +140,52 @@ export function historicalRaffleVariant(
 
 export function isImportableHistoricalRaffle(
   raffle: HistoricalRaffle,
+  options: HistoricalImportOptions = {},
 ): boolean {
-  if (raffle.status !== "ENDED" || raffle.entryCount < 1) return false;
-  return !/\btests?(?:y|ing)?\b/i.test(`${raffle.projectName} ${raffle.title}`);
+  if (raffle.status !== "ENDED" && raffle.status !== "CANCELLED") return false;
+  if (raffle.status === "CANCELLED" && !options.includeCancelled) return false;
+  if (
+    raffle.status === "ENDED" &&
+    raffle.entryCount < 1 &&
+    !options.includeEmpty
+  ) {
+    return false;
+  }
+  if (
+    /\btests?(?:y|ing)?\b/i.test(`${raffle.projectName} ${raffle.title}`) &&
+    !options.includeTests
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export function previewHistoricalRaffles(
+  input: HistoricalRaffle[],
+  options: HistoricalImportOptions = {},
+): HistoricalImportPreview {
+  const supported = input.filter((raffle) =>
+    ["ENDED", "CANCELLED"].includes(raffle.status),
+  );
+  const selected = supported.filter((raffle) =>
+    isImportableHistoricalRaffle(raffle, options),
+  );
+  return {
+    totalUnlinked: supported.length,
+    defaultEligible: supported.filter((raffle) =>
+      isImportableHistoricalRaffle(raffle),
+    ).length,
+    empty: supported.filter(
+      (raffle) => raffle.status === "ENDED" && raffle.entryCount < 1,
+    ).length,
+    cancelled: supported.filter((raffle) => raffle.status === "CANCELLED")
+      .length,
+    test: supported.filter((raffle) =>
+      /\btests?(?:y|ing)?\b/i.test(`${raffle.projectName} ${raffle.title}`),
+    ).length,
+    selected: selected.length,
+    groups: groupHistoricalRaffles(selected, options).length,
+  };
 }
 
 export function extractHistoricalXHandles(raffle: HistoricalRaffle): string[] {
@@ -209,8 +269,11 @@ function resolveHistoricalHost(raffles: HistoricalRaffle[]): string {
 
 export function groupHistoricalRaffles(
   input: HistoricalRaffle[],
+  options: HistoricalImportOptions = {},
 ): HistoricalCollaborationGroup[] {
-  const raffles = input.filter(isImportableHistoricalRaffle);
+  const raffles = input.filter((raffle) =>
+    isImportableHistoricalRaffle(raffle, options),
+  );
   const parents = raffles.map((_, index) => index);
   const find = (index: number): number => {
     while (parents[index] !== index) {
@@ -305,7 +368,7 @@ export function groupHistoricalRaffles(
       const raffleSummary = ordered
         .map(
           (raffle) =>
-            `#${raffle.id} ${historicalRaffleVariant(raffle)} (${raffle.spots} spots)`,
+            `#${raffle.id} ${raffle.status === "CANCELLED" ? "cancelled" : historicalRaffleVariant(raffle)} (${raffle.spots} spots)`,
         )
         .join(", ");
       const requirements = [
@@ -332,7 +395,11 @@ export function groupHistoricalRaffles(
         raffleIds: ordered.map((raffle) => raffle.id),
         variants,
         whitelistAllocation: ordered.reduce(
-          (total, raffle) => total + Math.max(0, raffle.spots),
+          (total, raffle) =>
+            total +
+            (raffle.status === "ENDED" && raffle.entryCount > 0
+              ? Math.max(0, raffle.spots)
+              : 0),
           0,
         ),
         hostAt: ordered.reduce((earliest, raffle) => {
@@ -344,6 +411,9 @@ export function groupHistoricalRaffles(
         hostedById: resolveHistoricalHost(ordered),
         xUrl: primaryHandle ? `https://x.com/${primaryHandle}` : null,
         websiteUrl: latestWithWebsite?.externalUrl?.trim() || null,
+        status: ordered.some((raffle) => raffle.status === "ENDED")
+          ? "COMPLETED"
+          : "CANCELLED",
       };
     })
     .sort((a, b) => b.completedAt.getTime() - a.completedAt.getTime());

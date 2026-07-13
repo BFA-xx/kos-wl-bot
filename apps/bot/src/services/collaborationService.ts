@@ -2,6 +2,7 @@ import {
   CollaborationStatus,
   CollaborationSubmissionStatus,
   CollaborationWalletStatus,
+  RaffleStatus,
   prisma,
 } from "@kos/db";
 import { logger } from "../logger.js";
@@ -15,21 +16,334 @@ const ACTIVE_BATCH_SIZE = 100;
 const REMINDER_BATCH_SIZE = 50;
 const REMINDER_TIME_BUDGET_MS = 20_000;
 const AUTOMATION_CURSOR_KEY = "collab-automation-cursor";
+const AUTO_LINK_BATCH_SIZE = 50;
+const REUSABLE_STATUSES = [
+  CollaborationStatus.LEAD,
+  CollaborationStatus.REACHED_OUT,
+  CollaborationStatus.NEGOTIATING,
+  CollaborationStatus.CONFIRMED,
+  CollaborationStatus.SCHEDULED,
+  CollaborationStatus.HOSTING,
+  CollaborationStatus.COLLECTING_WALLETS,
+  CollaborationStatus.READY_FOR_SUBMISSION,
+] as const;
+const TAG_COLORS = {
+  GTD: "#8B5CF6",
+  FCFS: "#3B82F6",
+  WL: "#10B981",
+} as const;
+const RESERVED_X_PATHS = new Set([
+  "home",
+  "i",
+  "intent",
+  "search",
+  "share",
+  "status",
+]);
 
 interface AutomationCursor {
   lastActivityAt: string;
   id: string;
 }
 
+export function cleanProjectName(value: string): string {
+  return (
+    value
+      .trim()
+      .replace(/^kos\s*[x×]\s*/i, "")
+      .replace(/[\s,;:!?._-]+$/g, "")
+      .replace(/\s+/g, " ") || "Untitled partner"
+  );
+}
+
+export function normalizedProjectName(value: string): string {
+  return cleanProjectName(value).toLocaleLowerCase().replace(/\s+/g, " ");
+}
+
+export function projectKey(value: string): string {
+  const compact = cleanProjectName(value)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  return compact.length > 4 ? compact.replace(/nft$/, "") : compact;
+}
+
+export function raffleVariant(projectName: string, title: string) {
+  const value = `${projectName} ${title}`.toLowerCase();
+  if (/\bfcfs\b/.test(value)) return "FCFS" as const;
+  if (/\bgtds?\b/.test(value)) return "GTD" as const;
+  return "WL" as const;
+}
+
+function httpUrl(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value.trim());
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function xProfileUrl(value: string | null): string | null {
+  const normalized = httpUrl(value);
+  if (!normalized) return null;
+  const url = new URL(normalized);
+  if (
+    !["x.com", "www.x.com", "twitter.com", "www.twitter.com"].includes(
+      url.hostname.toLowerCase(),
+    )
+  ) {
+    return null;
+  }
+  const handle = url.pathname.split("/").filter(Boolean)[0];
+  if (
+    !handle ||
+    !/^[a-z0-9_]{1,15}$/i.test(handle) ||
+    RESERVED_X_PATHS.has(handle.toLowerCase())
+  ) {
+    return null;
+  }
+  return `https://x.com/${handle.toLowerCase()}`;
+}
+
+/**
+ * Ensure a successfully hosted raffle has one tenant-scoped Collab Hub link.
+ * Existing active work for the same partner is reused; terminal relationships
+ * remain historical and a new campaign record is created.
+ */
+export async function ensureCollaborationForRaffle(
+  raffleId: number,
+): Promise<string | null> {
+  const existingLink = await prisma.collaborationRaffle.findUnique({
+    where: { raffleId },
+    select: { collaborationId: true },
+  });
+  if (existingLink) return existingLink.collaborationId;
+
+  const raffle = await prisma.raffle.findUnique({
+    where: { id: raffleId },
+    select: {
+      id: true,
+      guildId: true,
+      projectName: true,
+      title: true,
+      spots: true,
+      status: true,
+      startAt: true,
+      endAt: true,
+      createdById: true,
+      externalUrl: true,
+    },
+  });
+  if (!raffle || raffle.status === RaffleStatus.DRAFT) return null;
+
+  const connection = await prisma.guildConnection.findUnique({
+    where: { guildId: raffle.guildId },
+    select: {
+      organization: {
+        select: {
+          id: true,
+          ownerId: true,
+          members: {
+            where: { status: "ACTIVE" },
+            select: { userId: true },
+            orderBy: { createdAt: "asc" },
+          },
+        },
+      },
+    },
+  });
+  if (!connection) return null;
+
+  const org = connection.organization;
+  const displayName = cleanProjectName(raffle.projectName);
+  const normalizedName = normalizedProjectName(displayName);
+  const key = projectKey(displayName);
+  const xUrl = xProfileUrl(raffle.externalUrl);
+  const websiteUrl = xUrl ? null : httpUrl(raffle.externalUrl);
+  const partners = await prisma.collaborationPartner.findMany({
+    where: { organizationId: org.id },
+    select: {
+      id: true,
+      normalizedName: true,
+      websiteUrl: true,
+      xUrl: true,
+    },
+  });
+  const matchedPartner = partners.find(
+    (partner) =>
+      projectKey(partner.normalizedName) === key ||
+      (xUrl && partner.xUrl?.toLowerCase() === xUrl.toLowerCase()),
+  );
+  const partner = matchedPartner
+    ? await prisma.collaborationPartner.update({
+        where: { id: matchedPartner.id },
+        data: {
+          websiteUrl: matchedPartner.websiteUrl ?? websiteUrl,
+          xUrl: matchedPartner.xUrl ?? xUrl,
+        },
+      })
+    : await prisma.collaborationPartner.upsert({
+        where: {
+          organizationId_normalizedName: {
+            organizationId: org.id,
+            normalizedName,
+          },
+        },
+        create: {
+          organizationId: org.id,
+          name: displayName,
+          normalizedName,
+          websiteUrl,
+          xUrl,
+          createdById: raffle.createdById,
+        },
+        update: {
+          name: displayName,
+          ...(websiteUrl ? { websiteUrl } : {}),
+          ...(xUrl ? { xUrl } : {}),
+        },
+      });
+
+  const reusable = await prisma.collaboration.findFirst({
+    where: {
+      organizationId: org.id,
+      partnerId: partner.id,
+      archivedAt: null,
+      status: { in: [...REUSABLE_STATUSES] },
+    },
+    include: {
+      raffles: { select: { raffle: { select: { spots: true } } } },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  const teamIds = new Set(org.members.map((member) => member.userId));
+  const hostedById = teamIds.has(raffle.createdById)
+    ? raffle.createdById
+    : (org.members[0]?.userId ?? org.ownerId);
+  const variant = raffleVariant(raffle.projectName, raffle.title);
+  const targetStatus =
+    raffle.status === RaffleStatus.UPCOMING
+      ? CollaborationStatus.SCHEDULED
+      : CollaborationStatus.HOSTING;
+  const requirementSummary = `Auto-linked raffle #${raffle.id} ${variant} (${raffle.spots} spots).`;
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const racedLink = await tx.collaborationRaffle.findUnique({
+        where: { raffleId },
+        select: { collaborationId: true },
+      });
+      if (racedLink) return racedLink.collaborationId;
+
+      const collaboration = reusable
+        ? await tx.collaboration.update({
+            where: { id: reusable.id },
+            data: {
+              projectName: displayName,
+              status: targetStatus,
+              whitelistAllocation: Math.max(
+                reusable.whitelistAllocation,
+                reusable.raffles.reduce(
+                  (total, link) => total + Math.max(0, link.raffle.spots),
+                  Math.max(0, raffle.spots),
+                ),
+              ),
+              requirements: [reusable.requirements, requirementSummary]
+                .filter(Boolean)
+                .join("\n"),
+              ownerId: hostedById,
+              hostAt:
+                reusable.hostAt && reusable.hostAt < raffle.startAt
+                  ? reusable.hostAt
+                  : raffle.startAt,
+              hostingDeadline:
+                reusable.hostingDeadline &&
+                reusable.hostingDeadline > raffle.endAt
+                  ? reusable.hostingDeadline
+                  : raffle.endAt,
+              lastActivityAt: new Date(),
+            },
+          })
+        : await tx.collaboration.create({
+            data: {
+              organizationId: org.id,
+              partnerId: partner.id,
+              projectName: displayName,
+              status: targetStatus,
+              priority: "MEDIUM",
+              submissionStatus: CollaborationSubmissionStatus.NOT_STARTED,
+              whitelistAllocation: Math.max(0, raffle.spots),
+              requirements: requirementSummary,
+              ownerId: hostedById,
+              hostAt: raffle.startAt,
+              hostingDeadline: raffle.endAt,
+              lastActivityAt: new Date(),
+              createdById: raffle.createdById,
+            },
+          });
+
+      await tx.collaborationRaffle.create({
+        data: {
+          collaborationId: collaboration.id,
+          raffleId,
+          attachedById: raffle.createdById,
+        },
+      });
+      const tag = await tx.collaborationTag.upsert({
+        where: {
+          organizationId_normalizedName: {
+            organizationId: org.id,
+            normalizedName: variant.toLowerCase(),
+          },
+        },
+        create: {
+          organizationId: org.id,
+          name: variant,
+          normalizedName: variant.toLowerCase(),
+          color: TAG_COLORS[variant],
+        },
+        update: { name: variant, color: TAG_COLORS[variant] },
+      });
+      await tx.collaborationTagAssignment.createMany({
+        data: [{ collaborationId: collaboration.id, tagId: tag.id }],
+        skipDuplicates: true,
+      });
+      await tx.collaborationActivity.create({
+        data: {
+          collaborationId: collaboration.id,
+          actorId: raffle.createdById,
+          action: "RAFFLE_AUTO_LINKED",
+          title: `Raffle #${raffle.id} connected automatically`,
+          body: `${raffle.projectName} · ${raffle.title}`,
+          metadata: { raffleId: raffle.id, variant },
+        },
+      });
+      return collaboration.id;
+    });
+  } catch (error) {
+    const racedLink = await prisma.collaborationRaffle.findUnique({
+      where: { raffleId },
+      select: { collaborationId: true },
+    });
+    if (racedLink) return racedLink.collaborationId;
+    throw error;
+  }
+}
+
 /** Reconcile the Collab Hub record linked to one raffle after a draw. */
 export async function syncCollaborationForRaffle(
   raffleId: number,
 ): Promise<void> {
-  const link = await prisma.collaborationRaffle.findUnique({
+  const existing = await prisma.collaborationRaffle.findUnique({
     where: { raffleId },
     select: { collaborationId: true },
   });
-  if (link) await syncCollaboration(link.collaborationId);
+  const collaborationId =
+    existing?.collaborationId ?? (await ensureCollaborationForRaffle(raffleId));
+  if (collaborationId) await syncCollaboration(collaborationId);
 }
 
 async function syncCollaboration(collaborationId: string): Promise<void> {
@@ -159,6 +473,7 @@ async function syncCollaboration(collaborationId: string): Promise<void> {
 
 /** Sweep active records and deliver organization-team reminder notifications. */
 export async function processCollaborationAutomations(): Promise<void> {
+  await autoLinkHostedRaffles();
   let cursor = await readAutomationCursor();
   let active = await findActiveBatch(cursor);
   if (!active.length && cursor) {
@@ -211,6 +526,34 @@ export async function processCollaborationAutomations(): Promise<void> {
   while (Date.now() - startedAt < REMINDER_TIME_BUDGET_MS) {
     const processed = await processReminderBatch();
     if (processed < REMINDER_BATCH_SIZE) break;
+  }
+}
+
+async function autoLinkHostedRaffles(): Promise<void> {
+  const guildIds = (
+    await prisma.guildConnection.findMany({ select: { guildId: true } })
+  ).map((connection) => connection.guildId);
+  if (!guildIds.length) return;
+  const raffles = await prisma.raffle.findMany({
+    where: {
+      guildId: { in: guildIds },
+      status: {
+        in: [RaffleStatus.UPCOMING, RaffleStatus.LIVE, RaffleStatus.ENDED],
+      },
+      messageId: { not: null },
+      collaborationLink: { is: null },
+    },
+    select: { id: true },
+    orderBy: { id: "asc" },
+    take: AUTO_LINK_BATCH_SIZE,
+  });
+  for (const raffle of raffles) {
+    await syncCollaborationForRaffle(raffle.id).catch((error) =>
+      logger.warn(
+        { error, raffleId: raffle.id },
+        "hosted raffle Collab Hub auto-link sync failed",
+      ),
+    );
   }
 }
 

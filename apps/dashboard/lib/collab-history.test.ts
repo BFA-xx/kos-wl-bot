@@ -3,6 +3,7 @@ import {
   extractHistoricalXHandles,
   groupHistoricalRaffles,
   isImportableHistoricalRaffle,
+  previewHistoricalRaffles,
   type HistoricalRaffle,
 } from "./collab-history";
 
@@ -103,6 +104,48 @@ describe("historical Collab Hub import", () => {
         entryCount: 0,
       }),
     ).toBe(false);
+  });
+
+  it("can preview and explicitly include exceptional history", () => {
+    const input = [
+      raffle(20, "Normal", "GTD"),
+      { ...raffle(21, "Empty", "GTD"), entryCount: 0 },
+      { ...raffle(22, "Cancelled", "FCFS"), status: "CANCELLED" },
+      raffle(23, "Test project", "GTD"),
+    ];
+
+    expect(previewHistoricalRaffles(input)).toMatchObject({
+      totalUnlinked: 4,
+      defaultEligible: 1,
+      empty: 1,
+      cancelled: 1,
+      test: 1,
+      selected: 1,
+    });
+    expect(
+      previewHistoricalRaffles(input, {
+        includeEmpty: true,
+        includeCancelled: true,
+        includeTests: true,
+      }),
+    ).toMatchObject({ selected: 4, groups: 4 });
+  });
+
+  it("does not count empty or cancelled attempts as WL allocation", () => {
+    const groups = groupHistoricalRaffles(
+      [
+        raffle(30, "Project", "GTD"),
+        { ...raffle(31, "Project", "FCFS"), entryCount: 0 },
+        { ...raffle(32, "Project", "Retry"), status: "CANCELLED" },
+      ],
+      { includeEmpty: true, includeCancelled: true },
+    );
+
+    expect(groups[0]).toMatchObject({
+      raffleIds: [30, 31, 32],
+      whitelistAllocation: 3,
+      status: "COMPLETED",
+    });
   });
 
   it("extracts and normalizes handles from legacy task URLs", () => {

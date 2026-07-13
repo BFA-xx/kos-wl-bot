@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "deploy:commands": "tsx src/deploy-commands.ts",
-    "test": "tsx --test src/embeds/*.test.ts",
+    "test": "tsx --test src/embeds/*.test.ts src/services/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

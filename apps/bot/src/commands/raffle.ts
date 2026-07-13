@@ -29,6 +29,7 @@ import { getWinnerWallets } from "../services/walletService.js";
 import { stashBanner } from "../services/pendingRaffles.js";
 import { buildId, Actions } from "../utils/ids.js";
 import { participantsCsv, winnersCsv } from "../proof/csv.js";
+import { persistDiscordRaffleBanner } from "../services/raffleBannerService.js";
 
 export const raffleCommand: Command = {
   managerOnly: true,
@@ -43,16 +44,24 @@ export const raffleCommand: Command = {
         .setName("create")
         .setDescription("Create a whitelist raffle (opens a setup form)")
         .addAttachmentOption((o) =>
-          o.setName("banner").setDescription("Optional banner image (drag & drop)"),
+          o
+            .setName("banner")
+            .setDescription("Optional banner image (drag & drop)"),
         ),
     )
     // ---- repost ----
     .addSubcommand((sub) =>
       sub
         .setName("repost")
-        .setDescription("Re-post a raffle's embed (e.g. after fixing permissions)")
+        .setDescription(
+          "Re-post a raffle's embed (e.g. after fixing permissions)",
+        )
         .addIntegerOption((o) =>
-          o.setName("id").setDescription("Raffle ID").setRequired(true).setAutocomplete(true),
+          o
+            .setName("id")
+            .setDescription("Raffle ID")
+            .setRequired(true)
+            .setAutocomplete(true),
         ),
     )
     // ---- edit ----
@@ -60,17 +69,47 @@ export const raffleCommand: Command = {
       sub
         .setName("edit")
         .setDescription("Edit an existing raffle")
-        .addIntegerOption((o) => o.setName("id").setDescription("Raffle ID").setRequired(true).setAutocomplete(true))
-        .addStringOption((o) => o.setName("project").setDescription("New project name"))
-        .addStringOption((o) => o.setName("title").setDescription("New title (e.g. GTD / FCFS)"))
-        .addStringOption((o) => o.setName("description").setDescription("New description"))
-        .addIntegerOption((o) => o.setName("spots").setDescription("New WL spot count").setMinValue(1))
-        .addStringOption((o) => o.setName("start").setDescription("New start (now, 2026-06-25 17:00, tomorrow 5pm)"))
-        .addStringOption((o) => o.setName("end").setDescription("New end (24h, 2d, or 2026-06-26 17:00)"))
-        .addStringOption((o) => o.setName("link").setDescription("New external link"))
-        .addAttachmentOption((o) => o.setName("banner").setDescription("New banner image"))
+        .addIntegerOption((o) =>
+          o
+            .setName("id")
+            .setDescription("Raffle ID")
+            .setRequired(true)
+            .setAutocomplete(true),
+        )
+        .addStringOption((o) =>
+          o.setName("project").setDescription("New project name"),
+        )
+        .addStringOption((o) =>
+          o.setName("title").setDescription("New title (e.g. GTD / FCFS)"),
+        )
+        .addStringOption((o) =>
+          o.setName("description").setDescription("New description"),
+        )
+        .addIntegerOption((o) =>
+          o.setName("spots").setDescription("New WL spot count").setMinValue(1),
+        )
+        .addStringOption((o) =>
+          o
+            .setName("start")
+            .setDescription("New start (now, 2026-06-25 17:00, tomorrow 5pm)"),
+        )
+        .addStringOption((o) =>
+          o
+            .setName("end")
+            .setDescription("New end (24h, 2d, or 2026-06-26 17:00)"),
+        )
+        .addStringOption((o) =>
+          o.setName("link").setDescription("New external link"),
+        )
+        .addAttachmentOption((o) =>
+          o.setName("banner").setDescription("New banner image"),
+        )
         .addBooleanOption((o) =>
-          o.setName("hide_entries").setDescription("Hide (true) or show (false) the entry count on the post"),
+          o
+            .setName("hide_entries")
+            .setDescription(
+              "Hide (true) or show (false) the entry count on the post",
+            ),
         ),
     )
     // ---- delete ----
@@ -78,21 +117,39 @@ export const raffleCommand: Command = {
       sub
         .setName("delete")
         .setDescription("Delete a raffle and its message")
-        .addIntegerOption((o) => o.setName("id").setDescription("Raffle ID").setRequired(true).setAutocomplete(true)),
+        .addIntegerOption((o) =>
+          o
+            .setName("id")
+            .setDescription("Raffle ID")
+            .setRequired(true)
+            .setAutocomplete(true),
+        ),
     )
     // ---- end ----
     .addSubcommand((sub) =>
       sub
         .setName("end")
         .setDescription("End a raffle now and draw winners")
-        .addIntegerOption((o) => o.setName("id").setDescription("Raffle ID").setRequired(true).setAutocomplete(true)),
+        .addIntegerOption((o) =>
+          o
+            .setName("id")
+            .setDescription("Raffle ID")
+            .setRequired(true)
+            .setAutocomplete(true),
+        ),
     )
     // ---- reroll ----
     .addSubcommand((sub) =>
       sub
         .setName("reroll")
         .setDescription("Reroll winners of an ended raffle")
-        .addIntegerOption((o) => o.setName("id").setDescription("Raffle ID").setRequired(true).setAutocomplete(true))
+        .addIntegerOption((o) =>
+          o
+            .setName("id")
+            .setDescription("Raffle ID")
+            .setRequired(true)
+            .setAutocomplete(true),
+        )
         .addStringOption((o) =>
           o
             .setName("mode")
@@ -104,8 +161,15 @@ export const raffleCommand: Command = {
               { name: "Entire winner pool", value: "all" },
             ),
         )
-        .addUserOption((o) => o.setName("user").setDescription("Winner to replace (single mode)"))
-        .addIntegerOption((o) => o.setName("count").setDescription("How many to replace (multiple mode)").setMinValue(1)),
+        .addUserOption((o) =>
+          o.setName("user").setDescription("Winner to replace (single mode)"),
+        )
+        .addIntegerOption((o) =>
+          o
+            .setName("count")
+            .setDescription("How many to replace (multiple mode)")
+            .setMinValue(1),
+        ),
     )
     // ---- list ----
     .addSubcommand((sub) =>
@@ -125,14 +189,22 @@ export const raffleCommand: Command = {
     )
     // ---- stats ----
     .addSubcommand((sub) =>
-      sub.setName("stats").setDescription("Show raffle statistics for this server"),
+      sub
+        .setName("stats")
+        .setDescription("Show raffle statistics for this server"),
     )
     // ---- export ----
     .addSubcommand((sub) =>
       sub
         .setName("export")
         .setDescription("Export raffle data as CSV")
-        .addIntegerOption((o) => o.setName("id").setDescription("Raffle ID").setRequired(true).setAutocomplete(true))
+        .addIntegerOption((o) =>
+          o
+            .setName("id")
+            .setDescription("Raffle ID")
+            .setRequired(true)
+            .setAutocomplete(true),
+        )
         .addStringOption((o) =>
           o
             .setName("type")
@@ -166,7 +238,10 @@ export const raffleCommand: Command = {
       case "export":
         return handleExport(interaction);
       default:
-        await interaction.reply({ content: "Unknown subcommand.", flags: MessageFlags.Ephemeral });
+        await interaction.reply({
+          content: "Unknown subcommand.",
+          flags: MessageFlags.Ephemeral,
+        });
     }
   },
 
@@ -184,9 +259,15 @@ export const raffleCommand: Command = {
     const q = String(focused.value).toLowerCase();
     await interaction.respond(
       raffles
-        .filter((r) => !q || String(r.id).includes(q) || r.title.toLowerCase().includes(q))
+        .filter(
+          (r) =>
+            !q || String(r.id).includes(q) || r.title.toLowerCase().includes(q),
+        )
         .slice(0, 25)
-        .map((r) => ({ name: `#${r.id} · ${r.title} [${r.status}]`.slice(0, 100), value: r.id })),
+        .map((r) => ({
+          name: `#${r.id} · ${r.title} [${r.status}]`.slice(0, 100),
+          value: r.id,
+        })),
     );
   },
 };
@@ -292,7 +373,15 @@ async function handleEdit(interaction: ChatInputCommandInteraction) {
   if (description !== null) data.description = description || null;
   if (spots) data.spots = spots;
   if (link !== null) data.externalUrl = link || null;
-  if (banner?.url) data.bannerUrl = banner.url;
+  if (banner?.url) {
+    try {
+      data.bannerUrl = await persistDiscordRaffleBanner(id, banner.url);
+    } catch (error) {
+      return interaction.editReply(
+        `${KOS.emoji.cross} I couldn't store that banner safely. Re-attach the image and try again.`,
+      );
+    }
+  }
   if (hideEntries !== null) data.hideEntries = hideEntries;
 
   // Time edits: recompute start/end and the live status so the schedule stays
@@ -302,14 +391,16 @@ async function handleEdit(interaction: ChatInputCommandInteraction) {
     let startAt = raffle.startAt;
     if (startStr) {
       const parsed = resolveWhen(startStr, now);
-      if (!parsed) return interaction.editReply("Could not read the new **start** time.");
+      if (!parsed)
+        return interaction.editReply("Could not read the new **start** time.");
       startAt = parsed;
       data.startAt = parsed;
     }
     let endAt = raffle.endAt;
     if (endStr) {
       const parsed = resolveWhen(endStr, startAt);
-      if (!parsed) return interaction.editReply("Could not read the new **end** time.");
+      if (!parsed)
+        return interaction.editReply("Could not read the new **end** time.");
       endAt = parsed;
       data.endAt = parsed;
     }
@@ -326,7 +417,9 @@ async function handleEdit(interaction: ChatInputCommandInteraction) {
   }
 
   if (Object.keys(data).length === 0) {
-    return interaction.editReply("Nothing to update — provide at least one field.");
+    return interaction.editReply(
+      "Nothing to update — provide at least one field.",
+    );
   }
 
   await editRaffle(id, interaction.user.id, data);
@@ -356,13 +449,18 @@ async function handleEnd(interaction: ChatInputCommandInteraction) {
     return interaction.editReply("That raffle has already ended.");
   }
   await closeAndDraw(interaction.client, id, interaction.user.id);
-  await interaction.editReply(`${KOS.emoji.check} Ended raffle #${id} and drew winners. Proof delivered.`);
+  await interaction.editReply(
+    `${KOS.emoji.check} Ended raffle #${id} and drew winners. Proof delivered.`,
+  );
 }
 
 async function handleReroll(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const id = interaction.options.getInteger("id", true);
-  const mode = interaction.options.getString("mode", true) as "single" | "multiple" | "all";
+  const mode = interaction.options.getString("mode", true) as
+    | "single"
+    | "multiple"
+    | "all";
   const user = interaction.options.getUser("user");
   const count = interaction.options.getInteger("count") ?? undefined;
 
@@ -371,17 +469,25 @@ async function handleReroll(interaction: ChatInputCommandInteraction) {
     return interaction.editReply("Raffle not found.");
   }
 
-  const result = await rerollWinners(interaction.client, id, interaction.user.id, {
-    mode,
-    userIds: user ? [user.id] : undefined,
-    count,
-  });
+  const result = await rerollWinners(
+    interaction.client,
+    id,
+    interaction.user.id,
+    {
+      mode,
+      userIds: user ? [user.id] : undefined,
+      count,
+    },
+  );
   if (!result) {
-    return interaction.editReply("Reroll failed — the raffle must be ENDED with eligible replacements available.");
+    return interaction.editReply(
+      "Reroll failed — the raffle must be ENDED with eligible replacements available.",
+    );
   }
   await interaction.editReply(
     `${KOS.emoji.check} Rerolled ${result.replaced.length} winner(s). New: ${
-      result.added.map((w) => `<@${w.userId}>`).join(", ") || "none (pool exhausted)"
+      result.added.map((w) => `<@${w.userId}>`).join(", ") ||
+      "none (pool exhausted)"
     }`,
   );
 }
@@ -416,11 +522,27 @@ async function handleStats(interaction: ChatInputCommandInteraction) {
     .setColor(KOS.colors.silver)
     .setTitle(`${KOS.emoji.diamond} Raffle Statistics`)
     .addFields(
-      { name: "Total Raffles", value: String(stats.totalRaffles), inline: true },
+      {
+        name: "Total Raffles",
+        value: String(stats.totalRaffles),
+        inline: true,
+      },
       { name: "Live Now", value: String(stats.liveRaffles), inline: true },
-      { name: "Total Winners", value: String(stats.totalWinners), inline: true },
-      { name: "Total Entries", value: String(stats.totalEntries), inline: true },
-      { name: "Unique Participants", value: String(stats.uniqueParticipants), inline: true },
+      {
+        name: "Total Winners",
+        value: String(stats.totalWinners),
+        inline: true,
+      },
+      {
+        name: "Total Entries",
+        value: String(stats.totalEntries),
+        inline: true,
+      },
+      {
+        name: "Unique Participants",
+        value: String(stats.uniqueParticipants),
+        inline: true,
+      },
     )
     .setFooter({ text: KOS.footer });
   await interaction.editReply({ embeds: [embed] });
@@ -452,6 +574,8 @@ async function handleExport(interaction: ChatInputCommandInteraction) {
 
   await interaction.editReply({
     content: `${KOS.emoji.check} Export ready for raffle #${id}.`,
-    files: [new AttachmentBuilder(Buffer.from(csv, "utf8"), { name: filename })],
+    files: [
+      new AttachmentBuilder(Buffer.from(csv, "utf8"), { name: filename }),
+    ],
   });
 }

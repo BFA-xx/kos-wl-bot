@@ -7,7 +7,7 @@ import useSWR from "swr";
 import { motion } from "framer-motion";
 import { Empty, PageTitle, SectionTitle, StatCard, TableShell } from "./ui";
 import { CollabCreatePanel } from "./CollabCreatePanel";
-import { PartnerMark } from "./CollabMedia";
+import { PartnerMark, RaffleBanner } from "./CollabMedia";
 import {
   IconChart,
   IconCheck,
@@ -18,7 +18,10 @@ import {
 } from "./icons";
 import { useCan } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
-import { partnerDescriptor } from "@/lib/collab-presentation";
+import {
+  collaborationBannerUrls,
+  partnerDescriptor,
+} from "@/lib/collab-presentation";
 import {
   COLLAB_PRIORITIES,
   COLLAB_PRIORITY_LABELS,
@@ -67,7 +70,16 @@ interface CollabRow {
     trustRating: number | null;
   };
   tags: { tag: { id: string; name: string; color: string } }[];
-  raffles: { raffle: { id: number; status: string; title: string } }[];
+  raffles: {
+    raffle: {
+      id: number;
+      projectName: string;
+      status: string;
+      title: string;
+      bannerUrl: string | null;
+      endAt: string;
+    };
+  }[];
   reminders: { id: string; title: string; type: string; dueAt: string }[];
   walletProgress: {
     total: number;
@@ -88,6 +100,7 @@ interface HubData {
     readyForSubmission: number;
     completedAllTime: number;
     totalWlSpots: number;
+    linkedRafflesAllTime: number;
     unlinkedRaffles: number;
   };
   team: Person[];
@@ -131,6 +144,28 @@ interface HubData {
     activityHistory: { key: string; label: string; value: number }[];
   };
 }
+
+interface ImportOptions {
+  includeEmpty: boolean;
+  includeCancelled: boolean;
+  includeTests: boolean;
+}
+
+interface ImportPreview {
+  totalUnlinked: number;
+  defaultEligible: number;
+  empty: number;
+  cancelled: number;
+  test: number;
+  selected: number;
+  groups: number;
+}
+
+const DEFAULT_IMPORT_OPTIONS: ImportOptions = {
+  includeEmpty: false,
+  includeCancelled: false,
+  includeTests: false,
+};
 
 interface Partner {
   id: string;
@@ -195,6 +230,14 @@ export function CollabHub() {
   const [showCreate, setShowCreate] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [importingHistory, setImportingHistory] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [loadingImportPreview, setLoadingImportPreview] = useState(false);
+  const [importOptions, setImportOptions] = useState<ImportOptions>(
+    DEFAULT_IMPORT_OPTIONS,
+  );
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(
+    null,
+  );
   const [showColumns, setShowColumns] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<TableColumn>>(
     () => new Set(TABLE_COLUMNS),
@@ -365,6 +408,43 @@ export function CollabHub() {
     }
   }
 
+  async function loadImportPreview(options: ImportOptions) {
+    setLoadingImportPreview(true);
+    const params = new URLSearchParams();
+    if (options.includeEmpty) params.set("includeEmpty", "1");
+    if (options.includeCancelled) params.set("includeCancelled", "1");
+    if (options.includeTests) params.set("includeTests", "1");
+    try {
+      const res = await fetch(
+        `/api/${org}/collaborations/import-history?${params}`,
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessage(body.error ?? "Couldn't preview raffle history.");
+        return;
+      }
+      setImportPreview(body as ImportPreview);
+    } catch {
+      setMessage("Couldn't preview raffle history. Check your connection.");
+    } finally {
+      setLoadingImportPreview(false);
+    }
+  }
+
+  function openImport() {
+    const options = { ...DEFAULT_IMPORT_OPTIONS };
+    setImportOptions(options);
+    setImportPreview(null);
+    setShowImport(true);
+    void loadImportPreview(options);
+  }
+
+  function updateImportOption(key: keyof ImportOptions, checked: boolean) {
+    const options = { ...importOptions, [key]: checked };
+    setImportOptions(options);
+    void loadImportPreview(options);
+  }
+
   async function importHistory() {
     if (importingHistory) return;
     setImportingHistory(true);
@@ -372,6 +452,8 @@ export function CollabHub() {
     try {
       const res = await fetch(`/api/${org}/collaborations/import-history`, {
         method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(importOptions),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -383,6 +465,7 @@ export function CollabHub() {
           ? `Imported ${body.raffles} raffles into ${body.collaborations} partner collaboration${body.collaborations === 1 ? "" : "s"}.`
           : "Raffle history is already up to date.",
       );
+      setShowImport(false);
       await mutate();
     } catch {
       setMessage(
@@ -413,6 +496,17 @@ export function CollabHub() {
           team={data?.team ?? []}
           onClose={() => setShowCreate(false)}
           onCreated={(id) => router.push(`/${org}/collabs/${id}`)}
+        />
+      ) : null}
+      {showImport ? (
+        <HistoryImportPanel
+          preview={importPreview}
+          options={importOptions}
+          loading={loadingImportPreview}
+          importing={importingHistory}
+          onOption={updateImportOption}
+          onImport={importHistory}
+          onClose={() => setShowImport(false)}
         />
       ) : null}
       <PageTitle
@@ -489,6 +583,7 @@ export function CollabHub() {
                 onChange={(event) => setStatus(event.target.value)}
               >
                 <option value="">All statuses</option>
+                <option value="ACTIVE">Active pipeline</option>
                 {COLLAB_STATUSES.map((item) => (
                   <option key={item} value={item}>
                     {COLLAB_STATUS_LABELS[item]}
@@ -599,7 +694,7 @@ export function CollabHub() {
               {canCreate && (data?.summary.unlinkedRaffles ?? 0) > 0 ? (
                 <button
                   className="kos-btn h-9 px-3 text-xs"
-                  onClick={importHistory}
+                  onClick={openImport}
                   disabled={importingHistory}
                 >
                   {importingHistory
@@ -638,12 +733,27 @@ export function CollabHub() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
+            <button
+              type="button"
+              className={`rounded-2xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${status === "ACTIVE" ? "ring-2 ring-blue-400" : ""}`}
+              onClick={() => setStatus(status === "ACTIVE" ? "" : "ACTIVE")}
+              aria-pressed={status === "ACTIVE"}
+              aria-label="Filter the workspace to active collaborations"
+            >
+              <StatCard
+                accent
+                label="Active"
+                value={data?.summary.active ?? "—"}
+                hint={
+                  status === "ACTIVE" ? "showing active" : "click to filter"
+                }
+              />
+            </button>
             <StatCard
-              accent
-              label="Active"
-              value={data?.summary.active ?? "—"}
-              hint="in progress"
+              label="Raffles"
+              value={data?.summary.linkedRafflesAllTime ?? "—"}
+              hint="connected records"
             />
             <StatCard
               label="Hosting today"
@@ -682,13 +792,20 @@ export function CollabHub() {
             <div>
               <SectionTitle>Pipeline workspace</SectionTitle>
               <p className="text-sm text-kos-muted">
-                {rows.length} collaboration{rows.length === 1 ? "" : "s"} in
-                this view
+                {rows.length} grouped collaboration
+                {rows.length === 1 ? "" : "s"} in this view ·{" "}
+                {data?.summary.linkedRafflesAllTime ?? "—"} connected raffles
+                total
               </p>
             </div>
-            {isLoading ? (
-              <span className="text-xs text-kos-muted">Refreshing…</span>
-            ) : null}
+            <div className="flex items-center gap-2">
+              {isLoading ? (
+                <span className="text-xs text-kos-muted">Refreshing…</span>
+              ) : null}
+              <Link href={`/${org}/raffles`} className="kos-btn h-9 text-xs">
+                View all {data?.summary.linkedRafflesAllTime ?? ""} raffles
+              </Link>
+            </div>
           </div>
 
           <div className="mt-3">
@@ -711,7 +828,7 @@ export function CollabHub() {
                   (data?.summary.unlinkedRaffles ?? 0) > 0 ? (
                     <button
                       className="kos-btn-primary"
-                      onClick={importHistory}
+                      onClick={openImport}
                       disabled={importingHistory}
                     >
                       {importingHistory
@@ -1038,71 +1155,81 @@ function BoardCard({
       }
       className={
         compact
-          ? "block bg-[#151515] p-4 transition-colors hover:bg-white/[0.045]"
-          : "block cursor-grab rounded-2xl border border-white/[0.09] bg-[#171717] p-3.5 shadow-[0_14px_40px_-30px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:border-white/[0.16] active:cursor-grabbing"
+          ? "block overflow-hidden bg-[#151515] transition-colors hover:bg-white/[0.045]"
+          : "block cursor-grab overflow-hidden rounded-2xl border border-white/[0.09] bg-[#171717] shadow-[0_14px_40px_-30px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:border-white/[0.16] active:cursor-grabbing"
       }
     >
-      <div className="flex items-start gap-3">
-        <ProjectLogo row={row} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">
-            {row.projectName}
+      <ProjectBanner
+        row={row}
+        className={
+          compact
+            ? "aspect-[16/5] w-full border-b border-white/[0.07]"
+            : "aspect-[16/7] w-full border-b border-white/[0.07]"
+        }
+      />
+      <div className={compact ? "p-4" : "p-3.5"}>
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold">
+              {row.projectName}
+            </div>
+            <div className="mt-0.5 truncate text-xs text-kos-muted">
+              {partnerDescriptor(row.partner) ||
+                `${row.raffles.length} raffle${row.raffles.length === 1 ? "" : "s"}`}
+            </div>
           </div>
-          <div className="mt-0.5 truncate text-xs text-kos-muted">
-            {partnerDescriptor(row.partner) ||
-              `${row.raffles.length} raffle${row.raffles.length === 1 ? "" : "s"}`}
-          </div>
+          <PriorityDot priority={row.priority} />
         </div>
-        <PriorityDot priority={row.priority} />
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        {row.tags.slice(0, 3).map(({ tag }) => (
-          <span
-            key={tag.id}
-            className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] text-kos-muted"
-          >
-            {tag.name}
-          </span>
-        ))}
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {row.tags.slice(0, 3).map(({ tag }) => (
+            <span
+              key={tag.id}
+              className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] text-kos-muted"
+            >
+              {tag.name}
+            </span>
+          ))}
+          {compact ? (
+            <span className="text-[11px] text-kos-muted">
+              {row.raffles.length} raffle
+              {row.raffles.length === 1 ? "" : "s"} · {row.whitelistAllocation}{" "}
+              spots
+            </span>
+          ) : null}
+        </div>
         {compact ? (
-          <span className="text-[11px] text-kos-muted">
-            {row.raffles.length} raffle{row.raffles.length === 1 ? "" : "s"} ·{" "}
-            {row.whitelistAllocation} spots
-          </span>
-        ) : null}
-      </div>
-      {compact ? (
-        <div className="mt-3 flex items-center justify-between text-[11px] text-kos-muted">
-          <span>{formatShortDate(row.hostAt ?? row.hostingDeadline)}</span>
-          <span>
-            {row.walletProgress.collected}/{row.walletProgress.total} wallets
-          </span>
-        </div>
-      ) : (
-        <>
-          <div className="mt-3">
-            <div className="flex justify-between text-[10px] text-kos-muted">
-              <span>Wallets</span>
-              <span>
-                {row.walletProgress.collected}/{row.walletProgress.total}
-              </span>
-            </div>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500"
-                style={{ width: `${row.walletProgress.percent}%` }}
-              />
-            </div>
-          </div>
-          <div className="mt-3 flex items-center justify-between border-t border-white/[0.07] pt-3 text-[11px] text-kos-muted">
+          <div className="mt-3 flex items-center justify-between text-[11px] text-kos-muted">
             <span>{formatShortDate(row.hostAt ?? row.hostingDeadline)}</span>
-            <span className="max-w-24 truncate">
-              {teamById.get(row.assignedToId ?? row.ownerId ?? "")?.name ??
-                "Unassigned"}
+            <span>
+              {row.walletProgress.collected}/{row.walletProgress.total} wallets
             </span>
           </div>
-        </>
-      )}
+        ) : (
+          <>
+            <div className="mt-3">
+              <div className="flex justify-between text-[10px] text-kos-muted">
+                <span>Wallets</span>
+                <span>
+                  {row.walletProgress.collected}/{row.walletProgress.total}
+                </span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500"
+                  style={{ width: `${row.walletProgress.percent}%` }}
+                />
+              </div>
+            </div>
+            <div className="mt-3 flex items-center justify-between border-t border-white/[0.07] pt-3 text-[11px] text-kos-muted">
+              <span>{formatShortDate(row.hostAt ?? row.hostingDeadline)}</span>
+              <span className="max-w-24 truncate">
+                {teamById.get(row.assignedToId ?? row.ownerId ?? "")?.name ??
+                  "Unassigned"}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
     </Link>
   );
 }
@@ -1907,12 +2034,193 @@ function PartnerDirectory({
   );
 }
 
-function ProjectLogo({ row }: { row: CollabRow }) {
+function ProjectBanner({
+  row,
+  className,
+}: {
+  row: CollabRow;
+  className: string;
+}) {
+  const sources = collaborationBannerUrls(row.raffles);
   return (
-    <PartnerMark
+    <RaffleBanner
       name={row.projectName}
-      src={row.partner.logoUrl}
-      className="h-9 w-9 rounded-xl text-[10px]"
+      src={sources[0]}
+      fallbackSources={sources.slice(1)}
+      className={className}
+    />
+  );
+}
+
+function HistoryImportPanel({
+  preview,
+  options,
+  loading,
+  importing,
+  onOption,
+  onImport,
+  onClose,
+}: {
+  preview: ImportPreview | null;
+  options: ImportOptions;
+  loading: boolean;
+  importing: boolean;
+  onOption: (key: keyof ImportOptions, checked: boolean) => void;
+  onImport: () => void;
+  onClose: () => void;
+}) {
+  const choices: {
+    key: keyof ImportOptions;
+    label: string;
+    description: string;
+    count: number;
+  }[] = [
+    {
+      key: "includeEmpty",
+      label: "Ended with no entries",
+      description: "Attach for history without increasing WL allocation.",
+      count: preview?.empty ?? 0,
+    },
+    {
+      key: "includeCancelled",
+      label: "Cancelled attempts",
+      description:
+        "Keep failed or replaced posting attempts in the audit trail.",
+      count: preview?.cancelled ?? 0,
+    },
+    {
+      key: "includeTests",
+      label: "Test-named raffles",
+      description:
+        "Include records whose project or title contains test labels.",
+      count: preview?.test ?? 0,
+    },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:p-5"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="history-import-title"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl border border-white/[0.10] bg-[#121212] p-5 shadow-2xl sm:max-w-2xl sm:rounded-3xl sm:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2
+              id="history-import-title"
+              className="text-xl font-semibold tracking-tight"
+            >
+              Import raffle history
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-kos-muted">
+              Preview what will become collaboration records. Existing entries,
+              winners, proofs, and wallets remain linked to their original
+              raffles.
+            </p>
+          </div>
+          <button className="kos-btn h-9 px-3 text-xs" onClick={onClose}>
+            Close
+          </button>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <ImportMetric label="Unlinked" value={preview?.totalUnlinked} />
+          <ImportMetric label="Standard" value={preview?.defaultEligible} />
+          <ImportMetric label="Selected" value={preview?.selected} accent />
+          <ImportMetric label="Groups" value={preview?.groups} />
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-kos-muted">
+            Optional history
+          </div>
+          <div className="mt-3 space-y-2">
+            {choices.map((choice) => (
+              <label
+                key={choice.key}
+                className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/[0.07] bg-black/20 p-3 transition-colors hover:border-white/[0.14]"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 accent-blue-500"
+                  checked={options[choice.key]}
+                  onChange={(event) =>
+                    onOption(choice.key, event.target.checked)
+                  }
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center justify-between gap-3 text-sm font-medium">
+                    <span>{choice.label}</span>
+                    <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-kos-muted">
+                      {choice.count}
+                    </span>
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-kos-muted">
+                    {choice.description}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button className="kos-btn" onClick={onClose} disabled={importing}>
+            Cancel
+          </button>
+          <button
+            className="kos-btn-primary"
+            onClick={onImport}
+            disabled={
+              importing || loading || !preview || preview.selected === 0
+            }
+          >
+            {importing
+              ? "Importing…"
+              : loading
+                ? "Updating preview…"
+                : `Import ${preview?.selected ?? 0} raffle${preview?.selected === 1 ? "" : "s"}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImportMetric({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string;
+  value: number | undefined;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border p-3 ${accent ? "border-blue-400/25 bg-blue-500/10" : "border-white/[0.08] bg-white/[0.025]"}`}
+    >
+      <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-kos-muted">
+        {label}
+      </div>
+      <div className="mt-1 text-2xl font-semibold">{value ?? "—"}</div>
+    </div>
+  );
+}
+
+function ProjectLogo({ row }: { row: CollabRow }) {
+  const sources = collaborationBannerUrls(row.raffles);
+  return (
+    <RaffleBanner
+      name={row.projectName}
+      src={sources[0]}
+      fallbackSources={sources.slice(1)}
+      compact
+      className="h-10 w-16 shrink-0 rounded-xl border border-white/[0.09]"
     />
   );
 }

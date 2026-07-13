@@ -76,11 +76,16 @@ export const GET = withAccess(async (req, { params }) => {
     "whitelistAllocation",
   ]);
   const orderField = allowedSort.has(sort) ? sort : "updatedAt";
+  const activeStatus = status === "ACTIVE";
 
   const where: Prisma.CollaborationWhereInput = {
     organizationId: org.id,
     archivedAt: archived ? { not: null } : null,
-    ...(isCollabStatus(status) ? { status } : {}),
+    ...(activeStatus
+      ? { status: { in: [...ACTIVE_COLLAB_STATUSES] } }
+      : isCollabStatus(status)
+        ? { status }
+        : {}),
     ...(isCollabPriority(priority) ? { priority } : {}),
     ...(chain
       ? { partner: { chain: { equals: chain, mode: "insensitive" } } }
@@ -129,6 +134,7 @@ export const GET = withAccess(async (req, { params }) => {
     savedFilters,
     analyticsRows,
     unlinkedHistoryRows,
+    linkedRafflesAllTime,
   ] = await Promise.all([
     prisma.collaboration.findMany({
       where,
@@ -146,6 +152,7 @@ export const GET = withAccess(async (req, { params }) => {
                 projectName: true,
                 title: true,
                 status: true,
+                bannerUrl: true,
                 spots: true,
                 entryCount: true,
                 endAt: true,
@@ -195,11 +202,13 @@ export const GET = withAccess(async (req, { params }) => {
     prisma.raffle.findMany({
       where: {
         guildId: { in: guildIds },
-        status: "ENDED",
-        entryCount: { gt: 0 },
+        status: { in: ["ENDED", "CANCELLED"] },
         collaborationLink: { is: null },
       },
       select: { projectName: true, title: true },
+    }),
+    prisma.collaborationRaffle.count({
+      where: { collaboration: { organizationId: org.id } },
     }),
   ]);
 
@@ -238,9 +247,8 @@ export const GET = withAccess(async (req, { params }) => {
       (sum, row) => sum + Math.max(0, row.whitelistAllocation),
       0,
     ),
-    unlinkedRaffles: unlinkedHistoryRows.filter(
-      (row) => !/\btests?(?:y|ing)?\b/i.test(`${row.projectName} ${row.title}`),
-    ).length,
+    linkedRafflesAllTime,
+    unlinkedRaffles: unlinkedHistoryRows.length,
   };
 
   const [recentActivity, recentNotes, reminders] = await Promise.all([

@@ -51,9 +51,18 @@
   addresses may exist transiently inside a `collab:export` response but must
   not be copied into collaboration models, logs, activities, or client JSON.
 - Historical Collab Hub imports must be limited to the organization's connected
-  guilds and eligible unlinked ended raffles. Preserve the source raffle link,
-  exclude cancelled/empty/test records, and never turn an import into a copy of
-  participant, winner, proof, or wallet-address data.
+  guilds and unlinked ended/cancelled raffles. Preview and classify exceptional
+  records first; cancelled/empty/test records require an explicit team opt-in.
+  Preserve the source raffle link and never copy participant, winner, proof, or
+  wallet-address data.
+- A successfully published raffle in a connected guild must be linked into the
+  same organization's Collab Hub. Resolve tenancy from `GuildConnection`, keep
+  the source raffle as the system of record, and never create a collaboration
+  for a failed Discord publish.
+- A new Discord attachment banner must be copied to durable shared storage
+  before publication. Enforce the Discord-host allowlist, supported image MIME
+  types, and 5 MB limit; do not silently fall back to an expiring attachment
+  URL when persistence fails.
 
 ## Delivery
 

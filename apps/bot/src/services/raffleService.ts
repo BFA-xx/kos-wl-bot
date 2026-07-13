@@ -21,6 +21,8 @@ import { audit } from "./auditService.js";
 import { ensureGuild } from "./userService.js";
 import { logger } from "../logger.js";
 import type { EntryRequirements } from "../types.js";
+import { ensureCollaborationForRaffle } from "./collaborationService.js";
+import { persistDiscordRaffleBanner } from "./raffleBannerService.js";
 
 export interface CreateRaffleInput {
   guildId: string;
@@ -126,7 +128,7 @@ export async function publishRaffleMessage(
   client: Client,
   raffleId: number,
 ): Promise<PublishResult> {
-  const raffle = await getRaffle(raffleId);
+  let raffle = await getRaffle(raffleId);
   if (!raffle || !raffle.channelId) {
     return { ok: false, reason: "no target channel set" };
   }
@@ -155,6 +157,23 @@ export async function publishRaffleMessage(
     };
   }
 
+  if (raffle.bannerUrl) {
+    try {
+      const bannerUrl = await persistDiscordRaffleBanner(
+        raffleId,
+        raffle.bannerUrl,
+      );
+      if (bannerUrl !== raffle.bannerUrl) raffle = { ...raffle, bannerUrl };
+    } catch (error) {
+      logger.warn({ error, raffleId }, "raffle banner persistence failed");
+      return {
+        ok: false,
+        reason:
+          "I couldn't store that Discord banner safely. Re-attach the image and try again.",
+      };
+    }
+  }
+
   try {
     const content = startMentionContent(raffle);
     const message = await channel.send({
@@ -167,6 +186,12 @@ export async function publishRaffleMessage(
       where: { id: raffleId },
       data: { messageId: message.id, startPinged: Boolean(content) },
     });
+    await ensureCollaborationForRaffle(raffleId).catch((error) =>
+      logger.warn(
+        { error, raffleId },
+        "published raffle Collab Hub auto-link failed",
+      ),
+    );
     return { ok: true };
   } catch (err) {
     const e = err as {
