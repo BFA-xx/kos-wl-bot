@@ -526,7 +526,7 @@ export function CollabHub() {
         {mode === "WORKSPACE" ? (
           <div className="mt-3 border-t border-white/[0.07] pt-3 sm:flex sm:items-center sm:gap-2">
             <div
-              className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:shrink-0 sm:overflow-visible sm:px-0 sm:pb-0"
+              className="grid w-full grid-cols-3 gap-1.5 sm:flex sm:w-auto sm:shrink-0 sm:gap-2"
               role="group"
               aria-label="Collaboration view"
             >
@@ -785,7 +785,7 @@ function ViewButton({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`kos-btn h-9 px-3 text-xs ${active ? "border-blue-400/30 bg-blue-500/12 text-blue-100" : ""}`}
+      className={`kos-btn h-9 min-w-0 justify-center px-2 text-xs sm:px-3 ${active ? "border-blue-400/30 bg-blue-500/12 text-blue-100" : ""}`}
     >
       {icon}
       <span>{label}</span>
