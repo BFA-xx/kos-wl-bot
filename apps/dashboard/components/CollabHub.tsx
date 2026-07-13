@@ -86,6 +86,7 @@ interface HubData {
     readyForSubmission: number;
     completedThisMonth: number;
     totalWlSpots: number;
+    unlinkedRaffles: number;
   };
   team: Person[];
   tags: { id: string; name: string; color: string }[];
@@ -181,6 +182,8 @@ export function CollabHub() {
   const [sort, setSort] = useState("updatedAt");
   const [direction, setDirection] = useState<"asc" | "desc">("desc");
   const [showCreate, setShowCreate] = useState(false);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [importingHistory, setImportingHistory] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<TableColumn>>(
     () => new Set(TABLE_COLUMNS),
@@ -212,9 +215,6 @@ export function CollabHub() {
       }
       if (!typing && event.key.toLowerCase() === "n" && canCreate)
         setShowCreate(true);
-      if (!typing && event.key === "1") changeView("BOARD");
-      if (!typing && event.key === "2") changeView("TABLE");
-      if (!typing && event.key === "3") changeView("CALENDAR");
     };
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
@@ -354,6 +354,34 @@ export function CollabHub() {
     }
   }
 
+  async function importHistory() {
+    if (importingHistory) return;
+    setImportingHistory(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/${org}/collaborations/import-history`, {
+        method: "POST",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessage(body.error ?? "Couldn't import raffle history.");
+        return;
+      }
+      setMessage(
+        body.raffles
+          ? `Imported ${body.raffles} raffles into ${body.collaborations} partner collaboration${body.collaborations === 1 ? "" : "s"}.`
+          : "Raffle history is already up to date.",
+      );
+      await mutate();
+    } catch {
+      setMessage(
+        "Couldn't import raffle history. Check your connection and try again.",
+      );
+    } finally {
+      setImportingHistory(false);
+    }
+  }
+
   function applyFilter(criteria: Record<string, string>, savedView?: string) {
     setQ(criteria.q ?? "");
     setStatus(criteria.status ?? "");
@@ -377,7 +405,6 @@ export function CollabHub() {
         />
       ) : null}
       <PageTitle
-        eyebrow="Phase 4 · Relationship operations"
         title="Collab Hub"
         subtitle="Your partnership pipeline, raffle handoffs, wallet collection, and long-term project relationships in one workspace."
         action={
@@ -406,29 +433,47 @@ export function CollabHub() {
         }
       />
 
-      <div className="sticky top-[65px] z-10 mb-6 rounded-3xl border border-white/[0.08] bg-[#0D0D0D]/90 p-3 shadow-xl backdrop-blur-2xl">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-          <div className="relative min-w-0 flex-1">
-            <IconSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-kos-muted" />
-            <input
-              ref={searchRef}
-              className="kos-input h-11 pl-10 pr-12"
-              value={q}
-              onChange={(event) => setQ(event.target.value)}
-              placeholder={
-                mode === "PARTNERS"
-                  ? "Search partners, contacts, chain…"
-                  : "Search projects, contacts, Discord, tags…"
-              }
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-kos-muted">
-              /
-            </span>
+      <div className="relative z-10 mb-6 rounded-3xl border border-white/[0.08] bg-[#0D0D0D]/95 p-3 shadow-xl backdrop-blur-2xl lg:sticky lg:top-[65px]">
+        <div className="gap-3 xl:flex xl:items-center">
+          <div className="flex min-w-0 flex-1 gap-2">
+            <div className="relative min-w-0 flex-1">
+              <IconSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-kos-muted" />
+              <input
+                ref={searchRef}
+                className="kos-input h-11 pl-10 pr-12"
+                value={q}
+                onChange={(event) => setQ(event.target.value)}
+                placeholder={
+                  mode === "PARTNERS"
+                    ? "Search partners, contacts, chain…"
+                    : "Search projects, contacts, Discord, tags…"
+                }
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-kos-muted">
+                /
+              </span>
+            </div>
+            {mode === "WORKSPACE" ? (
+              <button
+                className="kos-btn h-11 shrink-0 px-3 text-xs xl:hidden"
+                onClick={() => setShowMobileFilters((value) => !value)}
+                aria-expanded={showMobileFilters}
+              >
+                Filters
+                {[status, priority, owner, tag].filter(Boolean).length ? (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] text-white">
+                    {[status, priority, owner, tag].filter(Boolean).length}
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
           </div>
           {mode === "WORKSPACE" ? (
-            <>
+            <div
+              className={`${showMobileFilters ? "grid" : "hidden"} mt-3 grid-cols-2 gap-2 sm:grid-cols-4 xl:mt-0 xl:flex xl:shrink-0`}
+            >
               <select
-                className="kos-input h-11 xl:w-44"
+                className="kos-input h-11 min-w-0 xl:w-44"
                 value={status}
                 onChange={(event) => setStatus(event.target.value)}
               >
@@ -440,7 +485,7 @@ export function CollabHub() {
                 ))}
               </select>
               <select
-                className="kos-input h-11 xl:w-36"
+                className="kos-input h-11 min-w-0 xl:w-36"
                 value={priority}
                 onChange={(event) => setPriority(event.target.value)}
               >
@@ -452,7 +497,7 @@ export function CollabHub() {
                 ))}
               </select>
               <select
-                className="kos-input h-11 xl:w-44"
+                className="kos-input h-11 min-w-0 xl:w-44"
                 value={owner}
                 onChange={(event) => setOwner(event.target.value)}
               >
@@ -464,7 +509,7 @@ export function CollabHub() {
                 ))}
               </select>
               <select
-                className="kos-input h-11 xl:w-40"
+                className="kos-input h-11 min-w-0 xl:w-40"
                 value={tag}
                 onChange={(event) => setTag(event.target.value)}
               >
@@ -475,74 +520,89 @@ export function CollabHub() {
                   </option>
                 ))}
               </select>
-            </>
+            </div>
           ) : null}
         </div>
         {mode === "WORKSPACE" ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/[0.07] pt-3">
-            <ViewButton
-              active={view === "BOARD"}
-              onClick={() => changeView("BOARD")}
-              icon={<IconGrid />}
-              label="Board"
-              shortcut="1"
-            />
-            <ViewButton
-              active={view === "TABLE"}
-              onClick={() => changeView("TABLE")}
-              icon={<IconChart />}
-              label="Spreadsheet"
-              shortcut="2"
-            />
-            <ViewButton
-              active={view === "CALENDAR"}
-              onClick={() => changeView("CALENDAR")}
-              icon={<IconUsers />}
-              label="Calendar"
-              shortcut="3"
-            />
-            <span className="mx-1 hidden h-6 w-px bg-white/[0.08] sm:block" />
-            {(data?.savedFilters ?? []).map((filter) => (
-              <button
-                key={filter.id}
-                className="kos-btn h-9 px-3 text-xs"
-                onClick={() => applyFilter(filter.criteria, filter.view)}
-              >
-                {filter.name}
-              </button>
-            ))}
-            <div className="relative">
-              <button
-                className="kos-btn h-9 px-3 text-xs"
-                onClick={() => setShowSave((value) => !value)}
-              >
-                Save filter
-              </button>
-              {showSave ? (
-                <div className="absolute left-0 top-full z-30 mt-2 w-72 rounded-2xl border border-white/[0.10] bg-[#151515] p-3 shadow-2xl">
-                  <label className="kos-label">Filter name</label>
-                  <input
-                    autoFocus
-                    className="kos-input"
-                    value={saveName}
-                    onChange={(event) => setSaveName(event.target.value)}
-                    placeholder="e.g. Urgent submissions"
-                  />
-                  <button
-                    className="kos-btn-primary mt-2 w-full"
-                    onClick={saveFilter}
-                  >
-                    Save for team
-                  </button>
-                </div>
-              ) : null}
-            </div>
-            <button
-              className="kos-btn ml-auto h-9 px-3 text-xs"
-              onClick={exportCsv}
+          <div className="mt-3 border-t border-white/[0.07] pt-3 sm:flex sm:items-center sm:gap-2">
+            <div
+              className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:shrink-0 sm:overflow-visible sm:px-0 sm:pb-0"
+              role="group"
+              aria-label="Collaboration view"
             >
-              Export CSV
-            </button>
+              <ViewButton
+                active={view === "BOARD"}
+                onClick={() => changeView("BOARD")}
+                icon={<IconGrid />}
+                label="Board"
+              />
+              <ViewButton
+                active={view === "TABLE"}
+                onClick={() => changeView("TABLE")}
+                icon={<IconChart />}
+                label="Spreadsheet"
+              />
+              <ViewButton
+                active={view === "CALENDAR"}
+                onClick={() => changeView("CALENDAR")}
+                icon={<IconUsers />}
+                label="Calendar"
+              />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2 sm:mt-0 sm:min-w-0 sm:flex-1">
+              {(data?.savedFilters ?? []).map((filter) => (
+                <button
+                  key={filter.id}
+                  className="kos-btn h-9 px-3 text-xs"
+                  onClick={() => applyFilter(filter.criteria, filter.view)}
+                >
+                  {filter.name}
+                </button>
+              ))}
+              <div className="relative">
+                <button
+                  className="kos-btn h-9 px-3 text-xs"
+                  onClick={() => setShowSave((value) => !value)}
+                >
+                  Save filter
+                </button>
+                {showSave ? (
+                  <div className="absolute left-0 top-full z-30 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-2xl border border-white/[0.10] bg-[#151515] p-3 shadow-2xl">
+                    <label className="kos-label">Filter name</label>
+                    <input
+                      autoFocus
+                      className="kos-input"
+                      value={saveName}
+                      onChange={(event) => setSaveName(event.target.value)}
+                      placeholder="e.g. Urgent submissions"
+                    />
+                    <button
+                      className="kos-btn-primary mt-2 w-full"
+                      onClick={saveFilter}
+                    >
+                      Save for team
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              {canCreate && (data?.summary.unlinkedRaffles ?? 0) > 0 ? (
+                <button
+                  className="kos-btn h-9 px-3 text-xs"
+                  onClick={importHistory}
+                  disabled={importingHistory}
+                >
+                  {importingHistory
+                    ? "Importing…"
+                    : `Import ${data?.summary.unlinkedRaffles ?? 0} previous raffles`}
+                </button>
+              ) : null}
+              <button
+                className="kos-btn ml-auto h-9 px-3 text-xs"
+                onClick={exportCsv}
+              >
+                Export CSV
+              </button>
+            </div>
           </div>
         ) : null}
       </div>
@@ -625,9 +685,30 @@ export function CollabHub() {
               <LoadingSkeleton />
             ) : rows.length === 0 ? (
               <Empty>
-                {q || status || priority || owner || tag
-                  ? "No collaborations match these filters."
-                  : "Your collaboration pipeline is empty. Add the first partner to get started."}
+                <div className="flex flex-col items-center gap-4">
+                  <p>
+                    {q || status || priority || owner || tag
+                      ? "No collaborations match these filters."
+                      : "Your collaboration pipeline is empty. Add the first partner or bring in your previous raffle partners."}
+                  </p>
+                  {!q &&
+                  !status &&
+                  !priority &&
+                  !owner &&
+                  !tag &&
+                  canCreate &&
+                  (data?.summary.unlinkedRaffles ?? 0) > 0 ? (
+                    <button
+                      className="kos-btn-primary"
+                      onClick={importHistory}
+                      disabled={importingHistory}
+                    >
+                      {importingHistory
+                        ? "Importing raffle history…"
+                        : `Import ${data?.summary.unlinkedRaffles ?? 0} previous raffles`}
+                    </button>
+                  ) : null}
+                </div>
               </Empty>
             ) : view === "BOARD" ? (
               <Board
@@ -693,22 +774,21 @@ function ViewButton({
   onClick,
   icon,
   label,
-  shortcut,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
-  shortcut: string;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={`kos-btn h-9 px-3 text-xs ${active ? "border-blue-400/30 bg-blue-500/12 text-blue-100" : ""}`}
     >
       {icon}
       <span>{label}</span>
-      <span className="text-[10px] text-kos-muted">{shortcut}</span>
     </button>
   );
 }
@@ -831,22 +911,17 @@ function Board({
   onMove: (id: string, status: CollabStatus) => void;
 }) {
   return (
-    <div className="-mx-4 overflow-x-auto px-4 pb-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-      <div className="flex min-w-max gap-3">
+    <>
+      <div className="space-y-3 md:hidden">
         {COLLAB_STATUSES.map((status) => {
           const items = rows.filter((row) => row.status === status);
+          if (!items.length) return null;
           return (
-            <div
+            <section
               key={status}
-              className="w-[285px] shrink-0 rounded-3xl border border-white/[0.08] bg-white/[0.025] p-2"
-              onDragOver={(event) => canEdit && event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault();
-                const id = event.dataTransfer.getData("text/collaboration-id");
-                if (id) onMove(id, status);
-              }}
+              className="overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.025]"
             >
-              <div className="flex items-center justify-between px-2 py-2.5">
+              <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
                 <span className="text-xs font-semibold uppercase tracking-[0.12em] text-kos-muted">
                   {COLLAB_STATUS_LABELS[status]}
                 </span>
@@ -854,7 +929,7 @@ function Board({
                   {items.length}
                 </span>
               </div>
-              <div className="min-h-24 space-y-2">
+              <div className="divide-y divide-white/[0.07]">
                 {items.map((row, index) => (
                   <motion.div
                     key={row.id}
@@ -862,74 +937,161 @@ function Board({
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: Math.min(index * 0.025, 0.2) }}
                   >
-                    <Link
-                      href={`/${org}/collabs/${row.id}`}
-                      draggable={canEdit}
-                      onDragStart={(event) =>
-                        event.dataTransfer.setData(
-                          "text/collaboration-id",
-                          row.id,
-                        )
-                      }
-                      className="block cursor-grab rounded-2xl border border-white/[0.09] bg-[#171717] p-3.5 shadow-[0_14px_40px_-30px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:border-white/[0.16] active:cursor-grabbing"
-                    >
-                      <div className="flex items-start gap-3">
-                        <ProjectLogo row={row} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-semibold">
-                            {row.projectName}
-                          </div>
-                          <div className="mt-0.5 truncate text-xs text-kos-muted">
-                            {row.partner.chain ??
-                              row.partner.category ??
-                              "Partner"}
-                          </div>
-                        </div>
-                        <PriorityDot priority={row.priority} />
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {row.tags.slice(0, 3).map(({ tag }) => (
-                          <span
-                            key={tag.id}
-                            className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] text-kos-muted"
-                          >
-                            {tag.name}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="mt-3">
-                        <div className="flex justify-between text-[10px] text-kos-muted">
-                          <span>Wallets</span>
-                          <span>
-                            {row.walletProgress.collected}/
-                            {row.walletProgress.total}
-                          </span>
-                        </div>
-                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500"
-                            style={{ width: `${row.walletProgress.percent}%` }}
-                          />
-                        </div>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between border-t border-white/[0.07] pt-3 text-[11px] text-kos-muted">
-                        <span>
-                          {formatShortDate(row.hostAt ?? row.hostingDeadline)}
-                        </span>
-                        <span className="max-w-24 truncate">
-                          {teamById.get(row.assignedToId ?? row.ownerId ?? "")
-                            ?.name ?? "Unassigned"}
-                        </span>
-                      </div>
-                    </Link>
+                    <BoardCard
+                      row={row}
+                      org={org}
+                      teamById={teamById}
+                      compact
+                    />
                   </motion.div>
                 ))}
               </div>
-            </div>
+            </section>
           );
         })}
       </div>
-    </div>
+
+      <div className="-mx-4 hidden overflow-x-auto px-4 pb-5 sm:-mx-6 sm:px-6 md:block lg:-mx-8 lg:px-8">
+        <div className="flex min-w-max gap-3">
+          {COLLAB_STATUSES.map((status) => {
+            const items = rows.filter((row) => row.status === status);
+            return (
+              <div
+                key={status}
+                className="w-[285px] shrink-0 rounded-3xl border border-white/[0.08] bg-white/[0.025] p-2"
+                onDragOver={(event) => canEdit && event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const id = event.dataTransfer.getData(
+                    "text/collaboration-id",
+                  );
+                  if (id) onMove(id, status);
+                }}
+              >
+                <div className="flex items-center justify-between px-2 py-2.5">
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-kos-muted">
+                    {COLLAB_STATUS_LABELS[status]}
+                  </span>
+                  <span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] text-kos-muted">
+                    {items.length}
+                  </span>
+                </div>
+                <div className="min-h-24 space-y-2">
+                  {items.map((row, index) => (
+                    <motion.div
+                      key={row.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(index * 0.025, 0.2) }}
+                    >
+                      <BoardCard
+                        row={row}
+                        org={org}
+                        teamById={teamById}
+                        draggable={canEdit}
+                      />
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function BoardCard({
+  row,
+  org,
+  teamById,
+  compact = false,
+  draggable = false,
+}: {
+  row: CollabRow;
+  org: string;
+  teamById: Map<string, Person>;
+  compact?: boolean;
+  draggable?: boolean;
+}) {
+  return (
+    <Link
+      href={`/${org}/collabs/${row.id}`}
+      draggable={draggable}
+      onDragStart={
+        draggable
+          ? (event) =>
+              event.dataTransfer.setData("text/collaboration-id", row.id)
+          : undefined
+      }
+      className={
+        compact
+          ? "block bg-[#151515] p-4 transition-colors hover:bg-white/[0.045]"
+          : "block cursor-grab rounded-2xl border border-white/[0.09] bg-[#171717] p-3.5 shadow-[0_14px_40px_-30px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:border-white/[0.16] active:cursor-grabbing"
+      }
+    >
+      <div className="flex items-start gap-3">
+        <ProjectLogo row={row} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold">
+            {row.projectName}
+          </div>
+          <div className="mt-0.5 truncate text-xs text-kos-muted">
+            {row.partner.chain ?? row.partner.category ?? "Partner"}
+          </div>
+        </div>
+        <PriorityDot priority={row.priority} />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        {row.tags.slice(0, 3).map(({ tag }) => (
+          <span
+            key={tag.id}
+            className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] text-kos-muted"
+          >
+            {tag.name}
+          </span>
+        ))}
+        {compact ? (
+          <span className="text-[11px] text-kos-muted">
+            {row.raffles.length} raffle{row.raffles.length === 1 ? "" : "s"} ·{" "}
+            {row.whitelistAllocation} spots
+          </span>
+        ) : null}
+      </div>
+      {compact ? (
+        <div className="mt-3 flex items-center justify-between text-[11px] text-kos-muted">
+          <span>{formatShortDate(row.hostAt ?? row.hostingDeadline)}</span>
+          <span>
+            {row.walletProgress.collected}/{row.walletProgress.total} wallets
+          </span>
+        </div>
+      ) : (
+        <>
+          <div className="mt-3">
+            <div className="flex justify-between text-[10px] text-kos-muted">
+              <span>Wallets</span>
+              <span>
+                {row.walletProgress.collected}/{row.walletProgress.total}
+              </span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500"
+                style={{ width: `${row.walletProgress.percent}%` }}
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center justify-between border-t border-white/[0.07] pt-3 text-[11px] text-kos-muted">
+            <span>{formatShortDate(row.hostAt ?? row.hostingDeadline)}</span>
+            <span className="max-w-24 truncate">
+              {teamById.get(row.assignedToId ?? row.ownerId ?? "")?.name ??
+                "Unassigned"}
+            </span>
+          </div>
+        </>
+      )}
+    </Link>
   );
 }
 
@@ -1361,6 +1523,54 @@ function CalendarView({
         .map(() => ({ row, label: "Reminder", tone: "violet" })),
     ]);
   };
+  const agenda = rows
+    .flatMap((row) => [
+      ...(row.hostAt
+        ? [{ row, label: "Host", tone: "blue", date: new Date(row.hostAt) }]
+        : []),
+      ...(row.walletSubmissionDeadline
+        ? [
+            {
+              row,
+              label: "Wallets",
+              tone: "amber",
+              date: new Date(row.walletSubmissionDeadline),
+            },
+          ]
+        : []),
+      ...(row.collaborationDeadline
+        ? [
+            {
+              row,
+              label: "Deadline",
+              tone: "red",
+              date: new Date(row.collaborationDeadline),
+            },
+          ]
+        : []),
+      ...(row.followUpAt
+        ? [
+            {
+              row,
+              label: "Follow up",
+              tone: "violet",
+              date: new Date(row.followUpAt),
+            },
+          ]
+        : []),
+      ...row.reminders.map((reminder) => ({
+        row,
+        label: reminder.title || "Reminder",
+        tone: "violet",
+        date: new Date(reminder.dueAt),
+      })),
+    ])
+    .filter(
+      (event) =>
+        event.date.getFullYear() === year &&
+        event.date.getMonth() === monthIndex,
+    )
+    .sort((left, right) => left.date.getTime() - right.date.getTime());
   return (
     <div className="kos-card overflow-hidden">
       <div className="flex items-center justify-between border-b border-white/[0.08] p-4">
@@ -1383,40 +1593,76 @@ function CalendarView({
           →
         </button>
       </div>
-      <div className="grid grid-cols-7 border-b border-white/[0.08] bg-white/[0.02] text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-kos-muted">
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-          <div key={day} className="py-2">
-            {day}
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7">
-        {cells.map((day, index) => (
-          <div
-            key={index}
-            className={`min-h-24 border-b border-r border-white/[0.06] p-1.5 sm:min-h-32 sm:p-2 ${day < 1 || day > days ? "bg-black/10" : ""}`}
+      <div className="space-y-2 p-3 md:hidden">
+        {agenda.map((event, index) => (
+          <Link
+            key={`${event.row.id}-${event.label}-${event.date.toISOString()}-${index}`}
+            href={`/${org}/collabs/${event.row.id}`}
+            className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3 transition-colors hover:bg-white/[0.05]"
           >
-            {day >= 1 && day <= days ? (
-              <>
-                <div className="mb-1 text-xs text-kos-muted">{day}</div>
-                <div className="space-y-1">
-                  {events(day)
-                    .slice(0, 4)
-                    .map((event, eventIndex) => (
-                      <Link
-                        key={`${event.row.id}-${event.label}-${eventIndex}`}
-                        href={`/${org}/collabs/${event.row.id}`}
-                        title={`${event.label}: ${event.row.projectName}`}
-                        className={`block truncate rounded-md px-1.5 py-1 text-[9px] sm:text-[10px] ${event.tone === "blue" ? "bg-blue-500/15 text-blue-200" : event.tone === "amber" ? "bg-amber-500/15 text-amber-200" : event.tone === "red" ? "bg-red-500/15 text-red-200" : "bg-violet-500/15 text-violet-200"}`}
-                      >
-                        {event.label} · {event.row.projectName}
-                      </Link>
-                    ))}
-                </div>
-              </>
-            ) : null}
-          </div>
+            <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-white/[0.05] text-[10px] uppercase text-kos-muted">
+              <span>
+                {event.date.toLocaleDateString(undefined, { month: "short" })}
+              </span>
+              <span className="text-sm font-semibold leading-none text-white">
+                {event.date.getDate()}
+              </span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold">
+                {event.row.projectName}
+              </div>
+              <div
+                className={`mt-0.5 text-xs ${event.tone === "blue" ? "text-blue-300" : event.tone === "amber" ? "text-amber-300" : event.tone === "red" ? "text-red-300" : "text-violet-300"}`}
+              >
+                {event.label}
+              </div>
+            </div>
+            <span className="text-kos-muted">→</span>
+          </Link>
         ))}
+        {agenda.length === 0 ? (
+          <div className="py-10 text-center text-sm text-kos-muted">
+            No collaboration dates this month.
+          </div>
+        ) : null}
+      </div>
+      <div className="hidden md:block">
+        <div className="grid grid-cols-7 border-b border-white/[0.08] bg-white/[0.02] text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-kos-muted">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+            <div key={day} className="py-2">
+              {day}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {cells.map((day, index) => (
+            <div
+              key={index}
+              className={`min-h-24 border-b border-r border-white/[0.06] p-1.5 sm:min-h-32 sm:p-2 ${day < 1 || day > days ? "bg-black/10" : ""}`}
+            >
+              {day >= 1 && day <= days ? (
+                <>
+                  <div className="mb-1 text-xs text-kos-muted">{day}</div>
+                  <div className="space-y-1">
+                    {events(day)
+                      .slice(0, 4)
+                      .map((event, eventIndex) => (
+                        <Link
+                          key={`${event.row.id}-${event.label}-${eventIndex}`}
+                          href={`/${org}/collabs/${event.row.id}`}
+                          title={`${event.label}: ${event.row.projectName}`}
+                          className={`block truncate rounded-md px-1.5 py-1 text-[9px] sm:text-[10px] ${event.tone === "blue" ? "bg-blue-500/15 text-blue-200" : event.tone === "amber" ? "bg-amber-500/15 text-amber-200" : event.tone === "red" ? "bg-red-500/15 text-red-200" : "bg-violet-500/15 text-violet-200"}`}
+                        >
+                          {event.label} · {event.row.projectName}
+                        </Link>
+                      ))}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

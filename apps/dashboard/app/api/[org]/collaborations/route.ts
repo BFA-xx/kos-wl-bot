@@ -50,7 +50,10 @@ function walletProgress(allocation: number, wallets: { status: string }[]) {
 }
 
 export const GET = withAccess(async (req, { params }) => {
-  const { org } = await requireOrgAccess(params.org, PERMISSIONS.COLLAB_VIEW);
+  const { org, guildIds } = await requireOrgAccess(
+    params.org,
+    PERMISSIONS.COLLAB_VIEW,
+  );
   const url = new URL(req.url);
   const q = url.searchParams.get("q")?.trim().slice(0, 120) ?? "";
   const status = url.searchParams.get("status");
@@ -118,71 +121,86 @@ export const GET = withAccess(async (req, { params }) => {
       : {}),
   };
 
-  const [collaborations, members, tags, savedFilters, analyticsRows] =
-    await Promise.all([
-      prisma.collaboration.findMany({
-        where,
-        orderBy: { [orderField]: direction },
-        take: 250,
-        include: {
-          partner: true,
-          tags: { include: { tag: true } },
-          wallets: { select: { status: true } },
-          raffles: {
-            include: {
-              raffle: {
-                select: {
-                  id: true,
-                  projectName: true,
-                  title: true,
-                  status: true,
-                  spots: true,
-                  entryCount: true,
-                  endAt: true,
-                },
+  const [
+    collaborations,
+    members,
+    tags,
+    savedFilters,
+    analyticsRows,
+    unlinkedHistoryRows,
+  ] = await Promise.all([
+    prisma.collaboration.findMany({
+      where,
+      orderBy: { [orderField]: direction },
+      take: 250,
+      include: {
+        partner: true,
+        tags: { include: { tag: true } },
+        wallets: { select: { status: true } },
+        raffles: {
+          include: {
+            raffle: {
+              select: {
+                id: true,
+                projectName: true,
+                title: true,
+                status: true,
+                spots: true,
+                entryCount: true,
+                endAt: true,
               },
             },
           },
-          reminders: {
-            where: { completedAt: null },
-            select: { id: true, title: true, type: true, dueAt: true },
-            orderBy: { dueAt: "asc" },
-          },
         },
-      }),
-      prisma.organizationMember.findMany({
-        where: { organizationId: org.id, status: "ACTIVE" },
-        include: { user: true, role: { select: { name: true } } },
-        orderBy: { createdAt: "asc" },
-      }),
-      prisma.collaborationTag.findMany({
-        where: { organizationId: org.id },
-        orderBy: { name: "asc" },
-      }),
-      prisma.collaborationSavedFilter.findMany({
-        where: { organizationId: org.id },
-        orderBy: { updatedAt: "desc" },
-        take: 30,
-      }),
-      prisma.collaboration.findMany({
-        where: { organizationId: org.id, archivedAt: null },
-        select: {
-          id: true,
-          status: true,
-          whitelistAllocation: true,
-          hostAt: true,
-          hostingDeadline: true,
-          completedAt: true,
-          createdAt: true,
-          assignedToId: true,
-          ownerId: true,
-          partnerId: true,
-          partner: { select: { name: true } },
-          wallets: { select: { status: true } },
-          raffles: { select: { id: true } },
+        reminders: {
+          where: { completedAt: null },
+          select: { id: true, title: true, type: true, dueAt: true },
+          orderBy: { dueAt: "asc" },
         },
-      }),
-    ]);
+      },
+    }),
+    prisma.organizationMember.findMany({
+      where: { organizationId: org.id, status: "ACTIVE" },
+      include: { user: true, role: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.collaborationTag.findMany({
+      where: { organizationId: org.id },
+      orderBy: { name: "asc" },
+    }),
+    prisma.collaborationSavedFilter.findMany({
+      where: { organizationId: org.id },
+      orderBy: { updatedAt: "desc" },
+      take: 30,
+    }),
+    prisma.collaboration.findMany({
+      where: { organizationId: org.id, archivedAt: null },
+      select: {
+        id: true,
+        status: true,
+        whitelistAllocation: true,
+        hostAt: true,
+        hostingDeadline: true,
+        completedAt: true,
+        createdAt: true,
+        assignedToId: true,
+        ownerId: true,
+        partnerId: true,
+        partner: { select: { name: true } },
+        wallets: { select: { status: true } },
+        raffles: { select: { id: true } },
+      },
+    }),
+    prisma.raffle.findMany({
+      where: {
+        guildId: { in: guildIds },
+        status: "ENDED",
+        entryCount: { gt: 0 },
+        collaborationLink: { is: null },
+      },
+      select: { projectName: true, title: true },
+    }),
+  ]);
 
   const rows = collaborations.map((collaboration) => ({
     ...collaboration,
@@ -221,6 +239,9 @@ export const GET = withAccess(async (req, { params }) => {
       (sum, row) => sum + Math.max(0, row.whitelistAllocation),
       0,
     ),
+    unlinkedRaffles: unlinkedHistoryRows.filter(
+      (row) => !/\btests?(?:y|ing)?\b/i.test(`${row.projectName} ${row.title}`),
+    ).length,
   };
 
   const [recentActivity, recentNotes, reminders] = await Promise.all([
