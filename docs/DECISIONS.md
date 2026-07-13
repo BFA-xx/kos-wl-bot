@@ -416,3 +416,17 @@ allocation, winner, and date signals. Linking preserves those source tables and
 tenant boundaries while giving teams a useful CRM immediately; the narrow
 social heuristic avoids merging unrelated raffles that mention the community's
 own X account.
+
+## D040 — Collaboration team assignment and media stay explicit
+
+**Status:** Accepted
+**Decision:** Present the legacy `Collaboration.ownerId` field as Team lead and
+only allow active organization members in collaboration assignment controls.
+Historical imports assign the authenticated importing admin. Do not infer a
+partner logo or generic category from an attached raffle banner; render raffle
+media separately with a complete-frame layout and a branded error fallback.
+**Why:** Organization ownership is an authorization concept, not proof of who
+operates a collaboration. Raffle banners are campaign assets rather than
+partner identity, and Discord interaction attachment URLs expire, so promoting
+them to logos creates repeated labels, cropped images, and broken project
+branding.

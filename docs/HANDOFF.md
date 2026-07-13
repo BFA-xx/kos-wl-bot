@@ -3,7 +3,7 @@
 Last updated: 2026-07-13
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `7030fd2`
+Audited application commit: `110300a`
 
 ## Current state
 
@@ -41,6 +41,12 @@ Phase 3 is implemented through S2.5:
   multi-raffle groups, with same-partner GTD/FCFS rounds combined. Its
   responsive workspace polish and scroll-dismiss workspace switcher are
   deployed on the dashboard.
+- Collab Hub history presentation is hardened and deployed: organization
+  ownership is no longer shown as the collaboration assignee, imported records
+  use the importing admin as **Team lead**, completed/activity analytics cover
+  all time, Completed is the third board column, generic partner labels are
+  removed, and attached raffle media uses complete 16:9 display with branded
+  fallbacks for unavailable historical assets.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -164,9 +170,59 @@ Production release evidence:
   both its project name and X identity will remain split; two truly distinct
   names that share one X identity could require a manual split. There is not
   yet a partner merge/split review tool.
+- Forty historical raffle banners were stored as Discord interaction
+  `ephemeral-attachments` URLs and have expired. Their original bytes cannot be
+  recovered from those URLs or the published Discord embeds. The UI now shows
+  a project-branded fallback and valid Vercel Blob banners render uncropped,
+  but future Discord attachment uploads still need durable shared persistence
+  at creation time.
 
 The previously listed Phase 4 release-blocking implementation debt remains
 closed; the historical review workflow above is the current follow-up.
+
+### Collab Hub team, history, and media hardening — production verified
+
+- Renamed every collaboration-facing Owner label to Team lead and restricted
+  assignment choices/validation to active organization members. The
+  organization owner keeps authorization ownership but is not silently added
+  to the operational team list.
+- Applied data migration `20260713190000_collab_team_import_cleanup`. All 34
+  imported collaborations now use their importing admin as team lead; all 34
+  generic `Raffle partner` categories and banner-derived partner logos were
+  removed without touching manually supplied branding.
+- Completed summary now reports all-time completed records, and the activity
+  chart spans the first collaboration month through the current month with
+  year-qualified labels and horizontal overflow for long histories.
+- Completed is the third desktop board column and the first populated status in
+  the current mobile board. Board/table cards use raffle counts instead of
+  repeating Partner/Raffle partner text when no meaningful chain/category is
+  set.
+- Added reusable partner-mark and raffle-banner media. Partner marks fall back
+  to project initials. Attached raffle banners render in a full 16:9 frame with
+  `object-contain`; failed/expired sources render a branded archive fallback
+  rather than a broken image.
+- Dashboard Vitest passes 41 tests across 15 files. Dashboard TypeScript,
+  Prisma schema validation, the production Next.js build with
+  `NODE_ENV=production`, and `git diff --check` pass.
+- Application commit `110300a` is pushed to `origin/main`; both connected
+  Vercel deployments completed successfully. Signed-in production QA verified
+  `Completed 29 · all time`, Completed in the first three board columns,
+  Outis as team lead, removal of generic partner labels, zero horizontal
+  overflow at a 772 px viewport, expired KUONnft media fallback, and two valid
+  1500x500 Mochimons banners rendered with `object-fit: contain`.
+
+Current assumptions:
+
+- The admin who executes the historical import is the correct operational team
+  lead for the records created by that import.
+- A raffle banner should remain attached-raffle media and must not be inferred
+  to be a partner logo.
+
+Recommended next task:
+
+- Persist Discord-uploaded raffle banners durably at creation/edit time, then
+  serve the durable media to both Discord and the dashboard so future
+  interaction attachment expiry cannot create another historical gap.
 
 - Git worktree was clean before documentation changes.
 - Prisma schema validates with Prisma 5.22.0.

@@ -252,7 +252,8 @@ Collab Hub is an organization-native whitelist collaboration CRM at
 a drag-and-drop pipeline board, a sortable/filterable spreadsheet, and a
 deadline/reminder calendar. The landing workspace also returns global summary
 metrics, recent activity/notes, deadlines, saved filters, partner performance,
-team performance, and monthly activity.
+team performance, and all-time monthly activity from the first record through
+the current month.
 
 The tenant root is `Collaboration.organizationId`. Durable relationship data
 belongs to `CollaborationPartner`; each pipeline record snapshots its working
@@ -321,6 +322,18 @@ uses the draggable horizontal board and month grid; mobile uses status-grouped
 cards and an agenda so neither requires a forced wide canvas. The mobile filter
 bar participates in normal document flow, and its advanced controls expand on
 demand.
+
+`Collaboration.ownerId` is the persisted compatibility field for the
+operational team lead. Collab Hub APIs expose active organization members as
+the assignment team; organization ownership alone does not add someone to that
+list. Historical imports assign the authenticated importing admin rather than
+`Organization.ownerId`.
+
+Partner identity media and raffle campaign media remain separate. A partner
+logo is an explicitly supplied `CollaborationPartner.logoUrl`; historical
+imports do not promote `Raffle.bannerUrl` into that field. Attached raffle
+cards display the banner in a contained 16:9 frame and fall back to a branded
+project treatment when the source is absent or expired.
 
 ## Deployment
 
