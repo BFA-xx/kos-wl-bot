@@ -97,6 +97,9 @@
 - `/c/*` community pages require sign-in. `/r/:id` is the only anonymous raffle
   surface and must never expose organization controls, entrant identities, or
   hidden entry counts.
+- `/r/:id` is an always-dark branded surface. Its page root and mobile
+  document/overscroll canvas must remain dark regardless of saved dashboard
+  theme preferences, and its minimum height must use the dynamic viewport.
 - Public raffle IDs are positive PostgreSQL integers. Only UPCOMING, LIVE, and
   ENDED records may resolve publicly; DRAFT and CANCELLED never do.
 - Participant uniqueness is normal product state, not an error path. Discord

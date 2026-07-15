@@ -157,6 +157,10 @@ processes those requests.
 - Every UPCOMING, LIVE, or ENDED raffle in a non-suspended organization has a
   canonical `/r/:id` page with SSR metadata, Open Graph/Twitter banner data,
   public requirements, and no admin controls.
+- The canonical page owns an always-dark design-token and `color-scheme`
+  boundary. A document-level `:has(.kos-public-dark)` rule keeps the HTML/body
+  canvas dark during mobile overscroll, while `min-height: 100dvh` avoids the
+  light tail caused by mobile browser chrome changing the viewport height.
 - Raffle IDs are validated as positive PostgreSQL integers. Share-link helpers
   normalize the configured HTTP(S) origin and use the stable global raffle ID;
   clipboard actions have a manual-copy fallback.

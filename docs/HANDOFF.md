@@ -3,7 +3,7 @@
 Last updated: 2026-07-15
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `d922ac0`
+Audited application commit: `4d7cff1`
 
 ## Current state
 
@@ -61,10 +61,13 @@ Phase 3 is implemented through S2.5:
 - Robinhood Chain (`RH`) is deployed as a first-class wallet chain across team
   raffle create/edit, member web/Discord registration, eligibility, winner
   collection, duplication, and exports.
-- A local, not-yet-deployed dashboard pass now makes full-size raffle banners
-  fill responsive media boxes edge-to-edge with `object-cover` and derives
-  Collab Hub chain labels from every linked raffle instead of relying on the
-  optional partner chain field.
+- Full-size raffle banners now fill responsive media boxes edge-to-edge with
+  `object-cover`, and Collab Hub chain labels derive from every linked raffle
+  instead of relying on the optional partner chain field. The public raffle
+  surface also owns a stable dark-theme boundary, preventing saved light-theme
+  preferences from turning only its lower cards white. Its dynamic-height root
+  and dark document canvas also prevent a white tail below the footer on
+  mobile. All are deployed.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -85,7 +88,7 @@ availability described below.
 
 ## Verified locally
 
-### Full-width raffle media and hosted-chain labels — locally verified, not deployed
+### Full-width raffle media, hosted-chain labels, and public contrast — production verified
 
 - Public raffle pages, member raffle/task cards, community raffle cards, and
   Collab Hub media now render inside consistent responsive-height boxes with
@@ -101,16 +104,35 @@ availability described below.
 - A manually entered `CollaborationPartner.chain` is retained as the fallback
   only when attached raffles provide no chain data. No schema migration or
   environment change is required.
+- `/r/:id` now establishes its own dark design-token scope and color scheme.
+  This fixes the mixed-theme repaint where the hard-coded dark hero remained
+  dark but theme-aware eligibility, task, entry, and rules cards became white
+  when `kos-theme=light` was stored.
+- The page root now uses `min-height: 100dvh`, and the HTML/body canvas becomes
+  dark whenever `.kos-public-dark` is present. Mobile browser chrome and
+  overscroll can no longer expose a long white area below the footer.
 
 Verification:
 
 - `corepack pnpm --filter @kos/dashboard test` — 16 files, 49 tests passed.
+- `corepack pnpm --filter @kos/dashboard test -- lib/raffle-share.test.ts` — 4
+  focused public-policy tests passed after both theme-boundary fixes.
 - `corepack pnpm --filter @kos/dashboard typecheck`
 - `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
 - `git diff --check`
+- Application commits `a7737d2`, `1bd5aee`, and `4d7cff1` were pushed to
+  `origin/main`.
+- Both connected Vercel dashboard projects reported successful deployments for
+  `4d7cff1`.
+- Production canary `https://raffle.koslabs.app/r/64` returned `200`, included
+  the `kos-public-dark`, `min-h-dvh`, and `object-cover` classes, and loaded the
+  active Mukuro banner asset from Vercel Blob with `200`. Its deployed CSS
+  includes the dark `body:has(.kos-public-dark)` canvas, `min-height: 100dvh`,
+  and horizontal overflow clipping.
 
 Modified files:
 
+- `apps/dashboard/app/globals.css`
 - `apps/dashboard/app/api/[org]/collaborations/route.ts`
 - `apps/dashboard/app/api/[org]/partners/route.ts`
 - `apps/dashboard/app/c/[slug]/page.tsx`
@@ -144,14 +166,13 @@ Technical debt discovered:
   Ethereum default). The application cannot infer an unrecorded chain from a
   banner or project name safely.
 - The authenticated Playwright baselines require externally supplied session
-  credentials and were not regenerated during this local pass. Unit,
-  typecheck, and production-build validation passed.
+  credentials and were not regenerated during this release. Unit, typecheck,
+  production-build, Vercel-status, and public-route validation passed.
 
 Recommended next task:
 
-- Run the authenticated desktop/mobile visual suite against this branch, then
-  deploy the dashboard and verify one public raffle, one member raffle card,
-  and the KOS Collab Hub board/table/detail views with production data.
+- Supply the ordinary authenticated Playwright session credentials and refresh
+  the desktop/mobile baselines for the member Raffles and Collab Hub views.
 
 ### Phase 4 Collab Hub — production release verified
 

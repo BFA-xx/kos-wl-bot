@@ -471,3 +471,18 @@ only when no attached raffle provides chain data.
 **Why:** Teams already select the operational wallet networks while creating a
 raffle. Requiring the same data on the partner record creates drift and left
 historical Hub rows blank even though the linked raffle retained the answer.
+
+## D044 — Canonical public raffle pages own an always-dark document boundary
+
+**Status:** Accepted
+**Decision:** Scope dark design tokens and `color-scheme: dark` on `/r/:id`,
+regardless of the stored member/dashboard theme preference. Keep the HTML/body
+overscroll canvas dark when that page is present and use dynamic viewport
+height for its root. Preserve the existing theme toggle on authenticated
+dashboard surfaces.
+**Why:** The share page intentionally uses a dark branded hero while some
+lower cards use shared theme variables. Allowing `kos-theme=light` to reach
+only those cards creates a mixed-contrast split, and a light document canvas
+becomes a long white tail during mobile overscroll. The page-local boundary
+keeps the public experience deterministic without removing theme functionality
+elsewhere.

@@ -175,6 +175,10 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   generous spacing, visible focus states, and collapsible command-center
   navigation. Preserve that direction when adding points, rewards, campaigns,
   and weighted-role controls.
+- The canonical public `/r/:id` surface is always dark, independent of the
+  member/dashboard `kos-theme` preference. Keep its dark design-token boundary
+  on the page root and its document/overscroll canvas dark so mixed-contrast
+  cards or a white mobile tail cannot appear.
 - Rewards and points must stay Discord + web parity features where technically
   possible. Current Discord commands are `/points`, `/tasks`, and `/rewards`;
   current web surfaces are `/:org/points`, `/:org/rewards`, `/me/points`,
