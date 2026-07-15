@@ -40,6 +40,19 @@ html.dark {
   color-scheme: dark;
 }
 
+/* Canonical raffle pages are always dark, including the mobile overscroll
+   canvas outside their main element. */
+html:has(.kos-public-dark),
+body:has(.kos-public-dark) {
+  background-color: #0a0a0a;
+  color-scheme: dark;
+}
+
+body:has(.kos-public-dark) {
+  min-height: 100dvh;
+  overflow-x: clip;
+}
+
 html,
 body {
   background-color: rgb(var(--kos-bg));
