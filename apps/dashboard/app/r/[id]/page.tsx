@@ -94,7 +94,7 @@ export default async function ShareableRafflePage({
     sanitizeHttpUrl(raffle.guild.iconUrl);
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#0A0A0A]">
+    <main className="dark min-h-screen overflow-hidden bg-[#0A0A0A] text-white [color-scheme:dark]">
       <div className="pointer-events-none fixed inset-x-0 top-0 h-[34rem] bg-[radial-gradient(circle_at_20%_0%,rgba(59,130,246,0.14),transparent_38%),radial-gradient(circle_at_82%_0%,rgba(139,92,246,0.12),transparent_34%)]" />
 
       <div className="relative mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:py-10">
