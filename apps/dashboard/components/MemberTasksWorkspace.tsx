@@ -789,13 +789,9 @@ export function TaskList({
 
 function BannerFrame({ src }: { src: string }) {
   return (
-    <div className="border-b border-white/[0.08] bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,0.14),transparent_45%),linear-gradient(135deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] px-3 py-3 sm:px-4">
+    <div className="h-40 overflow-hidden border-b border-white/[0.08] bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,0.14),transparent_45%),linear-gradient(135deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] sm:h-52 lg:h-60">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt=""
-        className="mx-auto block max-h-[320px] w-auto max-w-full rounded-3xl object-contain shadow-2xl shadow-black/25"
-      />
+      <img src={src} alt="" className="h-full w-full object-cover" />
     </div>
   );
 }

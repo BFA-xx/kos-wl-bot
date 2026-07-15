@@ -156,6 +156,7 @@ export const GET = withAccess(async (req, { params }) => {
                 spots: true,
                 entryCount: true,
                 endAt: true,
+                walletChains: true,
               },
             },
           },

@@ -4,6 +4,22 @@ const GENERIC_PARTNER_CATEGORIES = new Set([
   "collaboration partner",
 ]);
 
+const CHAIN_LABELS: Record<string, string> = {
+  ETHEREUM: "Ethereum",
+  BASE: "Base",
+  ROBINHOOD: "Robinhood Chain (RH)",
+  SOLANA: "Solana",
+  BITCOIN: "Bitcoin",
+};
+
+const CHAIN_ORDER = Object.keys(CHAIN_LABELS);
+
+type RaffleChainLink = {
+  raffle: {
+    walletChains?: readonly string[] | null;
+  };
+};
+
 export function meaningfulPartnerCategory(value: string | null | undefined) {
   const category = value?.trim() ?? "";
   return category && !GENERIC_PARTNER_CATEGORIES.has(category.toLowerCase())
@@ -19,6 +35,56 @@ export function partnerDescriptor({
   category?: string | null;
 }) {
   return [chain?.trim() || null, meaningfulPartnerCategory(category)]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+export function collaborationChainLabels(
+  raffles: readonly RaffleChainLink[],
+  fallback?: string | null,
+) {
+  const configured = [
+    ...new Set(
+      raffles.flatMap(({ raffle }) =>
+        (raffle.walletChains ?? [])
+          .map((chain) => chain.trim())
+          .filter(Boolean),
+      ),
+    ),
+  ];
+  const chains = configured.length
+    ? configured
+    : fallback?.trim()
+      ? [fallback.trim()]
+      : [];
+
+  return chains
+    .sort((left, right) => {
+      const leftRank = CHAIN_ORDER.indexOf(left.toUpperCase());
+      const rightRank = CHAIN_ORDER.indexOf(right.toUpperCase());
+      if (leftRank === -1 && rightRank === -1) return left.localeCompare(right);
+      if (leftRank === -1) return 1;
+      if (rightRank === -1) return -1;
+      return leftRank - rightRank;
+    })
+    .map((chain) => CHAIN_LABELS[chain.toUpperCase()] ?? chain);
+}
+
+export function collaborationChainText(
+  raffles: readonly RaffleChainLink[],
+  fallback?: string | null,
+) {
+  return collaborationChainLabels(raffles, fallback).join(", ");
+}
+
+export function collaborationDescriptor(
+  raffles: readonly RaffleChainLink[],
+  partner: { chain?: string | null; category?: string | null },
+) {
+  return [
+    collaborationChainText(raffles, partner.chain),
+    meaningfulPartnerCategory(partner.category),
+  ]
     .filter(Boolean)
     .join(" · ");
 }

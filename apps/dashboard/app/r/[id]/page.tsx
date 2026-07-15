@@ -115,12 +115,12 @@ export default async function ShareableRafflePage({
 
         <section className="kos-fade overflow-hidden rounded-[2rem] border border-white/[0.09] bg-[#111]/90 shadow-[0_30px_120px_-55px_rgba(0,0,0,0.95)] backdrop-blur-2xl">
           {bannerUrl ? (
-            <div className="border-b border-white/[0.08] bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,0.16),transparent_50%),rgba(255,255,255,0.02)] p-3 sm:p-5 lg:p-6">
+            <div className="h-40 overflow-hidden border-b border-white/[0.08] bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,0.16),transparent_50%),rgba(255,255,255,0.02)] sm:h-56 lg:h-72">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={bannerUrl}
                 alt={`${raffle.projectName} raffle banner`}
-                className="mx-auto block max-h-[34rem] w-auto max-w-full rounded-2xl object-contain shadow-2xl shadow-black/40 sm:rounded-3xl"
+                className="h-full w-full object-cover"
               />
             </div>
           ) : (

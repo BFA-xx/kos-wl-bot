@@ -126,12 +126,12 @@ export default async function CommunityPage({
               className="kos-card kos-card-hover overflow-hidden"
             >
               {r.bannerUrl ? (
-                <div className="border-b border-white/[0.08] bg-white/[0.025] p-3">
+                <div className="h-36 overflow-hidden border-b border-white/[0.08] bg-white/[0.025] sm:h-44">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={r.bannerUrl}
                     alt=""
-                    className="mx-auto block max-h-44 w-auto max-w-full rounded-2xl object-contain"
+                    className="h-full w-full object-cover"
                   />
                 </div>
               ) : null}

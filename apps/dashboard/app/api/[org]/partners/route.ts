@@ -29,7 +29,17 @@ export const GET = withAccess(async (req, { params }) => {
     include: {
       contacts: { orderBy: { updatedAt: "desc" }, take: 5 },
       collaborations: {
-        select: { id: true, status: true, projectName: true, updatedAt: true },
+        select: {
+          id: true,
+          status: true,
+          projectName: true,
+          updatedAt: true,
+          raffles: {
+            select: {
+              raffle: { select: { walletChains: true } },
+            },
+          },
+        },
         orderBy: { updatedAt: "desc" },
       },
     },

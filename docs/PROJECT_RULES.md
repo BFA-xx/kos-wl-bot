@@ -59,10 +59,16 @@
   same organization's Collab Hub. Resolve tenancy from `GuildConnection`, keep
   the source raffle as the system of record, and never create a collaboration
   for a failed Discord publish.
+- Collab Hub chain presentation must derive from all attached
+  `Raffle.walletChains`, with `CollaborationPartner.chain` used only as a
+  fallback when linked raffle chain data is absent.
 - A new Discord attachment banner must be copied to durable shared storage
   before publication. Enforce the Discord-host allowlist, supported image MIME
   types, and 5 MB limit; do not silently fall back to an expiring attachment
   URL when persistence fails.
+- Raffle banners fill responsive media containers edge-to-edge with
+  `width: 100%`, `height: 100%`, and `object-cover`. Prefer a clean crop over
+  centered letterboxing, but never distort the bitmap with `object-fill`.
 
 ## Delivery
 

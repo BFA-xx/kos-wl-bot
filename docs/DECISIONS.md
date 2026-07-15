@@ -425,8 +425,8 @@ only allow active organization members in collaboration assignment controls.
 Historical imports assign the attached raffle's `createdById`; grouped rounds
 use the most frequent host, then the most recent host as a deterministic
 tiebreaker. Do not infer a partner logo or generic category from an attached
-raffle banner; render raffle media separately with a complete-frame layout and
-a branded error fallback.
+raffle banner; render raffle media separately in responsive fixed-height frames
+with `object-cover` and a branded error fallback.
 **Why:** Organization ownership and import execution are authorization
 concepts, not proof of who hosted a raffle. The raffle creator is the durable
 source for host attribution. Raffle banners are campaign assets rather than
@@ -459,3 +459,15 @@ identity.
 **Why:** The same address format does not mean the same payout network. An
 explicit chain prevents ambiguous winner exports and keeps Discord/web entry
 rules identical without introducing paid or on-chain verification.
+
+## D043 — Hosted raffle configuration drives Collab Hub chain labels
+
+**Status:** Accepted
+**Decision:** Derive the chain displayed by a collaboration from the stable,
+deduplicated union of `walletChains` on all attached raffles. Apply the shared
+wallet-chain labels, including `Robinhood Chain (RH)`, in Hub cards, tables,
+details, partner summaries, and CSV exports. Use `CollaborationPartner.chain`
+only when no attached raffle provides chain data.
+**Why:** Teams already select the operational wallet networks while creating a
+raffle. Requiring the same data on the partner record creates drift and left
+historical Hub rows blank even though the linked raffle retained the answer.

@@ -20,7 +20,8 @@ import { useCan } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
   collaborationBannerUrls,
-  partnerDescriptor,
+  collaborationChainText,
+  collaborationDescriptor,
 } from "@/lib/collab-presentation";
 import {
   COLLAB_PRIORITIES,
@@ -78,6 +79,7 @@ interface CollabRow {
       title: string;
       bannerUrl: string | null;
       endAt: string;
+      walletChains: string[];
     };
   }[];
   reminders: { id: string; title: string; type: string; dueAt: string }[];
@@ -180,7 +182,12 @@ interface Partner {
   responseRate: number | null;
   privateNotes: string | null;
   contacts: { id: string; name: string; role: string | null }[];
-  collaborations: { id: string; projectName: string; status: string }[];
+  collaborations: {
+    id: string;
+    projectName: string;
+    status: string;
+    raffles: { raffle: { walletChains: string[] } }[];
+  }[];
 }
 
 type View = "BOARD" | "TABLE" | "CALENDAR";
@@ -366,7 +373,7 @@ export function CollabHub() {
       ],
       ...rows.map((row) => [
         row.projectName,
-        row.partner.chain ?? "",
+        collaborationChainText(row.raffles, row.partner.chain),
         displayCollabStatus(row.status),
         row.whitelistAllocation,
         `${row.walletProgress.collected}/${row.walletProgress.total}`,
@@ -1174,7 +1181,7 @@ function BoardCard({
               {row.projectName}
             </div>
             <div className="mt-0.5 truncate text-xs text-kos-muted">
-              {partnerDescriptor(row.partner) ||
+              {collaborationDescriptor(row.raffles, row.partner) ||
                 `${row.raffles.length} raffle${row.raffles.length === 1 ? "" : "s"}`}
             </div>
           </div>
@@ -1367,8 +1374,9 @@ function Spreadsheet({
                       {row.projectName}
                     </div>
                     <div className="text-xs text-kos-muted">
-                      {row.partner.chain ?? "No chain"} ·{" "}
-                      {row.whitelistAllocation} spots
+                      {collaborationChainText(row.raffles, row.partner.chain) ||
+                        "No chain"}{" "}
+                      · {row.whitelistAllocation} spots
                     </div>
                   </div>
                 </div>
@@ -1483,7 +1491,10 @@ function Spreadsheet({
                             {row.projectName}
                           </span>
                           <span className="block max-w-44 truncate text-xs text-kos-muted">
-                            {partnerDescriptor(row.partner) ||
+                            {collaborationDescriptor(
+                              row.raffles,
+                              row.partner,
+                            ) ||
                               `${row.raffles.length} raffle${row.raffles.length === 1 ? "" : "s"}`}
                           </span>
                         </span>
@@ -1492,7 +1503,8 @@ function Spreadsheet({
                   ) : null}
                   {visible.has("chain") ? (
                     <td className="text-kos-muted">
-                      {row.partner.chain ?? "—"}
+                      {collaborationChainText(row.raffles, row.partner.chain) ||
+                        "—"}
                     </td>
                   ) : null}
                   {visible.has("social") ? (
@@ -1954,7 +1966,12 @@ function PartnerDirectory({
             <div className="min-w-0 flex-1">
               <h3 className="truncate font-semibold">{partner.name}</h3>
               <p className="text-xs text-kos-muted">
-                {partnerDescriptor(partner) || "Multi-chain"}
+                {collaborationDescriptor(
+                  partner.collaborations.flatMap(
+                    (collaboration) => collaboration.raffles,
+                  ),
+                  partner,
+                ) || "No hosted chain yet"}
               </p>
             </div>
             <div className="text-right">

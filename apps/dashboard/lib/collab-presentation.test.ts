@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildAllTimeActivityHistory,
   collaborationBannerUrls,
+  collaborationChainLabels,
+  collaborationChainText,
+  collaborationDescriptor,
   meaningfulPartnerCategory,
   partnerDescriptor,
 } from "./collab-presentation";
@@ -62,5 +65,35 @@ describe("collaboration presentation", () => {
       "https://cdn.example/older.png",
       "https://cdn.example/cancelled.png",
     ]);
+  });
+
+  it("derives and deduplicates chains from every hosted raffle", () => {
+    const raffles = [
+      { raffle: { walletChains: ["ROBINHOOD", "ETHEREUM"] } },
+      { raffle: { walletChains: ["BASE", "ROBINHOOD"] } },
+      { raffle: { walletChains: [] } },
+    ];
+
+    expect(collaborationChainLabels(raffles, "Legacy chain")).toEqual([
+      "Ethereum",
+      "Base",
+      "Robinhood Chain (RH)",
+    ]);
+    expect(collaborationChainText(raffles, "Legacy chain")).toBe(
+      "Ethereum, Base, Robinhood Chain (RH)",
+    );
+    expect(
+      collaborationDescriptor(raffles, {
+        chain: "Legacy chain",
+        category: "Gaming",
+      }),
+    ).toBe("Ethereum, Base, Robinhood Chain (RH) · Gaming");
+  });
+
+  it("uses the partner chain only when linked raffles have no chain data", () => {
+    expect(
+      collaborationChainText([{ raffle: { walletChains: [] } }], "ROBINHOOD"),
+    ).toBe("Robinhood Chain (RH)");
+    expect(collaborationChainText([], null)).toBe("");
   });
 });

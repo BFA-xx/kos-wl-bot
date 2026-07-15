@@ -47,7 +47,7 @@ export function RaffleBanner({
   src,
   fallbackSources = [],
   compact = false,
-  className = "aspect-video w-full",
+  className = "aspect-[16/6] w-full",
 }: {
   name: string;
   src?: string | null;
@@ -66,13 +66,13 @@ export function RaffleBanner({
 
   return (
     <div
-      className={`relative flex items-center justify-center overflow-hidden bg-[#0B0B0B] ${className}`}
+      className={`relative flex items-center justify-center overflow-hidden bg-[#0B0B0B] ${!currentSource && !compact ? "min-h-32" : ""} ${className}`}
     >
       {currentSource ? (
         <img
           src={currentSource}
           alt={`${name} raffle banner`}
-          className="absolute inset-0 h-full w-full object-contain"
+          className="absolute inset-0 h-full w-full object-cover"
           onError={() => setSourceIndex((index) => index + 1)}
         />
       ) : (

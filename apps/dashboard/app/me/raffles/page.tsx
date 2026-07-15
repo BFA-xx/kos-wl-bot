@@ -229,13 +229,13 @@ function RaffleEntryCard({
   return (
     <div className="kos-card overflow-hidden">
       {raffle.bannerUrl ? (
-        <div className="border-b border-white/[0.08] bg-white/[0.025] px-3 py-3">
+        <div className="h-40 overflow-hidden border-b border-white/[0.08] bg-white/[0.025] sm:h-52">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={raffle.bannerUrl}
             alt=""
             loading={ended ? "lazy" : "eager"}
-            className="mx-auto block max-h-[220px] w-auto max-w-full rounded-3xl object-contain"
+            className="h-full w-full object-cover"
           />
         </div>
       ) : null}

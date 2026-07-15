@@ -1,6 +1,6 @@
 # Engineering Handoff
 
-Last updated: 2026-07-13
+Last updated: 2026-07-15
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
 Audited application commit: `d922ac0`
@@ -61,6 +61,10 @@ Phase 3 is implemented through S2.5:
 - Robinhood Chain (`RH`) is deployed as a first-class wallet chain across team
   raffle create/edit, member web/Discord registration, eligibility, winner
   collection, duplication, and exports.
+- A local, not-yet-deployed dashboard pass now makes full-size raffle banners
+  fill responsive media boxes edge-to-edge with `object-cover` and derives
+  Collab Hub chain labels from every linked raffle instead of relying on the
+  optional partner chain field.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -80,6 +84,74 @@ verified the points/weighted migration, EC2 bot deployment, and Vercel route
 availability described below.
 
 ## Verified locally
+
+### Full-width raffle media and hosted-chain labels — locally verified, not deployed
+
+- Public raffle pages, member raffle/task cards, community raffle cards, and
+  Collab Hub media now render inside consistent responsive-height boxes with
+  `width: 100%`, `height: 100%`, and `object-cover`. This removes the narrow
+  centered-banner treatment and fills every box without distorting the bitmap.
+- Banner crops adapt to the box when source proportions differ. Partner logos
+  remain separate identity media and still use `object-contain`.
+- Collab Hub list and partner APIs now return `walletChains` from linked
+  raffles. Board cards, mobile cards, spreadsheet rows, detail headers,
+  per-raffle detail cards, partner-directory cards, and CSV exports display the
+  stable deduplicated union across all hosted rounds. Known enum values use the
+  shared product wording, including `Robinhood Chain (RH)`.
+- A manually entered `CollaborationPartner.chain` is retained as the fallback
+  only when attached raffles provide no chain data. No schema migration or
+  environment change is required.
+
+Verification:
+
+- `corepack pnpm --filter @kos/dashboard test` — 16 files, 49 tests passed.
+- `corepack pnpm --filter @kos/dashboard typecheck`
+- `DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder corepack pnpm --filter @kos/dashboard build`
+- `git diff --check`
+
+Modified files:
+
+- `apps/dashboard/app/api/[org]/collaborations/route.ts`
+- `apps/dashboard/app/api/[org]/partners/route.ts`
+- `apps/dashboard/app/c/[slug]/page.tsx`
+- `apps/dashboard/app/me/raffles/page.tsx`
+- `apps/dashboard/app/r/[id]/page.tsx`
+- `apps/dashboard/components/CollabDetail.tsx`
+- `apps/dashboard/components/CollabHub.tsx`
+- `apps/dashboard/components/CollabMedia.tsx`
+- `apps/dashboard/components/MemberTasksWorkspace.tsx`
+- `apps/dashboard/lib/collab-presentation.ts`
+- `apps/dashboard/lib/collab-presentation.test.ts`
+- `docs/AGENTS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/DECISIONS.md`
+- `docs/HANDOFF.md`
+- `docs/PROJECT_RULES.md`
+
+Assumptions:
+
+- "Stretch to fit the box" means fill both dimensions with `object-cover`.
+  Cropping is acceptable; distorting the bitmap with `object-fill` is not.
+- Linked raffle configuration is authoritative for hosted wallet networks.
+  Partner chain remains a valid fallback for older manually created records.
+- The request changes raffle campaign media only; organization cover images
+  and partner logos keep their existing presentation rules.
+
+Technical debt discovered:
+
+- Historical raffles created before explicit multi-chain configuration can
+  only report the value retained in `Raffle.walletChains` (normally the legacy
+  Ethereum default). The application cannot infer an unrecorded chain from a
+  banner or project name safely.
+- The authenticated Playwright baselines require externally supplied session
+  credentials and were not regenerated during this local pass. Unit,
+  typecheck, and production-build validation passed.
+
+Recommended next task:
+
+- Run the authenticated desktop/mobile visual suite against this branch, then
+  deploy the dashboard and verify one public raffle, one member raffle card,
+  and the KOS Collab Hub board/table/detail views with production data.
 
 ### Phase 4 Collab Hub — production release verified
 

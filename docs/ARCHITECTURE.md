@@ -354,8 +354,16 @@ created round.
 Partner identity media and raffle campaign media remain separate. A partner
 logo is an explicitly supplied `CollaborationPartner.logoUrl`; historical
 imports do not promote `Raffle.bannerUrl` into that field. Attached raffle
-cards display the banner in a contained 16:9 frame and fall back to a branded
-project treatment when the source is absent or expired.
+cards display the banner in consistent responsive media frames using
+`width: 100%`, `height: 100%`, and `object-cover`, and fall back to a branded
+project treatment when the source is absent or expired. This favors an
+edge-to-edge crop over letterboxing and never distorts the bitmap.
+
+Collab Hub does not require teams to re-enter a chain already configured on a
+raffle. Workspace rows, detail views, partner cards, and CSV exports derive a
+stable, deduplicated chain list from every attached `Raffle.walletChains`
+value. `CollaborationPartner.chain` remains editable and is used only as a
+fallback for legacy collaborations whose linked raffles have no chain data.
 
 New Discord-uploaded raffle banners cross a durable-media boundary before
 publication. The bot accepts only Discord attachment hosts and supported image

@@ -19,7 +19,10 @@ import {
 } from "./icons";
 import { useCan } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
-import { partnerDescriptor } from "@/lib/collab-presentation";
+import {
+  collaborationChainText,
+  collaborationDescriptor,
+} from "@/lib/collab-presentation";
 import {
   COLLAB_PRIORITIES,
   COLLAB_PRIORITY_LABELS,
@@ -115,6 +118,7 @@ interface DetailData {
         endAt: string;
         bannerUrl: string | null;
         externalUrl: string | null;
+        walletChains: string[];
         proof: {
           messageLink: string | null;
           generatedAt: string;
@@ -323,8 +327,10 @@ export function CollabDetail() {
                   {collaboration.projectName}
                 </h1>
                 <p className="mt-2 text-sm text-kos-muted">
-                  {partnerDescriptor(collaboration.partner) ||
-                    "Community collaboration"}
+                  {collaborationDescriptor(
+                    collaboration.raffles,
+                    collaboration.partner,
+                  ) || "Community collaboration"}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {collaboration.tags.map(({ tag }) => (
@@ -763,7 +769,7 @@ function OverviewTab({
           <Detail label="Project" value={c.projectName} />
           <Detail
             label="Chain / Category"
-            value={partnerDescriptor(c.partner) || "Not set"}
+            value={collaborationDescriptor(c.raffles, c.partner) || "Not set"}
           />
           <Detail
             label="Hosted by"
@@ -1243,7 +1249,7 @@ function RafflesTab({
               <RaffleBanner
                 name={raffle.projectName}
                 src={raffle.bannerUrl}
-                className="aspect-video w-full border-b border-white/[0.07]"
+                className="aspect-[16/6] w-full border-b border-white/[0.07]"
               />
               <div className="p-4">
                 <div className="min-w-0">
@@ -1261,6 +1267,10 @@ function RafflesTab({
                   <p className="mt-2 text-xs text-kos-muted">
                     {raffle.entryCount} entries · {raffle._count.winners}{" "}
                     winners
+                  </p>
+                  <p className="mt-1 text-xs text-kos-muted">
+                    {collaborationChainText([{ raffle }]) ||
+                      "No wallet chain configured"}
                   </p>
                 </div>
               </div>

@@ -164,9 +164,12 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 - Member mobile navigation should use the sidebar/drawer, not a cramped
   horizontal tab rail. The drawer must include a clear jump back to team/org
   dashboards.
-- Keep member task cards compact and mobile-first: banners should render as
-  natural-aspect media strips, not forced side columns or fixed crops; social
-  tasks should use the one-CTA flow `Open task` -> `Verify` -> `Verified`.
+- Keep member task cards compact and mobile-first: full-size raffle banners
+  must fill a consistent responsive media frame edge-to-edge with
+  `object-cover`, without centered letterboxing or bitmap distortion. A clean
+  crop is preferred when the uploaded proportions differ from the frame;
+  social tasks should use the one-CTA flow `Open task` -> `Verify` ->
+  `Verified`.
 - Current UI refresh direction is dark-mode premium SaaS: `#0A0A0A` background,
   `#111111` panels, `#181818` cards, subtle borders, blue/purple accents,
   generous spacing, visible focus states, and collapsible command-center
@@ -282,9 +285,12 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   actually hosted the raffle rather than the person who ran the import.
 - Historical raffle banners are media for the attached raffle, not partner
   logos or partner categories. Do not seed `CollaborationPartner.logoUrl` from
-  a raffle banner or add a generic `Raffle partner` label. Raffle media uses a
-  full-frame `object-contain` presentation and a branded fallback when its
-  source is unavailable.
+  a raffle banner or add a generic `Raffle partner` label. Raffle media fills
+  its responsive container edge-to-edge with `object-cover`; use a branded
+  fallback when the source is unavailable.
+- Collab Hub chain labels come from the deduplicated union of
+  `Raffle.walletChains` across every attached raffle. Use the manually entered
+  partner chain only when none of those raffles has chain data.
 - Discord interaction attachment URLs under `ephemeral-attachments` expire.
   Older expired files cannot be recovered from their stored URL. Before a new
   Discord-uploaded banner is published, the bot must validate and copy at most
