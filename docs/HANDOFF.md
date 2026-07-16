@@ -1,9 +1,9 @@
 # Engineering Handoff
 
-Last updated: 2026-07-15
+Last updated: 2026-07-16
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `4d7cff1`
+Audited application commit: `5c7f5a0`
 
 ## Current state
 
@@ -68,6 +68,10 @@ Phase 3 is implemented through S2.5:
   preferences from turning only its lower cards white. Its dynamic-height root
   and dark document canvas also prevent a white tail below the footer on
   mobile. All are deployed.
+- Authenticated production visual regression now also covers Member Raffles
+  and Collab Hub with deterministic API fixtures on desktop Chromium and Pixel
+  7. Four reviewed baselines are committed, and the standard gitignored auth
+  state is reusable without an extra storage-state environment override.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:
@@ -1472,6 +1476,79 @@ Verification:
 - Commits: `7885db0` (Playwright harness), `ec6820f`/`11ebb03` (distributed
   token refresh hardening), `f08e963`/`2ba4343` (Discord retry handling), and
   `ac2c76b` (visual baselines).
+
+### Member Raffles and Collab Hub visual regression — production verified
+
+- Added deterministic authenticated Playwright coverage for `/me/raffles` and
+  `/:org/collabs`. Network fixtures keep the screenshots focused on layout and
+  interaction regressions instead of changing production raffle/collaboration
+  data, while the pages still run through the deployed production SSR shells,
+  authentication, routing, fonts, CSS, and responsive breakpoints.
+- Member Raffles covers summary metrics, a live entered raffle, inline task
+  verification states, responsive banner fill, the entry confirmation panel,
+  and ended-raffle history.
+- Collab Hub covers search/filters, responsive view controls, all-time metrics,
+  activity panels, the board with Completed in the third desktop column,
+  hosted chain labels, wallet progress, and analytics.
+- Four reviewed baselines are committed: Member Raffles and Collab Hub at
+  1440×1000 desktop Chromium and Pixel 7 mobile Chromium. The screenshot helper
+  hides only the shell's sticky header during element capture so Playwright
+  does not scroll it over and clip the workspace title.
+- The global setup now reuses the normal gitignored
+  `.playwright/auth-state.json` whenever it contains a usable KOS session. A
+  missing, malformed, or expired state can be replaced from externally
+  supplied signing inputs instead of silently running into login redirects.
+- Behavior-neutral `data-testid` landmarks were deployed in application commit
+  `5c7f5a0`; both connected Vercel projects reported successful deployment.
+
+Verification:
+
+- `corepack pnpm --filter @kos/dashboard test` — 16 files, 49 tests passed.
+- `corepack pnpm --filter @kos/dashboard typecheck` — passed.
+- `corepack pnpm --filter @kos/dashboard build` — production build passed with
+  the configured local environment; no schema or environment change was made.
+- Baseline generation against `https://raffle.koslabs.app` — 4 passed.
+- Independent production visual comparison — 4 passed in 16.9 seconds after
+  final baseline regeneration.
+- All four images were visually inspected after generation.
+- `git diff --check` — passed.
+
+Modified files for this task:
+
+- `apps/dashboard/app/me/raffles/page.tsx`
+- `apps/dashboard/components/CollabHub.tsx`
+- `apps/dashboard/e2e/global-setup.ts`
+- `apps/dashboard/e2e/member-and-collab.spec.ts`
+- `apps/dashboard/e2e/__screenshots__/member-and-collab.spec.ts/collab-hub-desktop-chromium.png`
+- `apps/dashboard/e2e/__screenshots__/member-and-collab.spec.ts/collab-hub-mobile-chromium.png`
+- `apps/dashboard/e2e/__screenshots__/member-and-collab.spec.ts/member-raffles-desktop-chromium.png`
+- `apps/dashboard/e2e/__screenshots__/member-and-collab.spec.ts/member-raffles-mobile-chromium.png`
+- `docs/HANDOFF.md`
+
+Assumptions:
+
+- KOS remains the default visual-test organization unless
+  `KOS_E2E_ORG_SLUG` explicitly selects another tenant.
+- Stable mocked API records are the correct baseline source for these mutable
+  workspaces; tenant authorization and deployed SSR behavior remain real.
+- The test-only session may be refreshed from the configured local signing
+  secret and the saved test-user identity without persisting or exposing either
+  value.
+
+Technical debt:
+
+- Authenticated visual state is intentionally short-lived and still needs a
+  manual/local refresh when it expires. CI does not yet provision an ordinary
+  test-user session or publish Playwright image diffs as build artifacts.
+- The older community-experience visual suite still depends on live directory
+  and branding API data with masks; it is more sensitive to production account
+  state than these deterministic workspace fixtures.
+
+Recommended next task:
+
+- Add a protected dashboard visual-regression CI job that provisions a
+  dedicated ordinary test-user session, runs both authenticated specs on pull
+  requests, and uploads HTML reports, traces, and image diffs on failure.
 
 ## Confirmed invariants and current product policies
 

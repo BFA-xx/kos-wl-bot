@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { FullConfig } from "@playwright/test";
@@ -17,11 +17,31 @@ function signedSession(userId: string, secret: string): string {
   return `${body}.${signature}`;
 }
 
+function hasUsableSessionState(statePath: string): boolean {
+  if (!existsSync(statePath)) return false;
+  try {
+    const state = JSON.parse(readFileSync(statePath, "utf8")) as {
+      cookies?: { name?: string; expires?: number }[];
+    };
+    const session = state.cookies?.find(
+      (cookie) => cookie.name === "kos_session",
+    );
+    if (!session) return false;
+    return (
+      session.expires === undefined ||
+      session.expires === -1 ||
+      session.expires > Math.floor(Date.now() / 1000) + 60
+    );
+  } catch {
+    return false;
+  }
+}
+
 export default async function globalSetup(config: FullConfig) {
   const statePath = resolve(
     process.env.KOS_E2E_STORAGE_STATE || ".playwright/auth-state.json",
   );
-  if (process.env.KOS_E2E_STORAGE_STATE && existsSync(statePath)) return;
+  if (hasUsableSessionState(statePath)) return;
 
   const baseURL = config.projects[0]?.use.baseURL;
   if (typeof baseURL !== "string") {
