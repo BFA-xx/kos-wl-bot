@@ -497,7 +497,7 @@ export function CollabHub() {
   }
 
   return (
-    <>
+    <div data-testid="collab-hub-workspace">
       {showCreate ? (
         <CollabCreatePanel
           team={data?.team ?? []}
@@ -900,7 +900,7 @@ export function CollabHub() {
           <IconPlus /> New
         </button>
       ) : null}
-    </>
+    </div>
   );
 }
 

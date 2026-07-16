@@ -38,9 +38,11 @@ interface RafflesData {
 
 export default function MeRafflesPage() {
   return (
-    <Suspense fallback={<Empty>Loading raffles…</Empty>}>
-      <MeRafflesInner />
-    </Suspense>
+    <div data-testid="member-raffles-workspace">
+      <Suspense fallback={<Empty>Loading raffles…</Empty>}>
+        <MeRafflesInner />
+      </Suspense>
+    </div>
   );
 }
 
