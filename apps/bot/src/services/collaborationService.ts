@@ -6,6 +6,7 @@ import {
   prisma,
 } from "@kos/db";
 import { logger } from "../logger.js";
+import { selectConfiguredWallet } from "../utils/wallets.js";
 
 const TERMINAL = new Set<CollaborationStatus>([
   CollaborationStatus.SUBMITTED,
@@ -416,9 +417,7 @@ export async function cleanupCollaborationAfterRaffleDelete(
     const requirements =
       collaboration.requirements
         ?.split("\n")
-        .filter(
-          (line) => !line.startsWith(`Auto-linked raffle #${raffleId} `),
-        )
+        .filter((line) => !line.startsWith(`Auto-linked raffle #${raffleId} `))
         .join("\n") || null;
     await tx.collaboration.update({
       where: { id: collaboration.id },
@@ -467,26 +466,24 @@ async function syncCollaboration(collaborationId: string): Promise<void> {
   const existingByUser = new Map(
     collaboration.wallets.map((wallet) => [wallet.userId, wallet]),
   );
-  const seen = new Set<string>();
+  const resolved = new Set<string>();
   for (const link of collaboration.raffles) {
     for (const winner of link.raffle.winners) {
-      if (seen.has(winner.userId)) continue;
-      seen.add(winner.userId);
+      if (resolved.has(winner.userId)) continue;
       const current = existingByUser.get(winner.userId);
-      const profile =
-        link.raffle.walletChains
-          .map((chain) =>
-            winner.user.walletProfiles.find((item) => item.chain === chain),
-          )
-          .find(Boolean) ??
-        winner.user.walletProfiles[0] ??
-        null;
-      const source = winner.wallet ?? profile;
+      const source = selectConfiguredWallet(
+        winner.wallet,
+        winner.user.walletProfiles,
+        link.raffle.walletChains,
+      );
+      if (source) resolved.add(winner.userId);
       const detected = source
         ? CollaborationWalletStatus.COLLECTED
         : CollaborationWalletStatus.WAITING;
       const status =
-        current && current.status !== CollaborationWalletStatus.WAITING
+        source &&
+        current &&
+        current.status !== CollaborationWalletStatus.WAITING
           ? current.status
           : detected;
       await prisma.collaborationWallet.upsert({
@@ -504,8 +501,8 @@ async function syncCollaboration(collaborationId: string): Promise<void> {
           status,
         },
         update: {
-          winnerId: current?.winnerId ?? winner.id,
-          chain: source?.chain ?? current?.chain ?? null,
+          winnerId: source ? winner.id : (current?.winnerId ?? winner.id),
+          chain: source?.chain ?? null,
           status,
         },
       });

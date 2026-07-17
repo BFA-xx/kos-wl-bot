@@ -6,6 +6,7 @@ import { addressesWorkbook, type AddressRow } from "@/lib/xlsx";
 import { logAudit, requireOrgAccess, withAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
 import { syncCollaborationState } from "@/lib/collab";
+import { selectConfiguredWallet } from "@/lib/winner-wallet";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,7 +24,12 @@ export const GET = withAccess(async (request, { params }) => {
       wallets: {
         where: { status: { not: "REJECTED" } },
         include: {
-          winner: { include: { wallet: true } },
+          winner: {
+            include: {
+              wallet: true,
+              raffle: { select: { walletChains: true } },
+            },
+          },
           user: { include: { walletProfiles: true } },
         },
         orderBy: { createdAt: "asc" },
@@ -39,14 +45,14 @@ export const GET = withAccess(async (request, { params }) => {
 
   const rows = collaboration.wallets
     .map((item) => {
-      const profile =
-        item.user.walletProfiles.find(
-          (wallet) => wallet.chain === item.chain,
-        ) ??
-        item.user.walletProfiles[0] ??
-        null;
-      const source = item.winner?.wallet ?? profile;
-      if (!source) return null;
+      const source = item.winner
+        ? selectConfiguredWallet(
+            item.winner.wallet,
+            item.user.walletProfiles,
+            item.winner.raffle.walletChains,
+          )
+        : null;
+      if (!source || source.chain !== item.chain) return null;
       return {
         walletId: item.id,
         userId: item.userId,

@@ -17,7 +17,7 @@ export const configCommand: Command = {
   managerOnly: false,
   data: new SlashCommandBuilder()
     .setName("config")
-    .setDescription("Configure KOS WL Bot for this server")
+    .setDescription("Configure KOS Raffles for this server")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false)
     .addSubcommandGroup((g) =>

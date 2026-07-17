@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EntryPanel } from "@/components/EntryPanel";
+import { PublicThemeBridge } from "@/components/PublicThemeBridge";
 import { RaffleCountdown } from "@/components/RaffleCountdown";
 import { StatusBadge } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
 import { sanitizeHttpUrl } from "@/lib/raffle-input";
 import { xProfileUrl } from "@/lib/organization-social";
 import {
+  canonicalRaffleBannerUrl,
   inferRaffleKind,
   parsePublicRaffleId,
   publicRafflePath,
@@ -33,7 +35,7 @@ export async function generateMetadata({
     raffle.description?.trim().slice(0, 200) ||
     `Join ${organization.name}'s ${raffle.projectName} raffle on KOS.`;
   const url = publicRaffleUrl(raffle.id);
-  const bannerUrl = sanitizeHttpUrl(raffle.bannerUrl);
+  const bannerUrl = canonicalRaffleBannerUrl(raffle.id, raffle.bannerUrl);
 
   return {
     title: `${title} · KOS Raffles`,
@@ -87,7 +89,7 @@ export default async function ShareableRafflePage({
     weighted: raffle.useRoleWeights,
   });
   const kind = inferRaffleKind(raffle.title);
-  const bannerUrl = sanitizeHttpUrl(raffle.bannerUrl);
+  const bannerUrl = canonicalRaffleBannerUrl(raffle.id, raffle.bannerUrl);
   const projectUrl = sanitizeHttpUrl(raffle.externalUrl);
   const logoUrl =
     sanitizeHttpUrl(organization.logoUrl) ||
@@ -95,6 +97,7 @@ export default async function ShareableRafflePage({
 
   return (
     <main className="kos-public-dark dark min-h-dvh overflow-hidden bg-[#0A0A0A] text-white [color-scheme:dark]">
+      <PublicThemeBridge />
       <div className="pointer-events-none fixed inset-x-0 top-0 h-[34rem] bg-[radial-gradient(circle_at_20%_0%,rgba(59,130,246,0.14),transparent_38%),radial-gradient(circle_at_82%_0%,rgba(139,92,246,0.12),transparent_34%)]" />
 
       <div className="relative mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:py-10">

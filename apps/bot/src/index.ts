@@ -19,7 +19,7 @@ async function main() {
   client.once(Events.ClientReady, async (c) => {
     logger.info(
       { user: c.user.tag, guilds: c.guilds.cache.size },
-      "KOS WL Bot is online",
+      "KOS Raffles is online",
     );
     c.user.setPresence({
       activities: [{ name: "WL Raffles", type: ActivityType.Watching }],

@@ -1,4 +1,4 @@
-# KOS WL Bot — User Guide
+# KOS Raffles — User Guide
 
 A quick guide you can share with your community and team.
 

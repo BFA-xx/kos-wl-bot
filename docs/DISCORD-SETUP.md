@@ -3,7 +3,7 @@
 ## 1. Create the application
 
 1. Go to the [Discord Developer Portal](https://discord.com/developers/applications).
-2. **New Application** → name it (e.g. `KOS WL Bot`).
+2. **New Application** → name it (e.g. `KOS Raffles`).
 3. Copy the **Application ID** → this is `DISCORD_CLIENT_ID`.
 
 ## 2. Create the bot user

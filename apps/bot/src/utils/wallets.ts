@@ -29,15 +29,22 @@ export function validateWallet(
       // Base and Robinhood Chain are EVM networks — same 0x address format.
       return ETH_RE.test(address)
         ? { valid: true, normalized: address.toLowerCase() }
-        : { valid: false, error: `Invalid ${chainLabel(chain)} address (expected 0x + 40 hex).` };
+        : {
+            valid: false,
+            error: `Invalid ${chainLabel(chain)} address (expected 0x + 40 hex).`,
+          };
 
     case WalletChain.SOLANA:
       return SOL_RE.test(address)
         ? { valid: true, normalized: address }
-        : { valid: false, error: "Invalid Solana address (expected base58, 32–44 chars)." };
+        : {
+            valid: false,
+            error: "Invalid Solana address (expected base58, 32–44 chars).",
+          };
 
     case WalletChain.BITCOIN:
-      return BTC_LEGACY_RE.test(address) || BTC_BECH32_RE.test(address.toLowerCase())
+      return BTC_LEGACY_RE.test(address) ||
+        BTC_BECH32_RE.test(address.toLowerCase())
         ? { valid: true, normalized: address }
         : { valid: false, error: "Invalid Bitcoin address." };
 
@@ -71,3 +78,30 @@ export const ALL_CHAINS: WalletChain[] = [
   WalletChain.SOLANA,
   WalletChain.BITCOIN,
 ];
+
+export interface ChainWallet {
+  chain: WalletChain;
+}
+
+/** Never substitute a wallet from a chain the raffle did not configure. */
+export function selectConfiguredWallet<
+  S extends ChainWallet,
+  P extends ChainWallet,
+>(
+  submitted: S | null | undefined,
+  profiles: readonly P[],
+  configuredChains: readonly WalletChain[],
+): S | P | null {
+  if (
+    submitted &&
+    (configuredChains.length === 0 ||
+      configuredChains.includes(submitted.chain))
+  ) {
+    return submitted;
+  }
+  for (const chain of configuredChains) {
+    const profile = profiles.find((item) => item.chain === chain);
+    if (profile) return profile;
+  }
+  return null;
+}

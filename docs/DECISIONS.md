@@ -442,6 +442,9 @@ validate the image before publishing, store its bytes in the one-to-one
 `RaffleBannerAsset`, and replace `Raffle.bannerUrl` with the versioned public
 `/r/:id/banner` route. Restrict ingestion to Discord attachment hosts,
 supported image MIME types, a 5 MB streamed limit, and a bounded timeout.
+Build the stored route from the stable `PUBLIC_RAFFLE_ORIGIN`, never from the
+dashboard control URL or a deployment-specific hostname. Canonical rendering
+may rewrite legacy `/r/:id/banner` records onto that public origin.
 Dashboard Vercel Blob uploads remain unchanged.
 **Why:** Discord interaction attachment URLs expire. Persisting before the
 Discord post makes every new banner portable across EC2 and Vercel while
@@ -478,8 +481,10 @@ historical Hub rows blank even though the linked raffle retained the answer.
 **Decision:** Scope dark design tokens and `color-scheme: dark` on `/r/:id`,
 regardless of the stored member/dashboard theme preference. Keep the HTML/body
 overscroll canvas dark when that page is present and use dynamic viewport
-height for its root. Preserve the existing theme toggle on authenticated
-dashboard surfaces.
+height for its root. When the public page client-navigates into the app, carry
+the document's dark class into the destination so the scoped public wrapper
+cannot reveal a stale light dashboard. Preserve the existing theme toggle on
+authenticated dashboard surfaces and do not overwrite its saved preference.
 **Why:** The share page intentionally uses a dark branded hero while some
 lower cards use shared theme variables. Allowing `kos-theme=light` to reach
 only those cards creates a mixed-contrast split, and a light document canvas
@@ -523,3 +528,18 @@ failure reports, screenshots, traces, and diffs—not authentication state.
 **Why:** The member and tenant surfaces need real authenticated regression
 coverage, but production session-signing material must never be available to
 untrusted pull-request code or committed browser state.
+
+## D048 — Raffle wallet chains are a strict payout boundary
+
+**Status:** Accepted
+**Decision:** Resolve winner wallets only from a raffle-specific submission
+whose chain is configured on the raffle, or a reusable profile matching one of
+those configured chains. Reject raffle-specific submissions for any other
+chain. Apply the same resolver to Discord proof output, dashboard wallet lists,
+CSV/XLSX exports, historical imports, and Collab Hub reconciliation. If no
+matching wallet exists, report the wallet as missing and return the workflow to
+Waiting instead of preserving a mislabeled chain.
+**Why:** EVM and non-EVM profiles coexist on one member account. Falling back to
+the first saved profile made a Robinhood raffle appear to have a Solana payout
+address, even though the raffle configuration was correct. Missing data is
+safer and more actionable than exporting a wallet for the wrong network.

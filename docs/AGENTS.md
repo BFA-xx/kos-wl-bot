@@ -139,6 +139,10 @@ Wallet validation is format-only for Ethereum/Base/Robinhood Chain, Solana,
 and Bitcoin. Robinhood Chain (`ROBINHOOD`, shown as `Robinhood Chain (RH)`) is
 an EVM chain and therefore uses the same normalized `0x` address rules as
 Ethereum and Base.
+Winner resolution is also chain-strict: a raffle-specific wallet is usable
+only when its chain is configured on that raffle, and a reusable profile may
+only fall back to another configured chain. Never substitute the user's first
+unrelated profile; a missing matching wallet must remain missing.
 Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
 `WALLET_ENCRYPTION_KEY`. Bot and dashboard must share the same key.
 
@@ -313,8 +317,10 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   Older expired files cannot be recovered from their stored URL. Before a new
   Discord-uploaded banner is published, the bot must validate and copy at most
   5 MB into `RaffleBannerAsset`, replace `Raffle.bannerUrl` with the versioned
-  public `/r/:id/banner` URL, and only then send the raffle post. Dashboard
-  uploads continue to use Vercel Blob.
+  public `/r/:id/banner` URL on the stable `PUBLIC_RAFFLE_ORIGIN`, and only
+  then send the raffle post. Never build durable media URLs from
+  `DASHBOARD_URL` or a deployment-specific Vercel hostname. Dashboard uploads
+  continue to use Vercel Blob.
 - Collaboration file downloads require `collab:view`; uploads/deletes require
   `collab:edit`. Store files as private Blob objects and never return their raw
   storage URL. Wallet CSV proof artifacts additionally require `collab:export`.

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
+import { selectConfiguredWallet } from "@/lib/winner-wallet";
 import type {
   CollaborationStatus,
   CollaborationSubmissionStatus,
@@ -51,26 +52,23 @@ export async function syncCollaborationState(
   const existingByUser = new Map(
     collaboration.wallets.map((wallet) => [wallet.userId, wallet]),
   );
-  const seen = new Set<string>();
+  const resolved = new Set<string>();
 
   for (const link of collaboration.raffles) {
     for (const winner of link.raffle.winners) {
-      if (seen.has(winner.userId)) continue;
-      seen.add(winner.userId);
+      if (resolved.has(winner.userId)) continue;
       const current = existingByUser.get(winner.userId);
-      const preferredProfile = link.raffle.walletChains
-        .map((chain) =>
-          winner.user.walletProfiles.find((p) => p.chain === chain),
-        )
-        .find(Boolean);
-      const fallbackProfile = winner.user.walletProfiles[0];
-      const source =
-        winner.wallet ?? preferredProfile ?? fallbackProfile ?? null;
+      const source = selectConfiguredWallet(
+        winner.wallet,
+        winner.user.walletProfiles,
+        link.raffle.walletChains,
+      );
+      if (source) resolved.add(winner.userId);
       const detectedStatus: CollaborationWalletStatus = source
         ? "COLLECTED"
         : "WAITING";
       const status =
-        current && current.status !== "WAITING"
+        source && current && current.status !== "WAITING"
           ? current.status
           : detectedStatus;
       await prisma.collaborationWallet.upsert({
@@ -88,8 +86,8 @@ export async function syncCollaborationState(
           status,
         },
         update: {
-          winnerId: current?.winnerId ?? winner.id,
-          chain: source?.chain ?? current?.chain ?? null,
+          winnerId: source ? winner.id : (current?.winnerId ?? winner.id),
+          chain: source?.chain ?? null,
           status,
         },
       });

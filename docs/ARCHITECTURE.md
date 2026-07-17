@@ -253,7 +253,10 @@ format-only validation. Robinhood Chain is stored as the distinct
 lets a team require or collect the exact network without conflating it with a
 member's Ethereum/Base record. `WalletProfile` is shared between Discord and
 web. Winner exports prefer a raffle-specific `Wallet`, then fall back to a
-matching reusable profile.
+matching reusable profile. Both paths are constrained by the raffle's exact
+`walletChains`; a submitted or saved wallet from another chain is omitted and
+the winner remains awaiting a valid wallet. This same resolver is used by bot
+proofs, team wallet views, CSV/XLSX exports, and Collab Hub reconciliation.
 
 OAuth tokens and wallet addresses use AES-256-GCM with
 `WALLET_ENCRYPTION_KEY`. If the key is absent, current helpers permit plaintext
@@ -382,8 +385,11 @@ publication. The bot accepts only Discord attachment hosts and supported image
 types, reads at most 5 MB, stores the bytes in the one-to-one
 `RaffleBannerAsset`, and changes `Raffle.bannerUrl` to a versioned
 `/r/:id/banner` URL. The public route serves the immutable copy to Discord and
-the dashboard. Dashboard-originated uploads continue to use Vercel Blob; the
-40 already-expired historical attachment URLs cannot be reconstructed.
+the dashboard. The URL is built from stable `PUBLIC_RAFFLE_ORIGIN`, not the
+internal dashboard control URL; rendering also canonicalizes legacy internal
+banner-route hostnames. Dashboard-originated uploads continue to use Vercel
+Blob; the 40 already-expired historical attachment URLs cannot be
+reconstructed.
 
 The Hub reports relationship cards and source raffles as distinct totals.
 Repeated GTD/FCFS rounds can share one collaboration, while the organization

@@ -1,4 +1,4 @@
-# KOS WL Bot — Runbook (when something goes wrong)
+# KOS Raffles — Runbook (when something goes wrong)
 
 Your live setup:
 - **Bot** → EC2 (`ubuntu@34.207.252.118`), managed by **pm2** as `kos-bot`.

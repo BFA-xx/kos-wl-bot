@@ -4,37 +4,53 @@ import { toCsv } from "@/lib/csv";
 import { decryptSecret } from "@/lib/crypto";
 import { AccessError, requireOrgAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
+import { selectConfiguredWallet } from "@/lib/winner-wallet";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /** CSV of every winner wallet across the org's raffles. */
-export async function GET(_req: Request, { params }: { params: { org: string } }) {
+export async function GET(
+  _req: Request,
+  { params }: { params: { org: string } },
+) {
   try {
-    const { guildIds } = await requireOrgAccess(params.org, PERMISSIONS.WALLET_EXPORT);
+    const { guildIds } = await requireOrgAccess(
+      params.org,
+      PERMISSIONS.WALLET_EXPORT,
+    );
 
     const winners = await prisma.winner.findMany({
       where: { replaced: false, raffle: { guildId: { in: guildIds } } },
       orderBy: [{ raffleId: "desc" }, { position: "asc" }],
-      include: { wallet: true, raffle: { select: { id: true, projectName: true, walletChains: true } } },
+      include: {
+        wallet: true,
+        raffle: { select: { id: true, projectName: true, walletChains: true } },
+      },
     });
-    const missing = winners.filter((w) => !w.wallet).map((w) => w.userId);
-    const profiles = missing.length
-      ? await prisma.walletProfile.findMany({ where: { userId: { in: missing } } })
+    const userIds = winners.map((winner) => winner.userId);
+    const profiles = userIds.length
+      ? await prisma.walletProfile.findMany({
+          where: { userId: { in: userIds } },
+        })
       : [];
-    const profileFor = (userId: string, chains: string[]) => {
-      const owned = profiles.filter((p) => p.userId === userId);
-      for (const c of chains) {
-        const hit = owned.find((p) => p.chain === c);
-        if (hit) return hit;
-      }
-      return owned[0] ?? null;
-    };
 
     const csv = toCsv(
-      ["raffle_id", "project", "position", "discord_id", "username", "chain", "wallet_address"],
+      [
+        "raffle_id",
+        "project",
+        "position",
+        "discord_id",
+        "username",
+        "chain",
+        "wallet_address",
+      ],
       winners.map((w) => {
-        const src = w.wallet ?? profileFor(w.userId, w.raffle.walletChains as string[]);
+        const src = selectConfiguredWallet(
+          w.wallet,
+          profiles.filter((profile) => profile.userId === w.userId),
+          w.raffle.walletChains,
+        );
         return [
           w.raffle.id,
           w.raffle.projectName,
@@ -54,7 +70,8 @@ export async function GET(_req: Request, { params }: { params: { org: string } }
       },
     });
   } catch (err) {
-    if (err instanceof AccessError) return NextResponse.json({ error: err.message }, { status: err.status });
+    if (err instanceof AccessError)
+      return NextResponse.json({ error: err.message }, { status: err.status });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

@@ -1,4 +1,4 @@
-# KOS WL Bot
+# KOS Raffles
 
 A premium NFT **whitelist raffle** management system for Discord communities —
 role-gated entries, live embeds, automatic scheduling, cryptographically

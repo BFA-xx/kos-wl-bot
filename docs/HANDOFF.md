@@ -68,6 +68,15 @@ Phase 3 is implemented through S2.5:
   preferences from turning only its lower cards white. Its dynamic-height root
   and dark document canvas also prevent a white tail below the footer on
   mobile. All are deployed.
+- Public banner, navigation-theme, and winner-chain hardening is implemented
+  and awaiting this release deployment. Legacy internal `/r/:id/banner` URLs
+  are canonicalized to `https://raffle.koslabs.app`, new Discord banners use
+  stable `PUBLIC_RAFFLE_ORIGIN`, public-to-dashboard client navigation carries
+  the dark document state, and every winner wallet surface now enforces the
+  raffle's configured chain instead of using an unrelated first profile.
+- User-facing product headings and default brand text now say **KOS Raffles**
+  instead of **KOS WL Bot**. Internal package, process, and repository names
+  remain unchanged for deployment compatibility.
 - Authenticated production visual regression now also covers Member Raffles
   and Collab Hub with deterministic API fixtures on desktop Chromium and Pixel 7. Four reviewed baselines are committed, and the standard gitignored auth
   state is reusable without an extra storage-state environment override.
@@ -1675,6 +1684,102 @@ Recommended next task:
 - Add a protected dashboard visual-regression CI job that provisions a
   dedicated ordinary test-user session, runs both authenticated specs on pull
   requests, and uploads HTML reports, traces, and image diffs on failure.
+
+### Public media, theme navigation, and winner-chain integrity — ready to ship
+
+- Raffle #65's banner bytes are intact in `RaffleBannerAsset`; the broken page
+  was caused by `Raffle.bannerUrl` pointing at the retired
+  `kos-wl-bot-dashboard-3a8x.vercel.app` deployment. Public rendering now
+  canonicalizes internal `/r/:id/banner` routes and future Discord uploads use
+  the stable `PUBLIC_RAFFLE_ORIGIN` instead of `DASHBOARD_URL`.
+- `/r/:id` now activates the document dark class before paint and carries it
+  through client navigation. This closes the mixed light/dark dashboard state
+  seen when leaving a forced-dark share page without changing the stored theme
+  preference or removing the authenticated theme toggle.
+- Raffle #64 is configured for `ROBINHOOD`; the Solana winner display came from
+  an unsafe first-profile fallback, not from address validation or a Solana
+  raffle submission. Wallet collection now rejects a chain outside the
+  raffle's configuration, and bot proofs, org wallet lists, CSV/XLSX exports,
+  historical imports, and Collab Hub all use the same strict selection rule.
+- Collab reconciliation clears a stale wrong-chain workflow row back to
+  `WAITING` when the member has no wallet matching the attached raffle. It does
+  not alter or expose the member's saved wallet profiles.
+- Dashboard metadata, Discord configuration copy/default branding, workbook
+  metadata, and primary documentation headings now use **KOS Raffles**.
+
+Verification completed before deployment:
+
+- `pnpm --filter @kos/bot typecheck`
+- `pnpm --filter @kos/bot test` — 14 tests passed.
+- `pnpm --filter @kos/bot build`
+- `pnpm --filter @kos/dashboard typecheck`
+- `pnpm --filter @kos/dashboard test` — 18 files, 55 tests passed.
+- `pnpm --filter @kos/dashboard build`
+- `git diff --check`
+
+Modified files for this task:
+
+- `.env.example`
+- `GUIDE.md`
+- `README.md`
+- `RUNBOOK.md`
+- `apps/bot/src/commands/config.ts`
+- `apps/bot/src/config.ts`
+- `apps/bot/src/index.ts`
+- `apps/bot/src/services/collaborationService.ts`
+- `apps/bot/src/services/raffleBannerService.ts`
+- `apps/bot/src/services/walletChainSupport.test.ts`
+- `apps/bot/src/services/walletService.ts`
+- `apps/bot/src/utils/wallets.ts`
+- `apps/dashboard/app/api/[org]/collaborations/[id]/wallets/export/route.ts`
+- `apps/dashboard/app/api/[org]/collaborations/import-history/route.ts`
+- `apps/dashboard/app/api/[org]/raffles/[id]/export-xlsx/route.ts`
+- `apps/dashboard/app/api/[org]/raffles/[id]/export/route.ts`
+- `apps/dashboard/app/api/[org]/wallets/export/route.ts`
+- `apps/dashboard/app/api/[org]/wallets/route.ts`
+- `apps/dashboard/app/layout.tsx`
+- `apps/dashboard/app/r/[id]/page.tsx`
+- `apps/dashboard/components/PublicThemeBridge.tsx`
+- `apps/dashboard/lib/collab.ts`
+- `apps/dashboard/lib/public-theme.test.ts`
+- `apps/dashboard/lib/public-theme.ts`
+- `apps/dashboard/lib/raffle-share.test.ts`
+- `apps/dashboard/lib/raffle-share.ts`
+- `apps/dashboard/lib/winner-wallet.test.ts`
+- `apps/dashboard/lib/winner-wallet.ts`
+- `apps/dashboard/lib/xlsx.ts`
+- `docs/AGENTS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/DECISIONS.md`
+- `docs/DISCORD-SETUP.md`
+- `docs/EC2-DEPLOYMENT.md`
+- `docs/HANDOFF.md`
+- `docs/USER-GUIDE.md`
+
+Assumptions:
+
+- `https://raffle.koslabs.app` remains the stable public raffle origin; internal
+  dashboard control/deployment URLs may change independently.
+- A legacy raffle with no configured wallet chains may retain its explicit
+  raffle-specific submission, but the system must not guess from reusable
+  profiles when the required network is unknown.
+- A wrong-chain collaboration workflow status is derived metadata and may be
+  reset to Waiting; member-owned encrypted wallet records remain untouched.
+
+Technical debt:
+
+- The strict resolver is duplicated in the bot and dashboard because they do
+  not yet share a runtime-neutral domain package. The behaviors are covered by
+  matching focused tests, but a future shared package would eliminate drift.
+- Relational database constraints cannot directly assert that `Wallet.chain`
+  belongs to the parent raffle's enum array. Enforcement currently lives in
+  application writes plus reconciliation of derived/exported state.
+
+Recommended next task:
+
+- Add a scheduled wallet-chain integrity audit that reports any legacy
+  raffle-specific or Collab Hub row outside its raffle configuration and raises
+  an admin health alert before an export is requested.
 
 ## Confirmed invariants and current product policies
 

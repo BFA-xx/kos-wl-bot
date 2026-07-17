@@ -10,7 +10,12 @@ import {
 } from "discord.js";
 import { prisma, LogCategory, WalletChain } from "@kos/db";
 import { encryptSecret, decryptSecret } from "../utils/crypto.js";
-import { validateWallet, chainLabel, ALL_CHAINS } from "../utils/wallets.js";
+import {
+  validateWallet,
+  chainLabel,
+  ALL_CHAINS,
+  selectConfiguredWallet,
+} from "../utils/wallets.js";
 import { buildId, Actions } from "../utils/ids.js";
 import { KOS } from "../theme.js";
 import { audit } from "./auditService.js";
@@ -20,7 +25,9 @@ import { logger } from "../logger.js";
  * Build the wallet-registration popup, pre-filled with the user's saved
  * addresses. Shared by the panel button, winner DMs, and /wallet register.
  */
-export async function buildWalletProfileModal(userId: string): Promise<ModalBuilder> {
+export async function buildWalletProfileModal(
+  userId: string,
+): Promise<ModalBuilder> {
   const existing = await getWalletProfiles(userId).catch(() => []);
   const byChain = new Map(existing.map((p) => [p.chain, p.address]));
 
@@ -38,7 +45,9 @@ export async function buildWalletProfileModal(userId: string): Promise<ModalBuil
       .setPlaceholder(`Your ${chainLabel(chain)} address (optional)`);
     const saved = byChain.get(chain);
     if (saved) input.setValue(saved);
-    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+    modal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(input),
+    );
   }
   return modal;
 }
@@ -99,7 +108,10 @@ export async function dmWinnersForWallets(
       await user.send({ embeds: [embed], components: [row] });
       delivered++;
     } catch (err) {
-      logger.warn({ err, userId: w.userId }, "could not DM winner (DMs closed?)");
+      logger.warn(
+        { err, userId: w.userId },
+        "could not DM winner (DMs closed?)",
+      );
     }
   }
 
@@ -133,11 +145,27 @@ export async function recordWallet(params: {
   }
 
   const winner = await prisma.winner.findFirst({
-    where: { raffleId: params.raffleId, userId: params.userId, replaced: false },
-    select: { id: true, raffle: { select: { guildId: true } } },
+    where: {
+      raffleId: params.raffleId,
+      userId: params.userId,
+      replaced: false,
+    },
+    select: {
+      id: true,
+      raffle: { select: { guildId: true, walletChains: true } },
+    },
   });
   if (!winner) {
     return { ok: false, error: "You are not a current winner of this raffle." };
+  }
+  if (
+    winner.raffle.walletChains.length > 0 &&
+    !winner.raffle.walletChains.includes(params.chain)
+  ) {
+    return {
+      ok: false,
+      error: `This raffle accepts ${winner.raffle.walletChains.map(chainLabel).join(" or ")} wallets.`,
+    };
   }
 
   const stored = encryptSecret(validation.normalized!);
@@ -165,12 +193,14 @@ export async function recordWallet(params: {
   return { ok: true };
 }
 
-/** Decrypted winner+wallet rows for export. Falls back to the winner's saved
- *  wallet profile (self-registered) when no raffle-specific wallet was submitted,
- *  so hosts/teams still receive on-file addresses automatically. */
+/** Decrypted winner+wallet rows for export. A saved profile may only satisfy a
+ * raffle when its chain is one of that raffle's configured wallet chains. */
 export async function getWinnerWallets(raffleId: number) {
   const [raffle, winners] = await Promise.all([
-    prisma.raffle.findUnique({ where: { id: raffleId }, select: { walletChains: true } }),
+    prisma.raffle.findUnique({
+      where: { id: raffleId },
+      select: { walletChains: true },
+    }),
     prisma.winner.findMany({
       where: { raffleId, replaced: false },
       orderBy: { position: "asc" },
@@ -181,40 +211,37 @@ export async function getWinnerWallets(raffleId: number) {
   const chains = raffle?.walletChains ?? [];
   const userIds = winners.map((w) => w.userId);
   const profiles = userIds.length
-    ? await prisma.walletProfile.findMany({ where: { userId: { in: userIds } } })
+    ? await prisma.walletProfile.findMany({
+        where: { userId: { in: userIds } },
+      })
     : [];
 
-  const pickProfile = (userId: string) => {
-    const owned = profiles.filter((p) => p.userId === userId);
-    // Prefer a profile that matches one of the raffle's chains, else any.
-    for (const c of chains) {
-      const hit = owned.find((p) => p.chain === c);
-      if (hit) return hit;
-    }
-    return owned[0] ?? null;
-  };
-
   return winners.map((w) => {
-    if (w.wallet) {
-      return {
-        position: w.position,
-        userId: w.userId,
-        username: w.username,
-        chain: w.wallet.chain as string,
-        address: safeDecrypt(w.wallet.address),
-        submittedAt: w.wallet.submittedAt as Date | null,
-        source: "submitted" as const,
-      };
-    }
-    const profile = pickProfile(w.userId);
+    const source = selectConfiguredWallet(
+      w.wallet,
+      profiles.filter((profile) => profile.userId === w.userId),
+      chains,
+    );
+    const submitted = source !== null && source === w.wallet;
+    const profile = submitted
+      ? null
+      : (profiles.find((item) => item === source) ?? null);
     return {
       position: w.position,
       userId: w.userId,
       username: w.username,
-      chain: profile ? (profile.chain as string) : null,
-      address: profile ? safeDecrypt(profile.address) : null,
-      submittedAt: profile?.updatedAt ?? null,
-      source: profile ? ("profile" as const) : ("none" as const),
+      chain: source ? (source.chain as string) : null,
+      address: source ? safeDecrypt(source.address) : null,
+      submittedAt: source
+        ? submitted
+          ? (w.wallet?.submittedAt ?? null)
+          : (profile?.updatedAt ?? null)
+        : null,
+      source: source
+        ? submitted
+          ? ("submitted" as const)
+          : ("profile" as const)
+        : ("none" as const),
     };
   });
 }

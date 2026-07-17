@@ -26,9 +26,7 @@ export function parsePublicRaffleId(value: string | number): number | null {
   const raw = typeof value === "number" ? String(value) : value.trim();
   if (!/^\d+$/u.test(raw)) return null;
   const id = Number(raw);
-  return Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647
-    ? id
-    : null;
+  return Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647 ? id : null;
 }
 
 export function publicRafflePath(raffleId: number): string {
@@ -39,6 +37,29 @@ export function publicRafflePath(raffleId: number): string {
 
 export function publicRaffleUrl(raffleId: number): string {
   return `${PUBLIC_RAFFLE_ORIGIN}${publicRafflePath(raffleId)}`;
+}
+
+/**
+ * Rewrite an internally persisted banner route onto the canonical raffle
+ * origin. This repairs records written with a temporary/retired deployment
+ * hostname while leaving genuine external project images unchanged.
+ */
+export function canonicalRaffleBannerUrl(
+  raffleId: number,
+  value: unknown,
+): string | null {
+  const id = parsePublicRaffleId(raffleId);
+  if (!id || typeof value !== "string" || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    if (url.pathname === `/r/${id}/banner`) {
+      return `${PUBLIC_RAFFLE_ORIGIN}${url.pathname}${url.search}`;
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 export function inferRaffleKind(title: string): RaffleKind | null {

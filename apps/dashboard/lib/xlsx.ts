@@ -16,7 +16,7 @@ export async function addressesWorkbook(
   mode: "addresses" | "full" = "addresses",
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = "KOS WL Bot";
+  wb.creator = "KOS Raffles";
   const ws = wb.addWorksheet("Addresses");
 
   const lastCol = mode === "full" ? "C" : "A";

@@ -1,4 +1,4 @@
-# Deploying KOS WL Bot on AWS EC2 (alongside Mintooor)
+# Deploying KOS Raffles on AWS EC2 (alongside Mintooor)
 
 You can absolutely run KOS WL Bot on the **same EC2 instance** as Mintooor —
 both are lightweight. They don't collide:

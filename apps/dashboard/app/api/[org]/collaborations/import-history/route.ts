@@ -9,6 +9,7 @@ import {
   type HistoricalImportOptions,
 } from "@/lib/collab-history";
 import { sanitizeHttpUrl } from "@/lib/raffle-input";
+import { selectConfiguredWallet } from "@/lib/winner-wallet";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,6 +39,7 @@ const raffleSelect = {
   endedAt: true,
   createdById: true,
   externalUrl: true,
+  walletChains: true,
   requirements: true,
   RaffleTask: {
     include: {
@@ -134,6 +136,9 @@ export const POST = withAccess(async (req, { params }) => {
     values.push(winner);
     winnersByRaffle.set(winner.raffleId, values);
   }
+  const walletChainsByRaffle = new Map(
+    raffles.map((raffle) => [raffle.id, raffle.walletChains] as const),
+  );
 
   const tagIds = new Map<string, string>();
   for (const name of ["GTD", "FCFS", "WL"]) {
@@ -278,8 +283,11 @@ export const POST = withAccess(async (req, { params }) => {
       >();
       for (const raffleId of group.raffleIds) {
         for (const winner of winnersByRaffle.get(raffleId) ?? []) {
-          const profile = winner.user.walletProfiles[0] ?? null;
-          const source = winner.wallet ?? profile;
+          const source = selectConfiguredWallet(
+            winner.wallet,
+            winner.user.walletProfiles,
+            walletChainsByRaffle.get(raffleId) ?? [],
+          );
           const current = winnerRows.get(winner.userId);
           if (!current || (!current.chain && source?.chain)) {
             winnerRows.set(winner.userId, {

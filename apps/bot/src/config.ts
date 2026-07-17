@@ -66,6 +66,9 @@ const schema = z.object({
   /** Public dashboard URL, used in proof embeds when present. */
   DASHBOARD_URL: optionalUrl,
 
+  /** Stable public raffle origin. Must not be a temporary deployment URL. */
+  PUBLIC_RAFFLE_ORIGIN: z.string().url().default("https://raffle.koslabs.app"),
+
   /**
    * 32-byte hex key (64 hex chars) enabling AES-256-GCM encryption of wallet
    * addresses at rest. When unset, addresses are stored in plaintext and a
@@ -77,7 +80,7 @@ const schema = z.object({
     .optional(),
 
   /** Branding overrides. */
-  KOS_BRAND_NAME: z.string().default("KOS WL Bot"),
+  KOS_BRAND_NAME: z.string().default("KOS Raffles"),
   KOS_LOGO_URL: optionalUrl,
 
   /**

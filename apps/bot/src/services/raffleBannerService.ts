@@ -76,10 +76,6 @@ export async function persistDiscordRaffleBanner(
   sourceUrl: string | null,
 ): Promise<string | null> {
   if (!sourceUrl || !isDiscordAttachmentUrl(sourceUrl)) return sourceUrl;
-  if (!config.DASHBOARD_URL) {
-    throw new Error("DASHBOARD_URL is required to persist Discord banners.");
-  }
-
   const response = await fetch(sourceUrl, {
     redirect: "error",
     signal: AbortSignal.timeout(12_000),
@@ -98,7 +94,7 @@ export async function persistDiscordRaffleBanner(
   const data = await readBoundedImage(response);
   const storedAt = Date.now();
   const publicUrl = durableRaffleBannerUrl(
-    config.DASHBOARD_URL,
+    config.PUBLIC_RAFFLE_ORIGIN,
     raffleId,
     storedAt,
   );

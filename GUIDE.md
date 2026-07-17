@@ -1,4 +1,4 @@
-# KOS WL Bot — Complete Setup & Operations Guide
+# KOS Raffles — Complete Setup & Operations Guide
 
 Everything you need to run, use, and deploy the bot and dashboard.
 

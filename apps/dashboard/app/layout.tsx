@@ -3,7 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "KOS WL Bot — Dashboard",
+  title: "KOS Raffles — Dashboard",
   description: "Premium NFT whitelist raffle management.",
 };
 
