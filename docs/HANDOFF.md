@@ -77,7 +77,7 @@ Phase 3 is implemented through S2.5:
 - User-facing product headings and default brand text now say **KOS Raffles**
   instead of **KOS WL Bot**. Internal package, process, and repository names
   remain unchanged for deployment compatibility.
-- Branded public raffle references are implemented and pending release:
+- Branded public raffle references are implemented and deployed:
   `/r/:community-x-:project-:id` is canonical, while numeric and stale branded
   links permanently redirect without a schema migration.
 - Authenticated production visual regression now also covers Member Raffles
@@ -1799,7 +1799,7 @@ Recommended next task:
   raffle-specific or Collab Hub row outside its raffle configuration and raises
   an admin health alert before an export is requested.
 
-### Branded public raffle references — ready to ship
+### Branded public raffle references — deployed
 
 - Canonical public raffle links now read like
   `/r/kos-x-dorian-pepentice-65`. The organization slug and project name make
@@ -1825,6 +1825,13 @@ Verification before deployment:
 - `pnpm --filter @kos/dashboard test` — 18 files, 56 tests passed.
 - `pnpm --filter @kos/dashboard build`
 - `git diff --check`
+- Commit `f5f5fbf` was pushed to `origin/main`; GitHub Quality run #7 completed
+  successfully and both connected Vercel deployments reached success.
+- Production `/r/65` returns `308` to
+  `/r/kos-x-dorian-pepentice-65`; that canonical page returns `200` and its
+  Open Graph/canonical metadata uses the branded absolute URL.
+- EC2 deploy passed all 15 bot tests, rebuilt the bot, registered seven global
+  commands, restarted PM2, and returned scheduler-ready health in two guilds.
 
 Modified files for this task:
 
