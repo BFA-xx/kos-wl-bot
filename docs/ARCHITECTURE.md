@@ -335,6 +335,14 @@ Collecting wallets, or Ready for submission, and deliver due reminder/inactive
 notifications to the organization owner plus active members with
 `collab:view`. Manual status changes remain available in the dashboard.
 
+All scheduler queue and lifecycle reads are deterministically ordered and
+bounded by `SCHEDULER_BATCH_SIZE`; a full batch is reported and remaining work
+continues on later ticks. The final draw transaction conditionally changes the
+raffle from its observed LIVE state, and rerolls conditionally mark each active
+winner replaced, so overlapping requests cannot commit two outcomes for the
+same state. This remains a single-process scheduler design; multiple bot
+processes require a distributed lease or queue.
+
 Collab Hub permissions are `collab:view`, `collab:create`, `collab:edit`,
 `collab:assign`, `collab:export`, and `collab:archive`. Owners bypass explicit
 permission strings; the Phase 4 migration grants expected access to existing
@@ -386,7 +394,8 @@ Raffles page remains the one-row-per-raffle archive.
 - Dashboard: Vercel, rooted at `apps/dashboard`; pushes to `main` trigger
   deployment. The primary production origin is `https://raffle.koslabs.app`.
 - Bot: EC2 under PM2 as `kos-bot`; `scripts/deploy-ec2.sh` rsyncs code, builds
-  DB/bot, registers slash commands, restarts PM2, and checks localhost health.
+  DB/bot, runs bot tests, registers global slash commands, restarts PM2, and
+  requires a successful scheduler tick from localhost health.
 - Database: shared managed PostgreSQL/Neon. Migrations are additive Prisma SQL
   migrations under `packages/db/prisma/migrations`.
 - Proof files: generated on the bot host under `PROOF_OUTPUT_DIR`, posted to
@@ -394,6 +403,12 @@ Raffles page remains the one-row-per-raffle archive.
   dashboard downloads. The dashboard never attempts to read EC2-local paths.
 
 ## Verification posture
+
+GitHub `Quality` CI covers shared DB build plus bot/dashboard typecheck, tests,
+and production builds on every pull request and `main` push. The protected
+`Authenticated visual regression` workflow runs committed desktop/mobile
+baselines against production for same-repository pull requests or a manual
+dispatch, using an ordinary test identity and failure-only artifacts.
 
 Vitest covers public raffle policy, duplicate scheduling/variants, and the
 duplicate API's tenant boundary. Additional safety nets are strict TypeScript,

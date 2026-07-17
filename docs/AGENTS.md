@@ -31,8 +31,8 @@ on the production dashboard and EC2 bot:
 Campaigns are still planned and not implemented.
 
 The actual repository is `/Users/adebayodaniel/KOS RAF`. The remote is
-`BFA-xx/kos-wl-bot`; the latest production verification was performed on
-`main` at `3fa9204`.
+`BFA-xx/kos-wl-bot`; use the current `main` and `docs/HANDOFF.md` release
+evidence rather than older commit references embedded in historical sections.
 
 ## Runtime and repository map
 
@@ -44,6 +44,10 @@ The actual repository is `/Users/adebayodaniel/KOS RAF`. The remote is
 - `packages/db`: Prisma 5 schema, migrations, generated client wrapper, seed,
   and the Phase 2 organization migration helper.
 - `scripts/deploy-ec2.sh`: rsync/build/register/restart workflow for the bot.
+- `.github/workflows/quality.yml`: non-secret DB/bot/dashboard verification.
+- `.github/workflows/visual-regression.yml`: protected authenticated
+  production baselines and failure artifacts.
+- `docs/ROLLOUT.md`: Discord installation, cohort, and scaling runbook.
 - `infra/nginx`: older all-in-one VPS dashboard proxy example.
 
 Both runtimes share PostgreSQL/Neon. Production dashboard-to-bot actions are
@@ -242,11 +246,21 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   backfills existing local artifacts in bounded batches and regenerates them
   from raffle data without Discord delivery when a legacy stored path is no
   longer valid on EC2.
+- Production slash commands register with `--global`; ordinary development
+  registration may remain guild-scoped. Runtime manager checks on `/raffle`
+  and `/blacklist` must remain compatible with configured manager roles rather
+  than a Discord default Manage Server visibility gate.
+- Scheduler operations are bounded by `SCHEDULER_BATCH_SIZE`; final draws and
+  reroll replacements atomically claim their current state. The scheduler
+  still assumes one bot process.
+- `/config diagnose` is the non-mutating onboarding readiness check for
+  channels, permissions, and the web organization connection.
 - Dashboard Vitest covers public raffle policy, duplication, tenant isolation,
   community membership, X branding, and Discord OAuth concurrency/rate-limit
   handling. Authenticated Playwright coverage includes desktop/mobile
   Communities and Branding visual baselines. Broader Discord/draw browser
-  coverage is still missing, and the scheduler assumes one bot instance.
+  coverage is still missing. Protected Playwright CI needs the externally
+  configured `visual-regression` GitHub environment and its two secrets.
 - Root `pnpm build` quotes workspace filters and builds DB, bot, and dashboard.
 - Older public setup/deployment docs and `.env.example` lag Phase 2/3 and still
   emphasize the legacy internal API.

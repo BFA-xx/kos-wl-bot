@@ -3,11 +3,11 @@
 You can absolutely run KOS WL Bot on the **same EC2 instance** as Mintooor —
 both are lightweight. They don't collide:
 
-| | Mintooor | KOS WL Bot |
-| --- | --- | --- |
-| Dashboard port | 3000 | **3001** |
-| Internal API | — | 4000 (localhost only) |
-| Database | its own DB | a separate `kos` DB on the same Postgres |
+|                | Mintooor   | KOS WL Bot                               |
+| -------------- | ---------- | ---------------------------------------- |
+| Dashboard port | 3000       | **3001**                                 |
+| Internal API   | —          | 4000 (localhost only)                    |
+| Database       | its own DB | a separate `kos` DB on the same Postgres |
 
 **Instance size:** `t3.small` (2 GB RAM) is comfortable for both. On a 1 GB
 `t3.micro`, add 2 GB swap (below) or run `pnpm build` once and copy the output,
@@ -120,7 +120,7 @@ cp .env apps/dashboard/.env.local
 pnpm db:generate
 DATABASE_URL="postgresql://kos:STRONGPASS@localhost:5432/kos" pnpm db:migrate:deploy
 pnpm build
-pnpm deploy:commands
+pnpm --filter @kos/bot deploy:commands -- --global
 ```
 
 ## 7. Start with PM2
@@ -171,7 +171,7 @@ pnpm install
 DATABASE_URL="postgresql://kos:STRONGPASS@localhost:5432/kos" pnpm db:migrate:deploy
 pnpm build
 cp .env apps/dashboard/.env.local
-pnpm deploy:commands         # only if commands changed
+pnpm --filter @kos/bot deploy:commands -- --global # only if commands changed
 pm2 restart kos-bot kos-dashboard
 ```
 
@@ -188,7 +188,7 @@ cp .env.example .env && nano .env        # fill values (DATABASE_URL is overridd
 # IMPORTANT when co-hosting: remove the "5432:5432" host port mapping under the
 # postgres service in docker-compose.yml so it doesn't clash with Mintooor's DB.
 docker compose up -d --build
-docker compose exec bot pnpm deploy:commands
+docker compose exec bot pnpm --filter @kos/bot deploy:commands -- --global
 ```
 
 Compose runs its own Postgres, the bot, and the dashboard (host port 3001).

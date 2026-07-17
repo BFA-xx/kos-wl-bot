@@ -1,9 +1,9 @@
 # Engineering Handoff
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `5c7f5a0`
+Audited application commit: `75fb56e`
 
 ## Current state
 
@@ -69,9 +69,135 @@ Phase 3 is implemented through S2.5:
   and dark document canvas also prevent a white tail below the footer on
   mobile. All are deployed.
 - Authenticated production visual regression now also covers Member Raffles
-  and Collab Hub with deterministic API fixtures on desktop Chromium and Pixel
-  7. Four reviewed baselines are committed, and the standard gitignored auth
+  and Collab Hub with deterministic API fixtures on desktop Chromium and Pixel 7. Four reviewed baselines are committed, and the standard gitignored auth
   state is reusable without an extra storage-state environment override.
+- Wider-rollout bot hardening is deployed: seven slash commands are globally
+  registered, configured manager roles can use the manager surface without a
+  conflicting Discord visibility gate, scheduler work is bounded, concurrent
+  outcomes are atomically claimed, onboarding has `/config diagnose`, and the
+  deploy script now fails unless tests, build, registration, PM2, and a real
+  scheduler tick succeed.
+
+## Wider rollout and protected CI — 2026-07-17
+
+### Delivered
+
+- Added global production slash-command registration with compatibility-guild
+  mirroring. Development can still use instant guild registration without
+  `--global`.
+- Removed the Discord default Manage Server visibility gate from `/raffle` and
+  `/blacklist`; `managerOnly` and `isRaffleManager` remain the server-side
+  authorization boundary for Administrator, Manage Server, and configured
+  manager roles. `/config` remains Administrator-only.
+- Added `/config diagnose`, which reports missing default channels, channel
+  permissions, the connected KOS web organization, and the privileged intent
+  requirement without mutating configuration.
+- Bounded every scheduler lifecycle/request query with deterministic ordering
+  and `SCHEDULER_BATCH_SIZE` (default 25). Full batches warn and continue on
+  later ticks.
+- Added atomic draw and reroll claims. Concurrent close requests cannot both
+  transition and persist a draw; concurrent rerolls cannot replace the same
+  active winner twice.
+- Added scheduler timing/outcome telemetry to localhost health and the database
+  heartbeat, structured interaction error context, bounded concurrent startup
+  guild sync, GuildCreate error handling, and GuildUpdate metadata sync.
+- Hardened `scripts/deploy-ec2.sh`: frozen install, bot tests, build, global
+  command registration, PM2 restart, and a 40-second scheduler-readiness gate
+  are all mandatory.
+- Added GitHub `Quality` CI for DB build plus dashboard/bot typecheck, tests,
+  and production builds. Added protected authenticated Playwright CI for
+  same-repository pull requests/manual dispatch, with fork isolation and
+  14-day failure reports/traces/screenshots/diffs.
+- Added `docs/ROLLOUT.md` with the corrected Discord install permissions,
+  onboarding smoke test, 3–25/25–75/75–100 cohort gates, verification boundary,
+  monitoring stop conditions, and the protected visual environment setup.
+
+### Verification and production evidence
+
+- `corepack pnpm typecheck` passed for DB, bot, and dashboard.
+- `corepack pnpm test` passed: 49 dashboard tests and 13 bot tests.
+- `corepack pnpm build` passed for DB, bot, and the Next.js production build.
+- `bash -n scripts/deploy-ec2.sh`, focused Prettier checks, and
+  `git diff --check` passed.
+- The local authenticated Playwright run stopped safely because its previous
+  session state had expired and no protected credentials were injected. No
+  authentication boundary was bypassed.
+- Commits `d9bb05c`, `345a3c5`, and `75fb56e` were pushed to `origin/main`.
+- The EC2 release reran all 13 bot tests, registered all seven commands
+  globally while mirroring compatibility guild `1293587526438883400`, and
+  restarted `kos-bot` under PM2.
+- Live health returned `ok: true`, `ready: true`, two connected guilds, and a
+  successful 283 ms scheduler tick at `2026-07-17T07:23:24.972Z`.
+- GitHub Quality run `29563017041` completed successfully on the clean Ubuntu
+  runner. Vercel deployment status is recorded in the final task response
+  after both connected projects finish their asynchronous builds.
+
+### Modified files
+
+- `.env.example`
+- `.github/workflows/quality.yml`
+- `.github/workflows/visual-regression.yml`
+- `apps/bot/package.json`
+- `apps/bot/src/commands/blacklist.ts`
+- `apps/bot/src/commands/config.ts`
+- `apps/bot/src/commands/raffle.ts`
+- `apps/bot/src/commands/registration.test.ts`
+- `apps/bot/src/commands/registration.ts`
+- `apps/bot/src/config.ts`
+- `apps/bot/src/deploy-commands.ts`
+- `apps/bot/src/http/server.ts`
+- `apps/bot/src/index.ts`
+- `apps/bot/src/interactions/router.ts`
+- `apps/bot/src/services/scheduler.ts`
+- `apps/bot/src/services/winnerService.ts`
+- `docs/AGENTS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/COMMANDS.md`
+- `docs/DECISIONS.md`
+- `docs/DEPLOYMENT.md`
+- `docs/DISCORD-SETUP.md`
+- `docs/EC2-DEPLOYMENT.md`
+- `docs/HANDOFF.md`
+- `docs/ROLLOUT.md`
+- `docs/SECURITY.md`
+- `scripts/deploy-ec2.sh`
+
+### Assumptions
+
+- Production continues to run one PM2 bot process. The current work targets a
+  measured, controlled beta up to 75 guilds, not an unbounded public launch.
+- Discord Server Members Intent is enabled today and will be submitted with
+  application/privileged-intent verification before the bot reaches 100
+  guilds.
+- The existing configured guild remains useful for instant compatibility
+  commands, so it is mirrored rather than deleted during global registration.
+- No schema or production environment change was needed. The protected GitHub
+  environment and its secret values remain an administrator-owned external
+  setup step.
+
+### Technical debt
+
+- The scheduler and Discord gateway still assume one bot process. A distributed
+  scheduler lease/queue and Discord sharding are required before multi-process
+  or roughly 2,500-guild operation.
+- Draw persistence is now race-safe, but post-commit Discord announcements,
+  notifications, wallet DMs, proof delivery, and Collab Hub sync do not use a
+  durable completion outbox. A failure after the committed draw requires an
+  explicit replay path.
+- Rerolls still do not persist their own seed/commitment.
+- Central dashboards do not yet chart scheduler duration, batch saturation,
+  Discord 429s, publish/proof latency, or per-guild error rates.
+- Protected visual CI cannot run until the `visual-regression` environment,
+  required reviewer, `DASHBOARD_SESSION_TOKEN`, and dedicated ordinary
+  `KOS_E2E_USER_ID` are configured. The current local session state is expired.
+
+### Recommended next task
+
+Create and approve the protected `visual-regression` GitHub environment, run
+the first authenticated green baseline, then onboard a 3–25 guild pilot using
+`/config diagnose` and the telemetry checklist in `docs/ROLLOUT.md`. Before the
+75–100 guild stage, implement a durable draw-completion outbox/replay path and
+begin Discord verification/Server Members Intent approval.
 
 The original takeover workstream was **S2.5 hardening**. Two hardening slices
 have been committed and pushed to `main`:

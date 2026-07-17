@@ -7,28 +7,28 @@ manager role. Responses are ephemeral (only the invoker sees them).
 
 Creates and posts a live raffle.
 
-| Option | Required | Description |
-| --- | --- | --- |
-| `project` | ✅ | Project name (shown as the embed author). |
-| `title` | ✅ | Raffle title. |
-| `spots` | ✅ | Number of WL spots (1–10000). |
-| `start` | ✅ | `now`, a duration (`30m`, `2h`, `1d`), a unix time, or ISO date. |
-| `end` | ✅ | Duration from start (`24h`, `2d`, `1w`) or absolute ISO date. |
-| `announce_channel` | ✅ | Channel for the winner announcement. |
-| `proof_channel` | ✅ | Channel for the proof package. |
-| `role1`…`role5` | — | Eligible roles. Omit all = everyone may enter. |
-| `match_mode` | — | `Any selected role` (default) or `Must have all`. |
-| `entry_channel` | — | Where to post the raffle (default: current channel). |
-| `banner` | — | Banner image attachment. |
-| `link` | — | External link (makes the title clickable). |
-| `wallet_chains` | — | `eth` (default), `sol`, `btc`, `eth_sol`, or `all`. |
-| `collect_wallets` | — | DM winners a wallet form (default `true`). |
-| `min_account_age_days` | — | Anti-alt: minimum Discord account age. |
-| `min_server_age_days` | — | Anti-alt: minimum server membership age. |
-| `min_messages` | — | Anti-alt: minimum messages (best-effort — see note). |
+| Option                 | Required | Description                                                      |
+| ---------------------- | -------- | ---------------------------------------------------------------- |
+| `project`              | ✅       | Project name (shown as the embed author).                        |
+| `title`                | ✅       | Raffle title.                                                    |
+| `spots`                | ✅       | Number of WL spots (1–10000).                                    |
+| `start`                | ✅       | `now`, a duration (`30m`, `2h`, `1d`), a unix time, or ISO date. |
+| `end`                  | ✅       | Duration from start (`24h`, `2d`, `1w`) or absolute ISO date.    |
+| `announce_channel`     | ✅       | Channel for the winner announcement.                             |
+| `proof_channel`        | ✅       | Channel for the proof package.                                   |
+| `role1`…`role5`        | —        | Eligible roles. Omit all = everyone may enter.                   |
+| `match_mode`           | —        | `Any selected role` (default) or `Must have all`.                |
+| `entry_channel`        | —        | Where to post the raffle (default: current channel).             |
+| `banner`               | —        | Banner image attachment.                                         |
+| `link`                 | —        | External link (makes the title clickable).                       |
+| `wallet_chains`        | —        | `eth` (default), `sol`, `btc`, `eth_sol`, or `all`.              |
+| `collect_wallets`      | —        | DM winners a wallet form (default `true`).                       |
+| `min_account_age_days` | —        | Anti-alt: minimum Discord account age.                           |
+| `min_server_age_days`  | —        | Anti-alt: minimum server membership age.                         |
+| `min_messages`         | —        | Anti-alt: minimum messages (best-effort — see note).             |
 
 > **Note on `min_messages`:** Discord's API does not expose per-member message
-> counts. This requirement *flags* accounts for review rather than hard-blocking,
+> counts. This requirement _flags_ accounts for review rather than hard-blocking,
 > unless you wire in an activity provider. See `eligibilityService.ts`.
 
 ## `/raffle edit`
@@ -46,11 +46,11 @@ Ends a raffle **now**, draws winners, announces, and ships proof. `id` autocompl
 
 ## `/raffle reroll`
 
-| Option | Description |
-| --- | --- |
-| `id` | Raffle (must be ENDED). |
-| `mode` | `single`, `multiple`, or `all`. |
-| `user` | The winner to replace (for `single`). |
+| Option  | Description                           |
+| ------- | ------------------------------------- |
+| `id`    | Raffle (must be ENDED).               |
+| `mode`  | `single`, `multiple`, or `all`.       |
+| `user`  | The winner to replace (for `single`). |
 | `count` | How many to replace (for `multiple`). |
 
 Replaced winners are kept (marked `replaced`) for the audit trail; replacements
@@ -71,23 +71,24 @@ Exports a CSV for a raffle: `winners` (with wallets, decrypted) or `participants
 
 ## `/blacklist add | remove | list`
 
-| Sub | Options |
-| --- | --- |
-| `add` | `user` (required), `reason` |
-| `remove` | `user` (required) |
-| `list` | — |
+| Sub      | Options                     |
+| -------- | --------------------------- |
+| `add`    | `user` (required), `reason` |
+| `remove` | `user` (required)           |
+| `list`   | —                           |
 
 Blacklisted users are blocked at entry time **and** excluded from draws/rerolls.
 
 ## `/config` (admins only)
 
-| Sub | Options | Description |
-| --- | --- | --- |
-| `managers add` | `role` | Allow a role to use `/raffle` and `/blacklist`. |
-| `managers remove` | `role` | Revoke a manager role. |
-| `managers list` | — | Show manager roles. |
-| `channels` | `announce`, `proof` | Set default announce / proof channels. |
-| `show` | — | Show current server config. |
+| Sub               | Options                                 | Description                                                                  |
+| ----------------- | --------------------------------------- | ---------------------------------------------------------------------------- |
+| `managers add`    | `role`                                  | Allow a role to use `/raffle` and `/blacklist`.                              |
+| `managers remove` | `role`                                  | Revoke a manager role.                                                       |
+| `managers list`   | —                                       | Show manager roles.                                                          |
+| `channels`        | `raffle`, `announce`, `proof`, `points` | Set any default operational channels.                                        |
+| `diagnose`        | —                                       | Check configured channels, bot permissions, and web organization connection. |
+| `show`            | —                                       | Show current server config.                                                  |
 
 Server owner and anyone with **Administrator / Manage Server** can always manage
 raffles; `/config managers add` grants access to additional roles (mods, collab
@@ -97,13 +98,14 @@ managers) without touching the database.
 
 A reusable wallet registry — members register once and it's used for every raffle.
 
-| Sub | Options | Description |
-| --- | --- | --- |
-| `set` | `chain`, `address` | Save / update one wallet (Ethereum, Base, Solana, Bitcoin). |
-| `view` | — | See your saved wallets (private). |
-| `remove` | `chain` | Delete a saved wallet. |
-| `panel` | — | *(Manager)* Post a public **Register / Update Wallet** button in the channel. |
-| `export` | — | *(Manager)* Download a CSV of every registered wallet. |
+| Sub        | Options            | Description                                                                   |
+| ---------- | ------------------ | ----------------------------------------------------------------------------- |
+| `register` | —                  | Open the guided wallet registration flow.                                     |
+| `set`      | `chain`, `address` | Save / update one wallet (Ethereum, Base, Robinhood Chain, Solana, Bitcoin).  |
+| `view`     | —                  | See your saved wallets (private).                                             |
+| `remove`   | `chain`            | Delete a saved wallet.                                                        |
+| `panel`    | —                  | _(Manager)_ Post a public **Register / Update Wallet** button in the channel. |
+| `export`   | —                  | _(Manager)_ Download a CSV of every registered wallet.                        |
 
 When a member wins, the bot uses their **registered wallet automatically** — it
 appears in the winner CSV and proof package, and the winner is only DM'd a form

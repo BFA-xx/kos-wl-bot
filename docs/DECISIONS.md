@@ -486,3 +486,40 @@ only those cards creates a mixed-contrast split, and a light document canvas
 becomes a long white tail during mobile overscroll. The page-local boundary
 keeps the public experience deterministic without removing theme functionality
 elsewhere.
+
+## D045 — Production slash commands register globally
+
+**Status:** Accepted
+**Decision:** Production deploys pass `--global` when registering slash
+commands. If `DISCORD_GUILD_ID` is still configured for development
+compatibility, write the same command definitions to that guild as well.
+Development deploys without `--global` may continue using instant guild
+registration.
+**Why:** A production environment can retain a development guild ID, which
+previously prevented every other installed server from receiving new command
+definitions. Mirroring avoids a stale guild override while global commands
+propagate.
+
+## D046 — One scheduler uses bounded work and atomic outcome claims
+
+**Status:** Accepted for controlled beta
+**Decision:** Keep the existing one-process sweep scheduler, bound every queue
+and lifecycle query by `SCHEDULER_BATCH_SIZE`, and continue full batches on the
+next tick. A draw must atomically claim its current raffle status inside the
+winner transaction; rerolls must atomically claim each active winner before a
+replacement is inserted.
+**Why:** Batches prevent one busy category from making a tick unbounded, while
+database claims prevent duplicate outcomes from concurrent dashboard, command,
+or scheduler requests. Distributed scheduling and gateway sharding remain
+required before large-scale multi-process operation.
+
+## D047 — Authenticated visual CI is protected production testing
+
+**Status:** Accepted
+**Decision:** Run committed desktop/mobile baselines against production using a
+dedicated ordinary KOS user, short-lived signed session state, and a GitHub
+environment with required review. Skip fork pull requests and upload only
+failure reports, screenshots, traces, and diffs—not authentication state.
+**Why:** The member and tenant surfaces need real authenticated regression
+coverage, but production session-signing material must never be available to
+untrusted pull-request code or committed browser state.

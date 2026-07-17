@@ -27,7 +27,7 @@ Compose starts three services: `postgres`, `bot`, `dashboard`.
 - Register slash commands once:
 
 ```bash
-docker compose exec bot pnpm deploy:commands
+docker compose exec bot pnpm --filter @kos/bot deploy:commands -- --global
 ```
 
 - Dashboard: `http://SERVER_IP:3001` (put Nginx + TLS in front for production).
@@ -74,7 +74,7 @@ cp .env.example .env && nano .env       # fill in everything
 pnpm install
 pnpm db:migrate:deploy
 pnpm build
-pnpm deploy:commands
+pnpm --filter @kos/bot deploy:commands -- --global
 
 # Dashboard env (Next reads from its own dir):
 cp .env apps/dashboard/.env.local
@@ -126,5 +126,11 @@ tar czf proofs-$(date +%F).tgz generated/proofs
 
 ## Health checks
 
-- Bot: `curl http://127.0.0.1:4000/internal/health` → `{"ok":true,"ready":true}`
+- Bot: `curl http://127.0.0.1:4000/internal/health` → readiness, guild count,
+  and scheduler telemetry (`lastTickAt`, duration, and outcome).
 - Dashboard: `curl -I http://127.0.0.1:3001` → `200/3xx`
+
+Production EC2 releases should use `scripts/deploy-ec2.sh`. It installs with a
+frozen lockfile, tests and builds the bot, registers commands globally,
+restarts PM2, and fails unless a successful scheduler tick is observed. See
+`docs/ROLLOUT.md` before expanding to new community cohorts.

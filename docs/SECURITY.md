@@ -19,9 +19,12 @@
 
 ## Permission model
 
-- Slash commands set `setDefaultMemberPermissions(ManageGuild)` and are further
-  checked at runtime (`isRaffleManager`): Administrator / Manage Server **or** a
-  configured manager role.
+- `/raffle` and `/blacklist` are checked at runtime by `isRaffleManager`:
+  Administrator / Manage Server **or** a configured manager role. They do not
+  use Discord's default Manage Server visibility gate because that would hide
+  the commands from configured operational roles. Unauthorized attempts are
+  denied ephemerally. `/config` remains Administrator-only at both the Discord
+  command and handler layers.
 - Member-facing buttons re-verify eligibility and blacklist on every click — the
   embed state is never trusted.
 
@@ -30,7 +33,10 @@
 - A unique `(raffleId, userId)` index makes double-entry impossible even under
   rapid concurrent clicks; the handler treats the unique violation as "already
   participating".
-- Entry/leave and reroll run inside transactions to keep counts consistent.
+- Entry/leave, draw, and reroll mutations run inside transactions. The draw
+  transaction atomically claims the current raffle status, and each reroll
+  atomically claims its active winners, so concurrent workers cannot publish
+  two valid outcomes for the same state.
 
 ## Anti-spam / rate limiting
 
@@ -71,3 +77,13 @@
 - Back up the database and `generated/proofs` regularly (see DEPLOYMENT.md).
 - Monitor `logs` table + process logs; every admin action is audited with actor,
   action, and metadata.
+
+## Protected visual tests
+
+- Authenticated visual CI must run through the protected
+  `visual-regression` GitHub environment with a required reviewer.
+- Store only `DASHBOARD_SESSION_TOKEN` and the dedicated ordinary
+  `KOS_E2E_USER_ID` as environment secrets; never commit Playwright storage
+  state or upload it as an artifact.
+- Same-repository pull requests may run after approval. Fork pull requests are
+  skipped so production session material is never exposed to untrusted code.
