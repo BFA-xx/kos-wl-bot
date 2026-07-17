@@ -1718,7 +1718,9 @@ Verification and production checks:
 - `git diff --check`
 - The production-origin banner test also passes under CI's configured
   `NEXT_PUBLIC_RAFFLE_ORIGIN=http://127.0.0.1:3001`; GitHub Actions checkout
-  and Node setup actions use their Node 24-based v5 releases.
+  and Node setup actions use their Node 24-based v5 releases. Setup-node's
+  automatic package-manager cache is disabled because Corepack enables pnpm in
+  the following workflow step.
 - EC2 deploy passed all 14 bot tests, rebuilt the bot, registered seven global
   commands, restarted PM2, and returned scheduler-ready health in two guilds.
 - Both Vercel production deployments completed successfully for `056e7ae`.
