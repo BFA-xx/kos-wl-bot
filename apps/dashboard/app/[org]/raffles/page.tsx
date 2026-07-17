@@ -155,6 +155,7 @@ function RafflesInner() {
                     <div className="flex justify-end">
                       <RaffleQuickActions
                         raffleId={r.id}
+                        projectName={r.projectName}
                         canDuplicate={canCreate}
                         canDelete={canDelete}
                         orgSlug={org}

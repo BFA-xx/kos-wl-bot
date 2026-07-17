@@ -163,6 +163,7 @@ export default async function RaffleDetailPage({
             />
             <RaffleQuickActions
               raffleId={raffle.id}
+              projectName={raffle.projectName}
               canDuplicate={canCreate}
               canDelete={canDelete}
               orgSlug={params.org}

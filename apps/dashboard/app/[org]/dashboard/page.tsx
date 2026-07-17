@@ -222,6 +222,7 @@ export default function OverviewPage() {
                 </Link>
                 <RaffleQuickActions
                   raffleId={r.id}
+                  projectName={r.projectName}
                   canDuplicate={canCreate}
                   canDelete={canDelete}
                   orgSlug={org}

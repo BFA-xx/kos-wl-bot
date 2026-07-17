@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { EntryPanel } from "@/components/EntryPanel";
 import { PublicThemeBridge } from "@/components/PublicThemeBridge";
 import { RaffleCountdown } from "@/components/RaffleCountdown";
@@ -11,7 +11,7 @@ import { xProfileUrl } from "@/lib/organization-social";
 import {
   canonicalRaffleBannerUrl,
   inferRaffleKind,
-  parsePublicRaffleId,
+  parsePublicRaffleReference,
   publicRafflePath,
   publicRaffleUrl,
 } from "@/lib/raffle-share";
@@ -25,7 +25,7 @@ export async function generateMetadata({
 }: {
   params: { id: string };
 }): Promise<Metadata> {
-  const id = parsePublicRaffleId(params.id);
+  const id = parsePublicRaffleReference(params.id);
   const data = id ? await getPublicRaffle(id) : null;
   if (!data) return { title: "Raffle not found · KOS" };
 
@@ -34,7 +34,12 @@ export async function generateMetadata({
   const description =
     raffle.description?.trim().slice(0, 200) ||
     `Join ${organization.name}'s ${raffle.projectName} raffle on KOS.`;
-  const url = publicRaffleUrl(raffle.id);
+  const identity = {
+    raffleId: raffle.id,
+    organizationSlug: organization.slug,
+    projectName: raffle.projectName,
+  };
+  const url = publicRaffleUrl(identity);
   const bannerUrl = canonicalRaffleBannerUrl(raffle.id, raffle.bannerUrl);
 
   return {
@@ -70,11 +75,20 @@ export default async function ShareableRafflePage({
 }: {
   params: { id: string };
 }) {
-  const id = parsePublicRaffleId(params.id);
+  const id = parsePublicRaffleReference(params.id);
   const data = id ? await getPublicRaffle(id) : null;
   if (!data) notFound();
 
   const { raffle, organization } = data;
+  const identity = {
+    raffleId: raffle.id,
+    organizationSlug: organization.slug,
+    projectName: raffle.projectName,
+  };
+  const canonicalPath = publicRafflePath(identity);
+  if (params.id !== canonicalPath.slice("/r/".length)) {
+    permanentRedirect(canonicalPath);
+  }
   const requirements = (raffle.requirements ?? {}) as Record<string, unknown>;
   const legacyTasks = getLegacyTasks(requirements);
   const verificationTasks = raffle.RaffleTask.map((item) => ({
@@ -349,7 +363,7 @@ export default async function ShareableRafflePage({
           <div className="space-y-4 lg:sticky lg:top-6">
             <EntryPanel
               raffleId={raffle.id}
-              loginHref={`/api/auth/discord/login?next=${encodeURIComponent(publicRafflePath(raffle.id))}`}
+              loginHref={`/api/auth/discord/login?next=${encodeURIComponent(canonicalPath)}`}
             />
             <section className="kos-card p-5">
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-kos-muted">

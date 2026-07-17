@@ -6,7 +6,10 @@ import {
   canonicalRaffleBannerUrl,
   normalizePublicRaffleOrigin,
   parsePublicRaffleId,
+  parsePublicRaffleReference,
   publicRafflePath,
+  publicRaffleReference,
+  publicRaffleUrl,
   titleForDuplicateVariant,
 } from "./raffle-share";
 
@@ -22,7 +25,28 @@ describe("public raffle policy", () => {
     expect(parsePublicRaffleId("57x")).toBeNull();
     expect(parsePublicRaffleId("0")).toBeNull();
     expect(parsePublicRaffleId("2147483648")).toBeNull();
-    expect(publicRafflePath(57)).toBe("/r/57");
+  });
+
+  it("builds branded collision-safe raffle references", () => {
+    const raffle = {
+      raffleId: 57,
+      organizationSlug: "KOS Community",
+      projectName: "Dorian Pepentice",
+    };
+    expect(publicRaffleReference(raffle)).toBe(
+      "kos-community-x-dorian-pepentice-57",
+    );
+    expect(publicRafflePath(raffle)).toBe(
+      "/r/kos-community-x-dorian-pepentice-57",
+    );
+    expect(publicRaffleUrl(raffle)).toBe(
+      `${PUBLIC_RAFFLE_ORIGIN}/r/kos-community-x-dorian-pepentice-57`,
+    );
+    expect(parsePublicRaffleReference("57")).toBe(57);
+    expect(
+      parsePublicRaffleReference("kos-community-x-dorian-pepentice-57"),
+    ).toBe(57);
+    expect(parsePublicRaffleReference("kos-x-raffle")).toBeNull();
   });
 
   it("normalizes configured origins and rejects unsafe protocols", () => {

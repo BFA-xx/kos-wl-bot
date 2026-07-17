@@ -94,12 +94,14 @@
   the shared Prisma enum, bot, dashboard API, and member wallet editor.
 - Paid billing and campaigns are not live. Points, rewards, and weighted draws
   have first production slices and must remain Discord + web parity features.
-- `/c/*` community pages require sign-in. `/r/:id` is the only anonymous raffle
-  surface and must never expose organization controls, entrant identities, or
-  hidden entry counts.
-- `/r/:id` is an always-dark branded surface. Its page root and mobile
-  document/overscroll canvas must remain dark regardless of saved dashboard
-  theme preferences, and its minimum height must use the dynamic viewport.
+- `/c/*` community pages require sign-in.
+  `/r/:community-x-:project-:id` is the only anonymous raffle surface and must
+  never expose organization controls, entrant identities, or hidden entry
+  counts. Numeric `/r/:id` links are compatibility redirects only.
+- The canonical public raffle page is an always-dark branded surface. Its page
+  root and mobile document/overscroll canvas must remain dark regardless of
+  saved dashboard theme preferences, and its minimum height must use the
+  dynamic viewport.
 - Public raffle IDs are positive PostgreSQL integers. Only UPCOMING, LIVE, and
   ENDED records may resolve publicly; DRAFT and CANCELLED never do.
 - Participant uniqueness is normal product state, not an error path. Discord

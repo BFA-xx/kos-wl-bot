@@ -104,12 +104,12 @@ surface for ordinary account, wallet, task, and raffle operations.
 
 ## D012 — Community pages remain session-gated; raffle share pages are anonymous
 
-**Status:** Superseded in part by D022
+**Status:** Superseded in path format by D049
 **Decision:** `/c/:slug` remains a signed-in community directory, while
-`/r/:id` is the canonical anonymous, SEO-indexable raffle surface. Only
+`/r/:reference` is the canonical anonymous, SEO-indexable raffle surface. Only
 UPCOMING, LIVE, and ENDED raffles belonging to non-suspended organizations are
 public. Entry APIs remain authenticated and return Discord OAuth users to the
-same `/r/:id` page.
+same canonical raffle page.
 **Why:** Sharing should not require login, but private dashboard/admin data and
 entry mutations must retain their existing authorization boundaries.
 
@@ -201,7 +201,7 @@ leaderboards, while still letting members use both web and Discord.
 
 ## D022 — Public raffle IDs are canonical and duplication is configuration-only
 
-**Status:** Accepted
+**Status:** Superseded in URL format by D049
 **Decision:** Use the existing stable raffle integer ID for `/r/:id` canonical
 URLs instead of adding a slug migration. Duplicate actions load a reusable
 configuration blueprint and create a new `DRAFT` raffle while explicitly
@@ -215,7 +215,8 @@ cross-community targets, drafts, and schedules without copying outcome data.
 ## D023 — Raffle sharing and duplication preserve tenant ownership
 
 **Status:** Accepted
-**Decision:** `/r/:id` uses the globally unique raffle identity, then derives
+**Decision:** The public route resolves the globally unique raffle identity,
+then derives
 the host organization exclusively through the raffle guild's unique
 `GuildConnection`. Duplicate reads and writes must use both the source raffle
 ID and the requesting organization's connected guild IDs. A duplicate remains
@@ -233,7 +234,8 @@ configuration.
 UPCOMING, LIVE, and ENDED raffles are public; DRAFT and CANCELLED are not.
 Share URLs use a normalized HTTP(S) `NEXT_PUBLIC_RAFFLE_ORIGIN`, falling back to
 the production origin `https://raffle.koslabs.app`. The compatibility route
-`/c/:slug/raffles/:id` verifies the slug and permanently redirects to `/r/:id`.
+`/c/:slug/raffles/:id` verifies the slug and permanently redirects to the
+branded canonical route defined by D049.
 **Why:** These were already product expectations. Encoding and testing them
 removes ambiguity and prevents route implementations from drifting apart.
 
@@ -478,10 +480,11 @@ historical Hub rows blank even though the linked raffle retained the answer.
 ## D044 — Canonical public raffle pages own an always-dark document boundary
 
 **Status:** Accepted
-**Decision:** Scope dark design tokens and `color-scheme: dark` on `/r/:id`,
-regardless of the stored member/dashboard theme preference. Keep the HTML/body
-overscroll canvas dark when that page is present and use dynamic viewport
-height for its root. When the public page client-navigates into the app, carry
+**Decision:** Scope dark design tokens and `color-scheme: dark` on every public
+raffle reference, regardless of the stored member/dashboard theme preference.
+Keep the HTML/body overscroll canvas dark when that page is present and use
+dynamic viewport height for its root. When the public page client-navigates
+into the app, carry
 the document's dark class into the destination so the scoped public wrapper
 cannot reveal a stale light dashboard. Preserve the existing theme toggle on
 authenticated dashboard surfaces and do not overwrite its saved preference.
@@ -543,3 +546,18 @@ Waiting instead of preserving a mislabeled chain.
 the first saved profile made a Robinhood raffle appear to have a Solana payout
 address, even though the raffle configuration was correct. Missing data is
 safer and more actionable than exporting a wallet for the wrong network.
+
+## D049 — Public raffle links are branded and collision-safe
+
+**Status:** Accepted
+**Decision:** Generate canonical public paths as
+`/r/:community-x-:project-:id`, using normalized organization and project names
+for readability and the immutable global raffle ID as the final uniqueness
+key. Numeric `/r/:id`, legacy `/c/:slug/raffles/:id`, and stale branded names
+must permanently redirect to the current canonical path. Do not add a mutable
+or separately persisted slug column. Internal durable banner assets remain on
+the numeric `/r/:id/banner` route.
+**Why:** A share link should identify the host and project before it is opened,
+while recurring project names and renamed communities must never collide or
+break historical links. The trailing ID preserves stable resolution without a
+schema migration; canonical redirects keep the visible URL current.

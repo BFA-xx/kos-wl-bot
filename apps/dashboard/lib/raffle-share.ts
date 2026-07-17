@@ -1,6 +1,12 @@
 export type RaffleKind = "GTD" | "FCFS";
 export type DuplicateVariant = "SAME" | RaffleKind;
 
+export interface PublicRaffleIdentity {
+  raffleId: number;
+  organizationSlug: string;
+  projectName: string;
+}
+
 export const DEFAULT_PUBLIC_RAFFLE_ORIGIN = "https://raffle.koslabs.app";
 export const PUBLIC_RAFFLE_STATUSES = ["UPCOMING", "LIVE", "ENDED"] as const;
 
@@ -29,14 +35,43 @@ export function parsePublicRaffleId(value: string | number): number | null {
   return Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647 ? id : null;
 }
 
-export function publicRafflePath(raffleId: number): string {
-  const id = parsePublicRaffleId(raffleId);
-  if (!id) throw new RangeError("Invalid public raffle id.");
-  return `/r/${id}`;
+/** Accept both the legacy numeric reference and the branded canonical form. */
+export function parsePublicRaffleReference(value: string): number | null {
+  const raw = value.trim();
+  if (/^\d+$/u.test(raw)) return parsePublicRaffleId(raw);
+  const match = raw.match(/-(\d+)$/u);
+  return match ? parsePublicRaffleId(match[1]) : null;
 }
 
-export function publicRaffleUrl(raffleId: number): string {
-  return `${PUBLIC_RAFFLE_ORIGIN}${publicRafflePath(raffleId)}`;
+export function raffleSlugPart(value: string, fallback: string): string {
+  const normalized = value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .toLowerCase()
+    .replace(/&/gu, " and ")
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "");
+  return (normalized || fallback).slice(0, 72).replace(/-+$/u, "");
+}
+
+export function publicRaffleReference({
+  raffleId,
+  organizationSlug,
+  projectName,
+}: PublicRaffleIdentity): string {
+  const id = parsePublicRaffleId(raffleId);
+  if (!id) throw new RangeError("Invalid public raffle id.");
+  const community = raffleSlugPart(organizationSlug, "community");
+  const raffle = raffleSlugPart(projectName, "raffle");
+  return `${community}-x-${raffle}-${id}`;
+}
+
+export function publicRafflePath(identity: PublicRaffleIdentity): string {
+  return `/r/${publicRaffleReference(identity)}`;
+}
+
+export function publicRaffleUrl(identity: PublicRaffleIdentity): string {
+  return `${PUBLIC_RAFFLE_ORIGIN}${publicRafflePath(identity)}`;
 }
 
 /**

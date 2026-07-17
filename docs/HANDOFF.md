@@ -77,6 +77,9 @@ Phase 3 is implemented through S2.5:
 - User-facing product headings and default brand text now say **KOS Raffles**
   instead of **KOS WL Bot**. Internal package, process, and repository names
   remain unchanged for deployment compatibility.
+- Branded public raffle references are implemented and pending release:
+  `/r/:community-x-:project-:id` is canonical, while numeric and stale branded
+  links permanently redirect without a schema migration.
 - Authenticated production visual regression now also covers Member Raffles
   and Collab Hub with deterministic API fixtures on desktop Chromium and Pixel 7. Four reviewed baselines are committed, and the standard gitignored auth
   state is reusable without an extra storage-state environment override.
@@ -1795,6 +1798,77 @@ Recommended next task:
 - Add a scheduled wallet-chain integrity audit that reports any legacy
   raffle-specific or Collab Hub row outside its raffle configuration and raises
   an admin health alert before an export is requested.
+
+### Branded public raffle references — ready to ship
+
+- Canonical public raffle links now read like
+  `/r/kos-x-dorian-pepentice-65`. The organization slug and project name make
+  the host and raffle recognizable; the trailing immutable ID prevents
+  collisions when communities host projects with the same name.
+- `/r/65`, `/c/kos/raffles/65`, and any stale branded name resolve the same
+  global ID and permanently redirect to the current canonical link. Renaming a
+  project or community therefore updates the visible URL without breaking
+  historical shares.
+- Open Graph canonical metadata, Discord result notifications, dashboard Copy
+  share link actions, community cards, member raffle/task cards, and Collab Hub
+  public-page actions all generate the branded format.
+- Durable banner assets intentionally remain at numeric `/r/:id/banner` routes;
+  they are internal media identifiers rather than user-facing share links.
+- No database migration or backfill is required.
+
+Verification before deployment:
+
+- `pnpm --filter @kos/bot typecheck`
+- `pnpm --filter @kos/bot test` — 15 tests passed.
+- `pnpm --filter @kos/bot build`
+- `pnpm --filter @kos/dashboard typecheck`
+- `pnpm --filter @kos/dashboard test` — 18 files, 56 tests passed.
+- `pnpm --filter @kos/dashboard build`
+- `git diff --check`
+
+Modified files for this task:
+
+- `apps/bot/src/services/raffleShare.test.ts`
+- `apps/bot/src/services/winnerService.ts`
+- `apps/bot/src/utils/raffleShare.ts`
+- `apps/dashboard/app/[org]/dashboard/page.tsx`
+- `apps/dashboard/app/[org]/raffles/[id]/page.tsx`
+- `apps/dashboard/app/[org]/raffles/page.tsx`
+- `apps/dashboard/app/c/[slug]/page.tsx`
+- `apps/dashboard/app/c/[slug]/raffles/[id]/page.tsx`
+- `apps/dashboard/app/me/raffles/page.tsx`
+- `apps/dashboard/app/r/[id]/page.tsx`
+- `apps/dashboard/components/CollabDetail.tsx`
+- `apps/dashboard/components/MemberTasksWorkspace.tsx`
+- `apps/dashboard/components/RaffleQuickActions.tsx`
+- `apps/dashboard/lib/raffle-share.test.ts`
+- `apps/dashboard/lib/raffle-share.ts`
+- `docs/AGENTS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/DECISIONS.md`
+- `docs/HANDOFF.md`
+- `docs/PROJECT_RULES.md`
+
+Assumptions:
+
+- `Organization.slug` and `Raffle.projectName` are the correct public labels
+  for the community and raffle portions of the link.
+- The trailing global raffle ID may remain visible because it is the stable
+  collision and legacy-resolution key, not a tenant-local raffle number.
+- A name edit should change the canonical display URL while old links continue
+  to redirect.
+
+Technical debt:
+
+- The small slug builder exists in both bot and dashboard runtimes. Tests pin
+  identical behavior, but a future runtime-neutral domain package should own
+  the helper to eliminate duplication.
+
+Recommended next task:
+
+- Add optional organization custom domains so approved communities can share
+  the same branded paths from their own raffle subdomain without changing the
+  canonical identity or tenant authorization model.
 
 ## Confirmed invariants and current product policies
 

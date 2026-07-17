@@ -12,6 +12,7 @@ import {
 } from "@/components/MemberTasksWorkspace";
 import { Empty, PageTitle, SectionTitle, StatCard } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
+import { publicRafflePath } from "@/lib/raffle-share";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -335,7 +336,11 @@ function RaffleEntryCard({
         {raffle.org ? (
           <div className="mt-3 text-right">
             <Link
-              href={`/r/${raffle.id}`}
+              href={publicRafflePath({
+                raffleId: raffle.id,
+                organizationSlug: raffle.org.slug,
+                projectName: raffle.projectName,
+              })}
               className="text-xs text-kos-muted underline-offset-2 hover:text-kos-fg hover:underline"
             >
               {ended ? "View results →" : "View public raffle page →"}

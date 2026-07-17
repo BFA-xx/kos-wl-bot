@@ -1,9 +1,6 @@
 import { notFound, permanentRedirect } from "next/navigation";
 import { getPublicRaffle } from "@/lib/public-raffle";
-import {
-  parsePublicRaffleId,
-  publicRafflePath,
-} from "@/lib/raffle-share";
+import { parsePublicRaffleId, publicRafflePath } from "@/lib/raffle-share";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,5 +14,11 @@ export default async function LegacyRafflePage({
   const id = parsePublicRaffleId(params.id);
   const data = id ? await getPublicRaffle(id) : null;
   if (!id || !data || data.organization.slug !== params.slug) notFound();
-  permanentRedirect(publicRafflePath(id));
+  permanentRedirect(
+    publicRafflePath({
+      raffleId: id,
+      organizationSlug: data.organization.slug,
+      projectName: data.raffle.projectName,
+    }),
+  );
 }

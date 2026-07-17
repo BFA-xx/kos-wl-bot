@@ -183,7 +183,8 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   generous spacing, visible focus states, and collapsible command-center
   navigation. Preserve that direction when adding points, rewards, campaigns,
   and weighted-role controls.
-- The canonical public `/r/:id` surface is always dark, independent of the
+- The canonical public `/r/:community-x-:project-:id` surface is always dark,
+  independent of the
   member/dashboard `kos-theme` preference. Keep its dark design-token boundary
   on the page root and its document/overscroll canvas dark so mixed-contrast
   cards or a white mobile tail cannot appear.
@@ -213,9 +214,11 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   removes the Discord raffle post, deletes EC2 proof files, writes the guild
   deletion audit, and finally deletes the database row. Do not make Vercel
   delete the Discord message or try to access bot-local proof paths.
-- `/r/:id` is the canonical anonymous raffle URL. Keep `/c/:slug` session-gated,
-  keep entry APIs authenticated, and pass `/r/:id` through Discord OAuth's safe
-  `next` return when a signed-out visitor joins.
+- `/r/:community-x-:project-:id` is the canonical anonymous raffle URL. The
+  trailing global ID is the collision-safe lookup key; numeric `/r/:id` and
+  stale branded references must permanently redirect. Keep `/c/:slug`
+  session-gated, keep entry APIs authenticated, and pass the canonical path
+  through Discord OAuth's safe `next` return when a signed-out visitor joins.
 - Raffle duplication is configuration-only. Reuse the duplicate blueprint and
   variant helpers, preserve custom `requirements`, and never clone participants,
   winners, entry counts, message IDs, proof/draw fields, timestamps, or

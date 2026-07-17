@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { EntryPanel } from "@/components/EntryPanel";
 import { fmtDate } from "@/lib/format";
+import { publicRafflePath } from "@/lib/raffle-share";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -521,7 +522,13 @@ function RaffleTaskCard({
   onOpen: (task: TaskRow, raffleIdForRefresh?: number) => void;
 }) {
   const summary = taskSummary(raffle.tasks);
-  const publicHref = raffle.org ? `/r/${raffle.id}` : "#";
+  const publicHref = raffle.org
+    ? publicRafflePath({
+        raffleId: raffle.id,
+        organizationSlug: raffle.org.slug,
+        projectName: raffle.projectName,
+      })
+    : "#";
 
   return (
     <div className="kos-card overflow-hidden">

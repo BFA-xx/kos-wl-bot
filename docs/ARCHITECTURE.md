@@ -71,9 +71,10 @@ Organization-native data such as tasks is scoped directly by
 `organizationId`.
 
 Middleware requires a valid session for every route except `/login`,
-`/api/auth/*`, `/r/:id`, Next.js assets, and public icons. `/c/:slug` pages are
+`/api/auth/*`, `/r/:reference`, Next.js assets, and public icons. `/c/:slug` pages are
 accessible without organization membership but still require a KOS session.
-`/r/:id` is anonymous and server-rendered; its client entry panel calls the
+The canonical `/r/:community-x-:project-:id` route is anonymous and
+server-rendered; its client entry panel calls the
 authenticated `/api/me/raffles/:id` routes and offers Discord OAuth with a safe
 same-page return when no session exists.
 
@@ -155,14 +156,16 @@ processes those requests.
 ### Public sharing and duplication
 
 - Every UPCOMING, LIVE, or ENDED raffle in a non-suspended organization has a
-  canonical `/r/:id` page with SSR metadata, Open Graph/Twitter banner data,
-  public requirements, and no admin controls.
+  canonical `/r/:community-x-:project-:id` page with SSR metadata, Open
+  Graph/Twitter banner data, public requirements, and no admin controls.
 - The canonical page owns an always-dark design-token and `color-scheme`
   boundary. A document-level `:has(.kos-public-dark)` rule keeps the HTML/body
   canvas dark during mobile overscroll, while `min-height: 100dvh` avoids the
   light tail caused by mobile browser chrome changing the viewport height.
-- Raffle IDs are validated as positive PostgreSQL integers. Share-link helpers
-  normalize the configured HTTP(S) origin and use the stable global raffle ID;
+- Raffle references resolve a positive PostgreSQL integer from either a legacy
+  numeric path or the trailing segment of the branded path. Share-link helpers
+  normalize the configured HTTP(S) origin, add normalized community/project
+  names, and retain the stable global raffle ID as the collision key;
   clipboard actions have a manual-copy fallback.
 - Public organization identity is derived from the raffle guild's unique
   `GuildConnection`. The legacy `/c/:slug/raffles/:id` page verifies that

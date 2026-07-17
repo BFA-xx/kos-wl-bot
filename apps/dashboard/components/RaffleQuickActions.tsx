@@ -9,6 +9,7 @@ import { publicRaffleUrl } from "@/lib/raffle-share";
 
 export function RaffleQuickActions({
   raffleId,
+  projectName,
   canDuplicate,
   canDelete = false,
   orgSlug,
@@ -19,9 +20,10 @@ export function RaffleQuickActions({
   initialToast,
 }: {
   raffleId: number;
+  projectName: string;
   canDuplicate: boolean;
   canDelete?: boolean;
-  orgSlug?: string;
+  orgSlug: string;
   raffleStatus?: string;
   editHref?: string;
   deleteRedirectHref?: string;
@@ -89,7 +91,11 @@ export function RaffleQuickActions({
   }, [confirmDelete, deleteBusy]);
 
   async function copyShareLink() {
-    const shareUrl = publicRaffleUrl(raffleId);
+    const shareUrl = publicRaffleUrl({
+      raffleId,
+      organizationSlug: orgSlug,
+      projectName,
+    });
     setOpen(false);
     setManualLink(null);
     try {

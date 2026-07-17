@@ -19,6 +19,7 @@ import { isBlacklisted } from "./blacklistService.js";
 import { audit } from "./auditService.js";
 import { generateAndDeliverProof } from "./proofService.js";
 import { logger } from "../logger.js";
+import { publicRafflePath } from "../utils/raffleShare.js";
 import { syncCollaborationForRaffle } from "./collaborationService.js";
 
 interface DrawnWinner {
@@ -176,7 +177,9 @@ async function notifyRaffleResults(
     where: { guildId },
     include: { organization: { select: { slug: true } } },
   });
-  const link = conn ? `/r/${raffleId}` : "/me/history";
+  const link = conn
+    ? publicRafflePath(raffleId, conn.organization.slug, projectName)
+    : "/me/history";
 
   const winnerIds = new Set(winners.map((w) => w.userId));
   const losers = participants.filter((p) => !winnerIds.has(p.userId));

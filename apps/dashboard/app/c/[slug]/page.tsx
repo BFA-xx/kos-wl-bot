@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { StatusBadge, Empty } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
 import { xProfileUrl } from "@/lib/organization-social";
+import { publicRafflePath } from "@/lib/raffle-share";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -122,7 +123,11 @@ export default async function CommunityPage({
           {live.map((r) => (
             <Link
               key={r.id}
-              href={`/r/${r.id}`}
+              href={publicRafflePath({
+                raffleId: r.id,
+                organizationSlug: org.slug,
+                projectName: r.projectName,
+              })}
               className="kos-card kos-card-hover overflow-hidden"
             >
               {r.bannerUrl ? (
@@ -169,7 +174,11 @@ export default async function CommunityPage({
             {ended.map((r) => (
               <Link
                 key={r.id}
-                href={`/r/${r.id}`}
+                href={publicRafflePath({
+                  raffleId: r.id,
+                  organizationSlug: org.slug,
+                  projectName: r.projectName,
+                })}
                 className="kos-card kos-card-hover flex items-center justify-between p-4 opacity-80"
               >
                 <div className="min-w-0">

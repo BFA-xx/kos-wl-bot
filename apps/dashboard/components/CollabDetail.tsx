@@ -19,6 +19,7 @@ import {
 } from "./icons";
 import { useCan } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
+import { publicRafflePath } from "@/lib/raffle-share";
 import {
   collaborationChainText,
   collaborationDescriptor,
@@ -1281,7 +1282,14 @@ function RafflesTab({
                 >
                   Open raffle
                 </Link>
-                <Link className="kos-btn h-9 text-xs" href={`/r/${raffle.id}`}>
+                <Link
+                  className="kos-btn h-9 text-xs"
+                  href={publicRafflePath({
+                    raffleId: raffle.id,
+                    organizationSlug: org,
+                    projectName: raffle.projectName,
+                  })}
+                >
                   Public page
                 </Link>
                 {raffle.proof?.messageLink ? (
