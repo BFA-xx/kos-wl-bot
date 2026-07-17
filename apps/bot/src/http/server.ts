@@ -3,7 +3,11 @@ import { timingSafeEqual } from "node:crypto";
 import type { Client } from "discord.js";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
-import { closeAndDraw, rerollWinners, type RerollMode } from "../services/winnerService.js";
+import {
+  closeAndDraw,
+  rerollWinners,
+  type RerollMode,
+} from "../services/winnerService.js";
 
 /**
  * Minimal internal control API for the dashboard. Exposes the few actions that
@@ -11,16 +15,21 @@ import { closeAndDraw, rerollWinners, type RerollMode } from "../services/winner
  * dashboard can trigger real announcements. Bound to localhost and protected
  * by a bearer token; intended to sit behind the same host / reverse proxy.
  */
-export function startInternalApi(client: Client): Server | undefined {
+export function startInternalApi(
+  client: Client,
+  schedulerHealth: () => unknown = () => null,
+): Server | undefined {
   if (!config.INTERNAL_API_PORT) return undefined;
   if (!config.INTERNAL_API_TOKEN) {
-    logger.warn("INTERNAL_API_PORT set but INTERNAL_API_TOKEN missing — internal API disabled");
+    logger.warn(
+      "INTERNAL_API_PORT set but INTERNAL_API_TOKEN missing — internal API disabled",
+    );
     return undefined;
   }
   const token = config.INTERNAL_API_TOKEN;
 
   const server = createServer((req, res) => {
-    void handle(req, res, client, token);
+    void handle(req, res, client, token, schedulerHealth);
   });
 
   server.listen(config.INTERNAL_API_PORT, config.INTERNAL_API_HOST, () => {
@@ -37,6 +46,7 @@ async function handle(
   res: import("node:http").ServerResponse,
   client: Client,
   token: string,
+  schedulerHealth: () => unknown,
 ): Promise<void> {
   const json = (status: number, body: unknown) => {
     res.writeHead(status, { "content-type": "application/json" });
@@ -47,7 +57,12 @@ async function handle(
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
 
     if (req.method === "GET" && url.pathname === "/internal/health") {
-      return json(200, { ok: true, ready: client.isReady() });
+      return json(200, {
+        ok: true,
+        ready: client.isReady(),
+        guilds: client.guilds.cache.size,
+        scheduler: schedulerHealth(),
+      });
     }
 
     if (!authorized(req.headers.authorization, token)) {
@@ -58,19 +73,26 @@ async function handle(
     if (req.method === "POST" && endMatch) {
       const id = Number(endMatch[1]);
       const body = await readJson(req);
-      await closeAndDraw(client, id, body.actorId ?? null);
-      return json(200, { ok: true });
+      const completed = await closeAndDraw(client, id, body.actorId ?? null);
+      return json(completed ? 200 : 409, { ok: completed });
     }
 
-    const rerollMatch = url.pathname.match(/^\/internal\/raffles\/(\d+)\/reroll$/u);
+    const rerollMatch = url.pathname.match(
+      /^\/internal\/raffles\/(\d+)\/reroll$/u,
+    );
     if (req.method === "POST" && rerollMatch) {
       const id = Number(rerollMatch[1]);
       const body = await readJson(req);
-      const result = await rerollWinners(client, id, body.actorId ?? "dashboard", {
-        mode: (body.mode as RerollMode) ?? "all",
-        userIds: body.userIds,
-        count: body.count,
-      });
+      const result = await rerollWinners(
+        client,
+        id,
+        body.actorId ?? "dashboard",
+        {
+          mode: (body.mode as RerollMode) ?? "all",
+          userIds: body.userIds,
+          count: body.count,
+        },
+      );
       return json(result ? 200 : 400, { ok: Boolean(result), result });
     }
 

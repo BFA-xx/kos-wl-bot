@@ -57,6 +57,9 @@ const schema = z.object({
   /** Scheduler sweep interval (seconds) for open/close/draw transitions. */
   SCHEDULER_TICK_SECONDS: z.coerce.number().int().positive().default(15),
 
+  /** Maximum records processed per scheduler operation and tick. */
+  SCHEDULER_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(25),
+
   /** Max enter/leave actions per user per minute (anti-spam). */
   ENTRY_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(8),
 

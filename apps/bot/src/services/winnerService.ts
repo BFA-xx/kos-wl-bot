@@ -37,14 +37,14 @@ export async function closeAndDraw(
   client: Client,
   raffleId: number,
   actorId?: string,
-): Promise<void> {
+): Promise<boolean> {
   const raffle = await getRaffle(raffleId);
-  if (!raffle) return;
+  if (!raffle) return false;
   if (
     raffle.status === RaffleStatus.ENDED ||
     raffle.status === RaffleStatus.CANCELLED
   ) {
-    return;
+    return false;
   }
 
   // Eligible pool = entered users who are not currently blacklisted.
@@ -77,9 +77,9 @@ export async function closeAndDraw(
   const endedAt =
     raffle.endAt.getTime() < Date.now() ? raffle.endAt : new Date();
 
-  await prisma.$transaction(async (tx) => {
-    await tx.raffle.update({
-      where: { id: raffleId },
+  const claimed = await prisma.$transaction(async (tx) => {
+    const transition = await tx.raffle.updateMany({
+      where: { id: raffleId, status: raffle.status },
       data: {
         status: RaffleStatus.ENDED,
         endedAt,
@@ -88,6 +88,7 @@ export async function closeAndDraw(
         drawSeedHash: hash,
       },
     });
+    if (transition.count === 0) return false;
     if (drawn.length > 0) {
       await tx.winner.createMany({
         data: drawn.map((w, i) => ({
@@ -99,7 +100,15 @@ export async function closeAndDraw(
         })),
       });
     }
+    return true;
   });
+  if (!claimed) {
+    logger.info(
+      { raffleId },
+      "draw skipped because another worker already claimed the raffle",
+    );
+    return false;
+  }
 
   await audit({
     guildId: raffle.guildId,
@@ -148,6 +157,7 @@ export async function closeAndDraw(
   await syncCollaborationForRaffle(raffleId).catch((err) =>
     logger.warn({ err, raffleId }, "Collab Hub sync failed"),
   );
+  return true;
 }
 
 /**
@@ -310,14 +320,17 @@ export async function rerollWinners(
       )
     : verifiableSample(pool, toReplace.length, seed, (p) => p.userId);
 
-  const added: { userId: string; username: string }[] = [];
-  await prisma.$transaction(async (tx) => {
+  const reroll = await prisma.$transaction(async (tx) => {
+    const replaced: typeof toReplace = [];
+    const added: { userId: string; username: string }[] = [];
     for (let i = 0; i < toReplace.length; i++) {
       const old = toReplace[i]!;
-      await tx.winner.update({
-        where: { id: old.id },
+      const claimed = await tx.winner.updateMany({
+        where: { id: old.id, replaced: false },
         data: { replaced: true },
       });
+      if (claimed.count === 0) continue;
+      replaced.push(old);
       const repl = replacements[i];
       if (!repl) continue; // pool exhausted
       await tx.winner.create({
@@ -332,17 +345,26 @@ export async function rerollWinners(
       });
       added.push({ userId: repl.userId, username: repl.username });
     }
+    return { replaced, added };
   });
+  if (reroll.replaced.length === 0) {
+    logger.info(
+      { raffleId },
+      "reroll skipped because another worker already claimed the winners",
+    );
+    return null;
+  }
+  const { replaced, added } = reroll;
 
   await audit({
     guildId: raffle.guildId,
     raffleId,
     category: LogCategory.REROLL,
     action: "RAFFLE_REROLL",
-    message: `Rerolled ${toReplace.length} winner(s) (${options.mode})`,
+    message: `Rerolled ${replaced.length} winner(s) (${options.mode})`,
     actorId,
     metadata: {
-      removed: toReplace.map((w) => w.userId),
+      removed: replaced.map((w) => w.userId),
       added: added.map((w) => w.userId),
       weighted: raffle.useRoleWeights,
       totalWeight: pool.reduce((sum, p) => sum + Math.max(1, p.weight), 0),
@@ -388,7 +410,7 @@ export async function rerollWinners(
   );
 
   return {
-    replaced: toReplace.map((w) => ({
+    replaced: replaced.map((w) => ({
       userId: w.userId,
       username: w.username,
     })),

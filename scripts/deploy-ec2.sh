@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# One-command deploy: sync local code to the EC2 bot, rebuild, re-register
-# slash commands, and restart it. Run from your Mac:
+# One-command deploy: sync local code to the EC2 bot, test, rebuild, register
+# global slash commands, restart, and verify scheduler health. Run from your Mac:
 #
 #   ./scripts/deploy-ec2.sh
 #
@@ -26,12 +26,23 @@ echo "▶ Building & restarting on the server ..."
 ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "$HOST" '
   export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"
   cd ~/kos-wl-bot
-  pnpm install >/dev/null 2>&1 || true
+  pnpm install --frozen-lockfile
   pnpm --filter @kos/db build
+  pnpm --filter @kos/bot test
   pnpm --filter @kos/bot build
-  pnpm deploy:commands
+  pnpm --filter @kos/bot deploy:commands -- --global
   pm2 restart kos-bot --update-env
-  sleep 4
-  curl -s --max-time 5 http://127.0.0.1:4000/internal/health; echo
+  for attempt in $(seq 1 20); do
+    if health=$(curl -fsS --max-time 5 http://127.0.0.1:4000/internal/health 2>/dev/null); then
+      if node -e "const health = JSON.parse(process.argv[1]); if (!health.ok || !health.ready || !health.scheduler?.lastTickAt || health.scheduler.lastTickOk !== true) process.exit(1)" "$health"; then
+        echo "$health"
+        exit 0
+      fi
+    fi
+    sleep 2
+  done
+  echo "Bot did not become scheduler-ready within 40 seconds" >&2
+  pm2 logs kos-bot --lines 50 --nostream >&2
+  exit 1
 '
 echo "✅ Deploy complete."

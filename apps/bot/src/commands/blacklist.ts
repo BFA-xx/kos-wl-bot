@@ -2,7 +2,6 @@ import {
   SlashCommandBuilder,
   MessageFlags,
   EmbedBuilder,
-  PermissionFlagsBits,
   type ChatInputCommandInteraction,
 } from "discord.js";
 import type { Command } from "../types.js";
@@ -18,20 +17,26 @@ export const blacklistCommand: Command = {
   data: new SlashCommandBuilder()
     .setName("blacklist")
     .setDescription("Manage the raffle blacklist")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .setDMPermission(false)
     .addSubcommand((sub) =>
       sub
         .setName("add")
         .setDescription("Blacklist a user from raffles")
-        .addUserOption((o) => o.setName("user").setDescription("User to blacklist").setRequired(true))
+        .addUserOption((o) =>
+          o
+            .setName("user")
+            .setDescription("User to blacklist")
+            .setRequired(true),
+        )
         .addStringOption((o) => o.setName("reason").setDescription("Reason")),
     )
     .addSubcommand((sub) =>
       sub
         .setName("remove")
         .setDescription("Remove a user from the blacklist")
-        .addUserOption((o) => o.setName("user").setDescription("User to remove").setRequired(true)),
+        .addUserOption((o) =>
+          o.setName("user").setDescription("User to remove").setRequired(true),
+        ),
     )
     .addSubcommand((sub) =>
       sub.setName("list").setDescription("Show blacklisted users"),
@@ -88,6 +93,9 @@ export const blacklistCommand: Command = {
               .slice(0, 4000),
       )
       .setFooter({ text: KOS.footer });
-    return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      embeds: [embed],
+      flags: MessageFlags.Ephemeral,
+    });
   },
 };

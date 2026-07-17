@@ -11,7 +11,9 @@ import { handleRaffleSelect } from "./raffleWizard.js";
 import { logger } from "../logger.js";
 
 /** Single entry point for every interaction the bot receives. */
-export async function handleInteraction(interaction: Interaction): Promise<void> {
+export async function handleInteraction(
+  interaction: Interaction,
+): Promise<void> {
   try {
     if (interaction.isChatInputCommand()) {
       return await runCommand(interaction);
@@ -38,27 +40,53 @@ export async function handleInteraction(interaction: Interaction): Promise<void>
       return;
     }
   } catch (err) {
-    logger.error({ err, type: interaction.type }, "interaction handler error");
+    logger.error(
+      {
+        err,
+        type: interaction.type,
+        interactionId: interaction.id,
+        guildId: interaction.guildId,
+        channelId: interaction.channelId,
+        userId: interaction.user.id,
+        commandName: interaction.isCommand()
+          ? interaction.commandName
+          : undefined,
+        customId:
+          interaction.isMessageComponent() || interaction.isModalSubmit()
+            ? interaction.customId
+            : undefined,
+      },
+      "interaction handler error",
+    );
     await safeError(interaction);
   }
 }
 
-async function runCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+async function runCommand(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
   const command = commandMap.get(interaction.commandName);
   if (!command) {
-    await interaction.reply({ content: "Unknown command.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: "Unknown command.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
   if (command.managerOnly) {
     if (!interaction.inGuild()) {
-      await interaction.reply({ content: "This command can only be used in a server.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({
+        content: "This command can only be used in a server.",
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
     const allowed = await isRaffleManager(interaction);
     if (!allowed) {
       await interaction.reply({
-        content: "You don't have permission to manage raffles. Ask an admin to grant you a manager role.",
+        content:
+          "You don't have permission to manage raffles. Ask an admin to grant you a manager role.",
         flags: MessageFlags.Ephemeral,
       });
       return;

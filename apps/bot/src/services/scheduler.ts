@@ -31,6 +31,9 @@ export class Scheduler {
   private running = false;
   private lastHeartbeat = 0;
   private lastCollaborationSweep = 0;
+  private lastTickAt: string | null = null;
+  private lastTickDurationMs: number | null = null;
+  private lastTickOk: boolean | null = null;
 
   constructor(private readonly client: Client) {}
 
@@ -47,6 +50,15 @@ export class Scheduler {
     if (this.transitionTimer) clearInterval(this.transitionTimer);
   }
 
+  health() {
+    return {
+      running: this.running,
+      lastTickAt: this.lastTickAt,
+      lastTickDurationMs: this.lastTickDurationMs,
+      lastTickOk: this.lastTickOk,
+    };
+  }
+
   /**
    * Liveness heartbeat for the Super Admin health page (the dashboard can't
    * reach the bot's localhost API from Vercel, so status flows via the DB).
@@ -58,6 +70,7 @@ export class Scheduler {
     const value = JSON.stringify({
       guilds: this.client.guilds.cache.size,
       user: this.client.user?.tag ?? null,
+      scheduler: this.health(),
     });
     await prisma.systemStatus
       .upsert({
@@ -72,6 +85,7 @@ export class Scheduler {
   private async tick(): Promise<void> {
     if (this.running) return; // prevent overlap on slow draws
     this.running = true;
+    const startedAt = Date.now();
     const now = new Date();
     try {
       // Post raffles created from the dashboard, and run dashboard reroll
@@ -95,8 +109,11 @@ export class Scheduler {
       // Open upcoming raffles whose start time has arrived.
       const toOpen = await prisma.raffle.findMany({
         where: { status: RaffleStatus.UPCOMING, startAt: { lte: now } },
+        orderBy: [{ startAt: "asc" }, { id: "asc" }],
+        take: config.SCHEDULER_BATCH_SIZE,
         select: { id: true, guildId: true },
       });
+      this.warnIfBatchIsFull("raffles waiting to open", toOpen.length);
       for (const r of toOpen) {
         await prisma.raffle.update({
           where: { id: r.id },
@@ -117,19 +134,34 @@ export class Scheduler {
       // Close + draw live raffles whose end time has passed.
       const toClose = await prisma.raffle.findMany({
         where: { status: RaffleStatus.LIVE, endAt: { lte: now } },
+        orderBy: [{ endAt: "asc" }, { id: "asc" }],
+        take: config.SCHEDULER_BATCH_SIZE,
         select: { id: true },
       });
+      this.warnIfBatchIsFull("raffles waiting to close", toClose.length);
       for (const r of toClose) {
         logger.info({ raffleId: r.id }, "raffle ending — drawing winners");
         await closeAndDraw(this.client, r.id).catch((err) =>
           logger.error({ err, raffleId: r.id }, "auto close/draw failed"),
         );
       }
+      this.lastTickOk = true;
     } catch (err) {
+      this.lastTickOk = false;
       logger.error({ err }, "scheduler tick failed");
     } finally {
+      this.lastTickAt = new Date().toISOString();
+      this.lastTickDurationMs = Date.now() - startedAt;
       this.running = false;
     }
+  }
+
+  private warnIfBatchIsFull(operation: string, count: number): void {
+    if (count < config.SCHEDULER_BATCH_SIZE) return;
+    logger.warn(
+      { operation, count, batchSize: config.SCHEDULER_BATCH_SIZE },
+      "scheduler batch reached its limit; remaining work continues next tick",
+    );
   }
 
   /** Remove dashboard-deleted raffle posts, proof files, and DB records. */
@@ -140,9 +172,10 @@ export class Scheduler {
         raffleId: { not: null },
       },
       orderBy: { createdAt: "asc" },
-      take: 25,
+      take: config.SCHEDULER_BATCH_SIZE,
       select: { id: true, raffleId: true, actorId: true },
     });
+    this.warnIfBatchIsFull("raffle deletion requests", requests.length);
     for (const request of requests) {
       if (!request.raffleId) continue;
       await deleteRaffle(
@@ -165,8 +198,11 @@ export class Scheduler {
   private async publishDashboardRaffles(): Promise<void> {
     const drafts = await prisma.raffle.findMany({
       where: { status: RaffleStatus.DRAFT, channelId: { not: null } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: config.SCHEDULER_BATCH_SIZE,
       select: { id: true, guildId: true, startAt: true },
     });
+    this.warnIfBatchIsFull("dashboard raffle publishes", drafts.length);
     for (const r of drafts) {
       const status =
         r.startAt.getTime() <= Date.now()
@@ -206,8 +242,11 @@ export class Scheduler {
   private async processRerollRequests(): Promise<void> {
     const pending = await prisma.raffle.findMany({
       where: { rerollRequestedAt: { not: null } },
+      orderBy: [{ rerollRequestedAt: "asc" }, { id: "asc" }],
+      take: config.SCHEDULER_BATCH_SIZE,
       select: { id: true, rerollRequest: true },
     });
+    this.warnIfBatchIsFull("dashboard reroll requests", pending.length);
     for (const r of pending) {
       // Clear FIRST so a failure can't loop.
       await prisma.raffle
@@ -236,8 +275,11 @@ export class Scheduler {
   private async processEditRequests(): Promise<void> {
     const edits = await prisma.raffle.findMany({
       where: { editRequestedAt: { not: null }, messageId: { not: null } },
+      orderBy: [{ editRequestedAt: "asc" }, { id: "asc" }],
+      take: config.SCHEDULER_BATCH_SIZE,
       select: { id: true },
     });
+    this.warnIfBatchIsFull("dashboard raffle edit requests", edits.length);
     for (const r of edits) {
       await prisma.raffle
         .update({ where: { id: r.id }, data: { editRequestedAt: null } })

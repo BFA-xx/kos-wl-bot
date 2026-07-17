@@ -2,7 +2,6 @@ import {
   SlashCommandBuilder,
   MessageFlags,
   EmbedBuilder,
-  PermissionFlagsBits,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -36,7 +35,6 @@ export const raffleCommand: Command = {
   data: new SlashCommandBuilder()
     .setName("raffle")
     .setDescription("Manage KOS whitelist raffles")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .setDMPermission(false)
     // ---- create (opens a popup form, then a setup panel) ----
     .addSubcommand((sub) =>
@@ -448,7 +446,16 @@ async function handleEnd(interaction: ChatInputCommandInteraction) {
   if (raffle.status === RaffleStatus.ENDED) {
     return interaction.editReply("That raffle has already ended.");
   }
-  await closeAndDraw(interaction.client, id, interaction.user.id);
+  const completed = await closeAndDraw(
+    interaction.client,
+    id,
+    interaction.user.id,
+  );
+  if (!completed) {
+    return interaction.editReply(
+      "That raffle is already closed or another worker is completing it.",
+    );
+  }
   await interaction.editReply(
     `${KOS.emoji.check} Ended raffle #${id} and drew winners. Proof delivered.`,
   );

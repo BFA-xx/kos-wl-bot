@@ -26,17 +26,15 @@ async function main() {
       status: "online",
     });
 
-    // Register guilds we're already in (lazy config rows).
-    for (const guild of c.guilds.cache.values()) {
-      await ensureGuild({ id: guild.id, name: guild.name, iconUrl: guild.iconURL() }).catch(
-        () => undefined,
-      );
-    }
-
     scheduler = new Scheduler(c);
     scheduler.start();
 
-    internalApi = startInternalApi(c);
+    internalApi = startInternalApi(c, () => scheduler?.health() ?? null);
+
+    // Do not hold readiness behind one slow database write per guild. The
+    // bounded sync keeps guild metadata current while the scheduler and health
+    // endpoint are already serving.
+    void syncConnectedGuilds(c.guilds.cache.values());
   });
 
   client.on(Events.InteractionCreate, (interaction) => {
@@ -44,11 +42,17 @@ async function main() {
   });
 
   client.on(Events.GuildCreate, (guild) => {
-    void ensureGuild({ id: guild.id, name: guild.name, iconUrl: guild.iconURL() });
     logger.info({ guildId: guild.id, name: guild.name }, "joined guild");
+    void syncGuild(guild);
   });
 
-  client.on(Events.Error, (err) => logger.error({ err }, "discord client error"));
+  client.on(Events.GuildUpdate, (_previous, guild) => {
+    void syncGuild(guild);
+  });
+
+  client.on(Events.Error, (err) =>
+    logger.error({ err }, "discord client error"),
+  );
   client.on(Events.Warn, (msg) => logger.warn({ msg }, "discord warning"));
 
   // Periodically bound the rate-limiter memory.
@@ -71,6 +75,31 @@ async function main() {
   );
 
   await client.login(config.DISCORD_TOKEN);
+}
+
+async function syncConnectedGuilds(
+  guilds: Iterable<{ id: string; name: string; iconURL(): string | null }>,
+): Promise<void> {
+  const pending = [...guilds];
+  const chunkSize = 10;
+  for (let offset = 0; offset < pending.length; offset += chunkSize) {
+    await Promise.all(pending.slice(offset, offset + chunkSize).map(syncGuild));
+  }
+  logger.info({ guilds: pending.length }, "guild metadata sync completed");
+}
+
+async function syncGuild(guild: {
+  id: string;
+  name: string;
+  iconURL(): string | null;
+}): Promise<void> {
+  await ensureGuild({
+    id: guild.id,
+    name: guild.name,
+    iconUrl: guild.iconURL(),
+  }).catch((err) =>
+    logger.warn({ err, guildId: guild.id }, "guild metadata sync failed"),
+  );
 }
 
 main().catch((err) => {
