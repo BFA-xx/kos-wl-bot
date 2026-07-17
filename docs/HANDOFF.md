@@ -69,7 +69,7 @@ Phase 3 is implemented through S2.5:
   and dark document canvas also prevent a white tail below the footer on
   mobile. All are deployed.
 - Public banner, navigation-theme, and winner-chain hardening is implemented
-  and awaiting this release deployment. Legacy internal `/r/:id/banner` URLs
+  and deployed. Legacy internal `/r/:id/banner` URLs
   are canonicalized to `https://raffle.koslabs.app`, new Discord banners use
   stable `PUBLIC_RAFFLE_ORIGIN`, public-to-dashboard client navigation carries
   the dark document state, and every winner wallet surface now enforces the
@@ -1685,7 +1685,7 @@ Recommended next task:
   dedicated ordinary test-user session, runs both authenticated specs on pull
   requests, and uploads HTML reports, traces, and image diffs on failure.
 
-### Public media, theme navigation, and winner-chain integrity — ready to ship
+### Public media, theme navigation, and winner-chain integrity — deployed
 
 - Raffle #65's banner bytes are intact in `RaffleBannerAsset`; the broken page
   was caused by `Raffle.bannerUrl` pointing at the retired
@@ -1707,7 +1707,7 @@ Recommended next task:
 - Dashboard metadata, Discord configuration copy/default branding, workbook
   metadata, and primary documentation headings now use **KOS Raffles**.
 
-Verification completed before deployment:
+Verification and production checks:
 
 - `pnpm --filter @kos/bot typecheck`
 - `pnpm --filter @kos/bot test` — 14 tests passed.
@@ -1716,9 +1716,22 @@ Verification completed before deployment:
 - `pnpm --filter @kos/dashboard test` — 18 files, 55 tests passed.
 - `pnpm --filter @kos/dashboard build`
 - `git diff --check`
+- The production-origin banner test also passes under CI's configured
+  `NEXT_PUBLIC_RAFFLE_ORIGIN=http://127.0.0.1:3001`; GitHub Actions checkout
+  and Node setup actions use their Node 24-based v5 releases.
+- EC2 deploy passed all 14 bot tests, rebuilt the bot, registered seven global
+  commands, restarted PM2, and returned scheduler-ready health in two guilds.
+- Both Vercel production deployments completed successfully for `056e7ae`.
+- Production raffle #65 now stores the canonical banner route and serves its
+  existing 5.15 MB PNG asset. Raffle #64 reconciliation found zero
+  mismatched raffle submissions, retained seven matching Robinhood wallets,
+  marked eleven missing matching wallets as Waiting, and left zero invalid
+  Collab Hub chain rows. No plaintext address was read or logged.
 
 Modified files for this task:
 
+- `.github/workflows/quality.yml`
+- `.github/workflows/visual-regression.yml`
 - `.env.example`
 - `GUIDE.md`
 - `README.md`

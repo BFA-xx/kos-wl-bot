@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PUBLIC_RAFFLE_ORIGIN,
+  PUBLIC_RAFFLE_ORIGIN,
   PUBLIC_RAFFLE_STATUSES,
   canonicalRaffleBannerUrl,
   normalizePublicRaffleOrigin,
@@ -42,7 +43,7 @@ describe("public raffle policy", () => {
         65,
         "https://retired.vercel.app/r/65/banner?v=123",
       ),
-    ).toBe(`${DEFAULT_PUBLIC_RAFFLE_ORIGIN}/r/65/banner?v=123`);
+    ).toBe(`${PUBLIC_RAFFLE_ORIGIN}/r/65/banner?v=123`);
     expect(canonicalRaffleBannerUrl(65, "https://cdn.example/banner.png")).toBe(
       "https://cdn.example/banner.png",
     );
