@@ -1,0 +1,68 @@
+name: Authenticated visual regression
+
+on:
+  pull_request:
+    paths:
+      - "apps/dashboard/**"
+      - "packages/db/prisma/**"
+      - ".github/workflows/visual-regression.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visual-regression-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  production-visuals:
+    name: Member and organization visuals
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-14
+    timeout-minutes: 20
+    environment: visual-regression
+    env:
+      CI: "true"
+      KOS_E2E_BASE_URL: https://raffle.koslabs.app
+      KOS_E2E_STORAGE_STATE: .playwright/auth-state-ci.json
+      DASHBOARD_SESSION_TOKEN: ${{ secrets.DASHBOARD_SESSION_TOKEN }}
+      KOS_E2E_USER_ID: ${{ secrets.KOS_E2E_USER_ID }}
+    defaults:
+      run:
+        working-directory: apps/dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Enable pnpm
+        run: corepack prepare pnpm@9.12.0 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: ${{ github.workspace }}
+
+      - name: Validate protected test identity
+        run: |
+          test -n "$DASHBOARD_SESSION_TOKEN"
+          test -n "$KOS_E2E_USER_ID"
+
+      - name: Install pinned Chromium
+        run: pnpm exec playwright install chromium
+
+      - name: Run authenticated desktop and mobile baselines
+        run: pnpm test:e2e -- e2e/community-experience.spec.ts e2e/member-and-collab.spec.ts
+
+      - name: Upload visual failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-${{ github.run_id }}
+          path: |
+            apps/dashboard/test-results
+            apps/dashboard/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14
