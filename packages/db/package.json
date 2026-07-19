@@ -20,6 +20,7 @@
     "studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "migrate:orgs": "tsx scripts/migrate-to-orgs.ts",
+    "test": "tsx --test src/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "prisma": {

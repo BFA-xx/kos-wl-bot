@@ -8,7 +8,8 @@ agent taking over KOS.
 KOS is a Discord-first whitelist raffle platform evolving into a reusable
 community-engagement platform. The production product is Phase 3 S2.5 plus
 the first S3/S4 slices. Phase 4 Collab Hub and its additive migration are live
-on the production dashboard and EC2 bot:
+on the production dashboard and EC2 bot. The first Campaigns slice is
+implemented locally and awaiting migration/runtime deployment:
 
 - Discord raffle creation, entry, scheduling, winner draws, rerolls, wallet
   collection, announcements, and PDF/CSV/PNG proofs.
@@ -21,14 +22,14 @@ on the production dashboard and EC2 bot:
 - Points ledger with member/org points pages, Discord/web task awarding, and a
   configurable Discord points channel.
 - Rewards store with web and Discord redemption flows.
+- Organization campaigns that combine reusable tasks and raffle participation,
+  with explicit member enrollment, progress tracking, and completion points.
 - Role-weighted raffles with participant weight snapshots and deterministic
   weighted draws.
 - Organization-scoped Collab Hub CRM with overview analytics, Kanban/table/
   calendar views, partner directory, contacts, notes/comments, reminders,
   attachments, linked raffles, wallet submission tracking, exports, and bot
   automations.
-
-Campaigns are still planned and not implemented.
 
 The actual repository is `/Users/adebayodaniel/KOS RAF`. The remote is
 `BFA-xx/kos-wl-bot`; use the current `main` and `docs/HANDOFF.md` release
@@ -188,10 +189,12 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   member/dashboard `kos-theme` preference. Keep its dark design-token boundary
   on the page root and its document/overscroll canvas dark so mixed-contrast
   cards or a white mobile tail cannot appear.
-- Rewards and points must stay Discord + web parity features where technically
-  possible. Current Discord commands are `/points`, `/tasks`, and `/rewards`;
+- Rewards, points, and campaigns must stay Discord + web parity features where
+  technically possible. Current Discord commands are `/points`, `/tasks`,
+  `/rewards`, and `/campaigns`;
   current web surfaces are `/:org/points`, `/:org/rewards`, `/me/points`,
-  `/me/raffles`, `/me/tasks` as a compatibility route, and `/me/rewards`.
+  `/:org/campaigns`, `/me/raffles`, `/me/tasks` as a compatibility route,
+  `/me/rewards`, and `/me/campaigns`.
 - Legacy social/link raffle steps are click-and-attest gates, not paid X API
   checks. They persist `SOCIAL_TASK_CLICK` / `SOCIAL_TASK_VERIFY` guild `Log`
   rows with a stable metadata `taskKey` and, when the task has a URL,

@@ -1,7 +1,4 @@
-import {
-  type GuildMember,
-  type ChatInputCommandInteraction,
-} from "discord.js";
+import { type GuildMember, type ChatInputCommandInteraction } from "discord.js";
 import {
   prisma,
   Prisma,
@@ -9,6 +6,7 @@ import {
   type TaskType,
   type CompletionStatus,
   type RewardRedemptionStatus,
+  syncCampaignsForTask,
 } from "@kos/db";
 import { KOS } from "../theme.js";
 import { upsertUser } from "./userService.js";
@@ -41,7 +39,9 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   MANUAL: "Manual review",
 };
 
-export async function orgForGuild(guildId: string): Promise<OrgForGuild | null> {
+export async function orgForGuild(
+  guildId: string,
+): Promise<OrgForGuild | null> {
   const conn = await prisma.guildConnection.findUnique({
     where: { guildId },
     include: {
@@ -75,25 +75,36 @@ export async function awardTaskPoints({
   taskTitle: string;
   points: number;
 }) {
-  if (points <= 0) return;
-  const row = await prisma.pointsLedger
-    .create({
-      data: {
+  if (points > 0) {
+    const row = await prisma.pointsLedger
+      .create({
+        data: {
+          organizationId,
+          userId,
+          delta: points,
+          reason: `Task: ${taskTitle}`,
+          sourceType: "TASK",
+          sourceId: taskId,
+        },
+      })
+      .catch(() => undefined);
+    if (row) {
+      await notifyPointsChannel({
         organizationId,
         userId,
         delta: points,
-        reason: `Task: ${taskTitle}`,
-        sourceType: "TASK",
-        sourceId: taskId,
-      },
-    })
-    .catch(() => undefined);
-  if (row) {
+        reason: `completed ${taskTitle}`,
+      });
+    }
+  }
+  const campaigns = await syncCampaignsForTask(prisma, taskId, userId);
+  for (const campaign of campaigns) {
+    if (!campaign.awardedPoints) continue;
     await notifyPointsChannel({
-      organizationId,
+      organizationId: campaign.organizationId,
       userId,
-      delta: points,
-      reason: `completed ${taskTitle}`,
+      delta: campaign.awardedPoints,
+      reason: `completed campaign ${campaign.title}`,
     });
   }
 }
@@ -101,7 +112,9 @@ export async function awardTaskPoints({
 export function taskActionUrl(type: TaskType, cfg: TaskConfig): string | null {
   switch (type) {
     case "X_FOLLOW":
-      return cfg.xHandle ? `https://x.com/${cfg.xHandle.replace(/^@/, "")}` : null;
+      return cfg.xHandle
+        ? `https://x.com/${cfg.xHandle.replace(/^@/, "")}`
+        : null;
     case "X_LIKE":
     case "X_REPOST":
     case "X_COMMENT":
@@ -190,7 +203,8 @@ async function evaluateTask(
   evidence?: Record<string, unknown>;
 }> {
   const cfg = (task.config ?? {}) as TaskConfig;
-  if (!task.active) return { status: "REJECTED", reason: "This task is disabled." };
+  if (!task.active)
+    return { status: "REJECTED", reason: "This task is disabled." };
   if (task.expiresAt && task.expiresAt < new Date()) {
     return { status: "REJECTED", reason: "This task has expired." };
   }
@@ -202,7 +216,11 @@ async function evaluateTask(
         reason: `Use this command inside the required Discord server.`,
       };
     }
-    if (task.type === "DISCORD_ROLE" && cfg.roleId && !member.roles.cache.has(cfg.roleId)) {
+    if (
+      task.type === "DISCORD_ROLE" &&
+      cfg.roleId &&
+      !member.roles.cache.has(cfg.roleId)
+    ) {
       return {
         status: "PENDING",
         reason: `You do not have the ${cfg.roleName ?? "required"} role yet.`,
@@ -275,7 +293,13 @@ export async function redeemReward({
   rewardId: string;
   member: GuildMember;
 }): Promise<
-  | { ok: true; redemptionId: string; title: string; cost: number; organizationId: string }
+  | {
+      ok: true;
+      redemptionId: string;
+      title: string;
+      cost: number;
+      organizationId: string;
+    }
   | { ok: false; error: string }
 > {
   await upsertUser({
@@ -287,8 +311,10 @@ export async function redeemReward({
 
   const result = await prisma.$transaction(async (tx) => {
     const reward = await tx.reward.findUnique({ where: { id: rewardId } });
-    if (!reward || !reward.active) return { ok: false as const, error: "Reward is not available." };
-    if (reward.stock !== null && reward.stock <= 0) return { ok: false as const, error: "Reward is out of stock." };
+    if (!reward || !reward.active)
+      return { ok: false as const, error: "Reward is not available." };
+    if (reward.stock !== null && reward.stock <= 0)
+      return { ok: false as const, error: "Reward is out of stock." };
 
     const balance = await tx.pointsLedger.aggregate({
       where: { organizationId: reward.organizationId, userId: member.id },
@@ -296,7 +322,10 @@ export async function redeemReward({
     });
     const points = balance._sum.delta ?? 0;
     if (points < reward.cost) {
-      return { ok: false as const, error: `You need ${reward.cost - points} more points.` };
+      return {
+        ok: false as const,
+        error: `You need ${reward.cost - points} more points.`,
+      };
     }
 
     if (reward.stock !== null) {
@@ -304,7 +333,8 @@ export async function redeemReward({
         where: { id: reward.id, stock: { gt: 0 } },
         data: { stock: { decrement: 1 } },
       });
-      if (claimed.count === 0) return { ok: false as const, error: "Reward is out of stock." };
+      if (claimed.count === 0)
+        return { ok: false as const, error: "Reward is out of stock." };
     }
 
     const redemption = await tx.rewardRedemption.create({
@@ -358,15 +388,21 @@ export async function updateRedemptionStatus({
   status: RewardRedemptionStatus;
 }) {
   const org = await orgForGuild(guildId);
-  if (!org) return { ok: false as const, error: "This server is not connected to an organization." };
+  if (!org)
+    return {
+      ok: false as const,
+      error: "This server is not connected to an organization.",
+    };
 
   return prisma.$transaction(async (tx) => {
     const redemption = await tx.rewardRedemption.findFirst({
       where: { id: redemptionId, organizationId: org.id },
       include: { reward: true },
     });
-    if (!redemption) return { ok: false as const, error: "Redemption not found." };
-    if (redemption.status !== "PENDING") return { ok: false as const, error: "Redemption is already closed." };
+    if (!redemption)
+      return { ok: false as const, error: "Redemption not found." };
+    if (redemption.status !== "PENDING")
+      return { ok: false as const, error: "Redemption is already closed." };
 
     if (status === "CANCELLED" || status === "REJECTED") {
       await tx.pointsLedger.create({
@@ -431,7 +467,9 @@ export async function notifyPointsChannel({
   });
   const sign = delta > 0 ? "+" : "";
   const display = user?.globalName ?? user?.username ?? userId;
-  const channel = await globalThis.kosClient?.channels.fetch(channelId).catch(() => null);
+  const channel = await globalThis.kosClient?.channels
+    .fetch(channelId)
+    .catch(() => null);
   if (!channel || !channel.isTextBased() || channel.isDMBased()) return;
   await channel
     .send({

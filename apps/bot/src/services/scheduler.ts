@@ -1,5 +1,11 @@
 import { type Client } from "discord.js";
-import { prisma, Prisma, LogCategory, RaffleStatus } from "@kos/db";
+import {
+  prisma,
+  Prisma,
+  CampaignStatus,
+  LogCategory,
+  RaffleStatus,
+} from "@kos/db";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
 import {
@@ -105,6 +111,7 @@ export class Scheduler {
       await this.publishDashboardRaffles();
       await this.processRerollRequests();
       await this.processEditRequests();
+      await this.processCampaignLifecycle(now);
 
       // Open upcoming raffles whose start time has arrived.
       const toOpen = await prisma.raffle.findMany({
@@ -162,6 +169,69 @@ export class Scheduler {
       { operation, count, batchSize: config.SCHEDULER_BATCH_SIZE },
       "scheduler batch reached its limit; remaining work continues next tick",
     );
+  }
+
+  /** Open and close dashboard-owned campaigns from their persisted schedule. */
+  private async processCampaignLifecycle(now: Date): Promise<void> {
+    const toOpen = await prisma.campaign.findMany({
+      where: { status: CampaignStatus.SCHEDULED, startAt: { lte: now } },
+      orderBy: [{ startAt: "asc" }, { id: "asc" }],
+      take: config.SCHEDULER_BATCH_SIZE,
+      select: { id: true, organizationId: true },
+    });
+    this.warnIfBatchIsFull("campaigns waiting to open", toOpen.length);
+    if (toOpen.length > 0) {
+      await prisma.campaign.updateMany({
+        where: {
+          id: { in: toOpen.map((campaign) => campaign.id) },
+          status: CampaignStatus.SCHEDULED,
+        },
+        data: { status: CampaignStatus.LIVE },
+      });
+      await prisma.auditLog
+        .createMany({
+          data: toOpen.map((campaign) => ({
+            organizationId: campaign.organizationId,
+            actorId: null,
+            action: "CAMPAIGN_OPEN",
+            targetType: "campaign",
+            targetId: campaign.id,
+          })),
+        })
+        .catch((err) =>
+          logger.warn({ err }, "campaign open audit write failed"),
+        );
+    }
+
+    const toEnd = await prisma.campaign.findMany({
+      where: { status: CampaignStatus.LIVE, endAt: { lte: now } },
+      orderBy: [{ endAt: "asc" }, { id: "asc" }],
+      take: config.SCHEDULER_BATCH_SIZE,
+      select: { id: true, organizationId: true },
+    });
+    this.warnIfBatchIsFull("campaigns waiting to end", toEnd.length);
+    if (toEnd.length > 0) {
+      await prisma.campaign.updateMany({
+        where: {
+          id: { in: toEnd.map((campaign) => campaign.id) },
+          status: CampaignStatus.LIVE,
+        },
+        data: { status: CampaignStatus.ENDED },
+      });
+      await prisma.auditLog
+        .createMany({
+          data: toEnd.map((campaign) => ({
+            organizationId: campaign.organizationId,
+            actorId: null,
+            action: "CAMPAIGN_END_AUTO",
+            targetType: "campaign",
+            targetId: campaign.id,
+          })),
+        })
+        .catch((err) =>
+          logger.warn({ err }, "campaign end audit write failed"),
+        );
+    }
   }
 
   /** Remove dashboard-deleted raffle posts, proof files, and DB records. */

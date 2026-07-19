@@ -111,6 +111,21 @@ When a member wins, the bot uses their **registered wallet automatically** — i
 appears in the winner CSV and proof package, and the winner is only DM'd a form
 if they have no wallet on file. Addresses are encrypted at rest.
 
+## `/campaigns` (everyone)
+
+Campaigns combine existing KOS tasks and raffle participation into one
+time-bounded community journey. Responses are private.
+
+| Sub        | Options               | Description                                      |
+| ---------- | --------------------- | ------------------------------------------------ |
+| `list`     | —                     | List live and scheduled campaigns in the server. |
+| `join`     | `campaign` (required) | Join a live campaign.                            |
+| `progress` | `campaign` (required) | Check required steps and completion status.      |
+
+Task verification and raffle entry update campaign progress automatically.
+Completing every required step during the live window awards the configured
+campaign points once.
+
 ## Member buttons
 
 - **Enter Raffle** — verifies eligibility + blacklist, prevents duplicates.

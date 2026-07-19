@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@kos/db": "workspace:*",
     "@prisma/client": "^5.22.0",
     "@vercel/blob": "^2.5.0",
     "exceljs": "^4.4.0",

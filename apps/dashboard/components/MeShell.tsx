@@ -12,6 +12,7 @@ import {
   IconDoc,
   IconGrid,
   IconLogout,
+  IconMegaphone,
   IconMenu,
   IconTicket,
   IconUsers,
@@ -28,6 +29,7 @@ const NAV: {
 }[] = [
   { href: "/me", label: "Profile", exact: true, Icon: IconGrid },
   { href: "/me/raffles", label: "Raffles", Icon: IconTicket },
+  { href: "/me/campaigns", label: "Campaigns", Icon: IconMegaphone },
   { href: "/me/points", label: "Points", Icon: IconChart },
   { href: "/me/rewards", label: "Rewards", Icon: IconCard },
   { href: "/me/wallets", label: "Wallets", Icon: IconWallet },
@@ -201,7 +203,11 @@ export function MeShell({
                 user.name.slice(0, 2).toUpperCase()
               )}
             </div>
-            <form action="/api/auth/logout" method="post" className="hidden sm:block">
+            <form
+              action="/api/auth/logout"
+              method="post"
+              className="hidden sm:block"
+            >
               <button
                 className="rounded-lg p-1.5 text-kos-muted hover:text-kos-fg"
                 aria-label="Sign out"

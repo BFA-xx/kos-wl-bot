@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { syncCampaignsForTask } from "@kos/db";
 import { Prisma, type RewardRedemptionStatus } from "@prisma/client";
 
 type Tx = Prisma.TransactionClient;
@@ -17,26 +18,37 @@ export async function awardTaskPoints({
   taskTitle: string;
   points: number;
 }) {
-  if (points <= 0) return;
-  const row = await prisma.pointsLedger
-    .create({
-      data: {
+  if (points > 0) {
+    const row = await prisma.pointsLedger
+      .create({
+        data: {
+          organizationId,
+          userId,
+          delta: points,
+          reason: `Task: ${taskTitle}`,
+          sourceType: "TASK",
+          sourceId: taskId,
+        },
+      })
+      // Unique source = already awarded.
+      .catch(() => undefined);
+    if (row) {
+      await notifyPointsChannel({
         organizationId,
         userId,
         delta: points,
-        reason: `Task: ${taskTitle}`,
-        sourceType: "TASK",
-        sourceId: taskId,
-      },
-    })
-    // Unique source = already awarded.
-    .catch(() => undefined);
-  if (row) {
+        reason: `completed ${taskTitle}`,
+      });
+    }
+  }
+  const campaigns = await syncCampaignsForTask(prisma, taskId, userId);
+  for (const campaign of campaigns) {
+    if (!campaign.awardedPoints) continue;
     await notifyPointsChannel({
-      organizationId,
+      organizationId: campaign.organizationId,
       userId,
-      delta: points,
-      reason: `completed ${taskTitle}`,
+      delta: campaign.awardedPoints,
+      reason: `completed campaign ${campaign.title}`,
     });
   }
 }
@@ -60,19 +72,37 @@ export async function redeemReward({
   rewardId: string;
   userId: string;
 }): Promise<
-  | { ok: true; redemptionId: string; cost: number; title: string; organizationId: string }
+  | {
+      ok: true;
+      redemptionId: string;
+      cost: number;
+      title: string;
+      organizationId: string;
+    }
   | { ok: false; error: string; status?: number }
 > {
   const result = await prisma.$transaction(async (tx) => {
     const reward = await tx.reward.findUnique({ where: { id: rewardId } });
     if (!reward || !reward.active) {
-      return { ok: false as const, error: "Reward is not available.", status: 404 };
+      return {
+        ok: false as const,
+        error: "Reward is not available.",
+        status: 404,
+      };
     }
     if (reward.cost <= 0) {
-      return { ok: false as const, error: "Reward is misconfigured.", status: 400 };
+      return {
+        ok: false as const,
+        error: "Reward is misconfigured.",
+        status: 400,
+      };
     }
     if (reward.stock !== null && reward.stock <= 0) {
-      return { ok: false as const, error: "This reward is out of stock.", status: 409 };
+      return {
+        ok: false as const,
+        error: "This reward is out of stock.",
+        status: 409,
+      };
     }
 
     const balance = await pointsBalance(reward.organizationId, userId, tx);
@@ -90,7 +120,11 @@ export async function redeemReward({
         data: { stock: { decrement: 1 } },
       });
       if (claimed.count === 0) {
-        return { ok: false as const, error: "This reward is out of stock.", status: 409 };
+        return {
+          ok: false as const,
+          error: "This reward is out of stock.",
+          status: 409,
+        };
       }
     }
 
@@ -152,9 +186,18 @@ export async function updateRedemptionStatus({
       where: { id: redemptionId, organizationId },
       include: { reward: true },
     });
-    if (!redemption) return { ok: false as const, error: "Redemption not found.", status: 404 };
+    if (!redemption)
+      return {
+        ok: false as const,
+        error: "Redemption not found.",
+        status: 404,
+      };
     if (redemption.status !== "PENDING") {
-      return { ok: false as const, error: "Only pending redemptions can be updated.", status: 409 };
+      return {
+        ok: false as const,
+        error: "Only pending redemptions can be updated.",
+        status: 409,
+      };
     }
 
     const refund = status === "CANCELLED" || status === "REJECTED";

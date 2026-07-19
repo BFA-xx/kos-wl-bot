@@ -116,6 +116,7 @@ model User {
   rewardRedemptions    RewardRedemption[]
   notifications        Notification[]
   collaborationWallets CollaborationWallet[]
+  campaignEnrollments  CampaignEnrollment[]
 
   /// Last time the user opened their notification feed (announcement unread
   /// counts are computed against this instead of materializing rows).
@@ -220,6 +221,7 @@ model Raffle {
   bannerAsset       RaffleBannerAsset?
   logs              Log[]
   RaffleTask        RaffleTask[]
+  campaignRaffles   CampaignRaffle[]
   collaborationLink CollaborationRaffle?
 
   @@index([guildId, status])
@@ -509,6 +511,7 @@ model Organization {
   roleWeights               RoleWeight[]
   rewards                   Reward[]
   rewardRedemptions         RewardRedemption[]
+  campaigns                 Campaign[]
   collaborations            Collaboration[]
   collaborationPartners     CollaborationPartner[]
   collaborationTags         CollaborationTag[]
@@ -1000,6 +1003,19 @@ enum RewardRedemptionStatus {
   REJECTED
 }
 
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+enum CampaignEnrollmentStatus {
+  JOINED
+  COMPLETED
+}
+
 /// A reusable task built by an organization. Referenced by raffles now and
 /// campaigns in S3 — build once, attach anywhere.
 model TaskDefinition {
@@ -1019,9 +1035,10 @@ model TaskDefinition {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  completions  TaskCompletion[]
-  raffleTasks  RaffleTask[]
+  organization  Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  completions   TaskCompletion[]
+  raffleTasks   RaffleTask[]
+  campaignTasks CampaignTask[]
 
   @@index([organizationId, active])
   @@map("task_definitions")
@@ -1117,6 +1134,87 @@ model RewardRedemption {
   @@index([rewardId, status])
   @@index([userId, createdAt])
   @@map("reward_redemptions")
+}
+
+/// A time-bounded organization quest that groups reusable tasks and raffles.
+/// Members explicitly join, then complete required linked steps for a one-time
+/// points bonus backed by the shared append-only PointsLedger.
+model Campaign {
+  id               String         @id @default(cuid())
+  organizationId   String
+  title            String
+  description      String?
+  status           CampaignStatus @default(DRAFT)
+  startAt          DateTime?
+  endAt            DateTime?
+  completionPoints Int            @default(0)
+  createdById      String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tasks        CampaignTask[]
+  raffles      CampaignRaffle[]
+  enrollments  CampaignEnrollment[]
+
+  @@index([organizationId, status])
+  @@index([status, startAt])
+  @@index([status, endAt])
+  @@map("campaigns")
+}
+
+/// Reusable Task Engine step attached to a campaign.
+model CampaignTask {
+  id         String  @id @default(cuid())
+  campaignId String
+  taskId     String
+  required   Boolean @default(true)
+  position   Int     @default(0)
+
+  campaign Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  task     TaskDefinition @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, taskId])
+  @@index([campaignId, position])
+  @@index([taskId])
+  @@map("campaign_tasks")
+}
+
+/// Existing raffle participation step attached to a campaign. The raffle
+/// remains the source of truth for entry and results.
+model CampaignRaffle {
+  id         String  @id @default(cuid())
+  campaignId String
+  raffleId   Int
+  required   Boolean @default(true)
+  position   Int     @default(0)
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  raffle   Raffle   @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, raffleId])
+  @@index([campaignId, position])
+  @@index([raffleId])
+  @@map("campaign_raffles")
+}
+
+/// One member's participation and completion state for one campaign.
+model CampaignEnrollment {
+  id          String                   @id @default(cuid())
+  campaignId  String
+  userId      String
+  status      CampaignEnrollmentStatus @default(JOINED)
+  joinedAt    DateTime                 @default(now())
+  completedAt DateTime?
+  updatedAt   DateTime                 @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([userId, updatedAt])
+  @@index([campaignId, status])
+  @@map("campaign_enrollments")
 }
 
 /// Attach a task to a raffle. Required tasks gate entry.

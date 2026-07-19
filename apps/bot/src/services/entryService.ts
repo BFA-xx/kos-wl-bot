@@ -4,6 +4,7 @@ import {
   LogCategory,
   RaffleStatus,
   type WalletChain,
+  syncCampaignsForRaffle,
 } from "@kos/db";
 import { createHash } from "node:crypto";
 import {
@@ -15,6 +16,7 @@ import { audit } from "./auditService.js";
 import { logger } from "../logger.js";
 import {
   awardTaskPoints,
+  notifyPointsChannel,
   taskActionUrl,
   type TaskConfig,
 } from "./pointsService.js";
@@ -110,20 +112,22 @@ export async function enterRaffle(
     const weight = await entryWeightForMember(raffle, member);
     const entryCount = await prisma.$transaction(async (tx) => {
       const inserted = await tx.participant.createMany({
-        data: [{
-          raffleId,
-          userId: member.id,
-          username: member.user.username,
-          accountCreatedAt: new Date(member.user.createdTimestamp),
-          joinedGuildAt: member.joinedTimestamp
-            ? new Date(member.joinedTimestamp)
-            : null,
-          flagged: eligibility.flags.length > 0,
-          flagReason: eligibility.flags.length
-            ? eligibility.flags.join(", ")
-            : null,
-          weight,
-        }],
+        data: [
+          {
+            raffleId,
+            userId: member.id,
+            username: member.user.username,
+            accountCreatedAt: new Date(member.user.createdTimestamp),
+            joinedGuildAt: member.joinedTimestamp
+              ? new Date(member.joinedTimestamp)
+              : null,
+            flagged: eligibility.flags.length > 0,
+            flagReason: eligibility.flags.length
+              ? eligibility.flags.join(", ")
+              : null,
+            weight,
+          },
+        ],
         skipDuplicates: true,
       });
       if (inserted.count === 0) return null;
@@ -147,6 +151,17 @@ export async function enterRaffle(
         ? { flags: eligibility.flags }
         : undefined,
     });
+
+    const campaigns = await syncCampaignsForRaffle(prisma, raffleId, member.id);
+    for (const campaign of campaigns) {
+      if (!campaign.awardedPoints) continue;
+      await notifyPointsChannel({
+        organizationId: campaign.organizationId,
+        userId: member.id,
+        delta: campaign.awardedPoints,
+        reason: `completed campaign ${campaign.title}`,
+      });
+    }
 
     // Which of the raffle's wallet chains does this user still need to register?
     let missingWalletChains: WalletChain[] = [];
@@ -400,7 +415,10 @@ export async function verifyLegacyRaffleTaskForMember({
       actorId: member.id,
       action: "SOCIAL_TASK_VERIFY",
       OR: [
-        { raffleId: raffle.id, metadata: { path: ["taskKey"], equals: task.key } },
+        {
+          raffleId: raffle.id,
+          metadata: { path: ["taskKey"], equals: task.key },
+        },
         ...(task.sharedKey
           ? [{ metadata: { path: ["sharedTaskKey"], equals: task.sharedKey } }]
           : []),
@@ -429,7 +447,10 @@ export async function verifyLegacyRaffleTaskForMember({
   return { ok: true, label: task.label };
 }
 
-export function legacySocialTasks(raffleId: number, requirements: unknown): MissingLegacyTask[] {
+export function legacySocialTasks(
+  raffleId: number,
+  requirements: unknown,
+): MissingLegacyTask[] {
   const tasks = parseRequirements(requirements).tasks ?? [];
   return tasks.flatMap((task, index) => {
     if (!task.label.trim()) return [];

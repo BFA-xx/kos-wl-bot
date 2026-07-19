@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
 import type { Raffle, RaffleRole, User } from "@prisma/client";
+import { syncCampaignsForRaffle } from "@kos/db";
+import { notifyPointsChannel } from "@/lib/points";
 import {
   getLegacyRaffleTasks,
   LEGACY_TASK_VERIFY,
@@ -275,7 +277,9 @@ export async function evaluateWebGates(
       }),
     );
     for (const task of legacyTasks) {
-      const ok = done.has(task.key) || Boolean(task.sharedKey && done.has(task.sharedKey));
+      const ok =
+        done.has(task.key) ||
+        Boolean(task.sharedKey && done.has(task.sharedKey));
       gates.push({
         key: `legacy-task-${task.key}`,
         label: task.label,
@@ -302,14 +306,16 @@ export async function recordWebEntry(
   const weight = await entryWeightForRoles(raffle, member.roles);
   const entryCount = await prisma.$transaction(async (tx) => {
     const inserted = await tx.participant.createMany({
-      data: [{
-        raffleId: raffle.id,
-        userId: user.id,
-        username: user.username,
-        accountCreatedAt: snowflakeDate(user.id),
-        joinedGuildAt: member.joined_at ? new Date(member.joined_at) : null,
-        weight,
-      }],
+      data: [
+        {
+          raffleId: raffle.id,
+          userId: user.id,
+          username: user.username,
+          accountCreatedAt: snowflakeDate(user.id),
+          joinedGuildAt: member.joined_at ? new Date(member.joined_at) : null,
+          weight,
+        },
+      ],
       skipDuplicates: true,
     });
     if (inserted.count === 0) return null;
@@ -335,6 +341,17 @@ export async function recordWebEntry(
       },
     })
     .catch(() => undefined);
+
+  const campaigns = await syncCampaignsForRaffle(prisma, raffle.id, user.id);
+  for (const campaign of campaigns) {
+    if (!campaign.awardedPoints) continue;
+    await notifyPointsChannel({
+      organizationId: campaign.organizationId,
+      userId: user.id,
+      delta: campaign.awardedPoints,
+      reason: `completed campaign ${campaign.title}`,
+    });
+  }
 
   return entryCount;
 }

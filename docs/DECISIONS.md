@@ -129,8 +129,9 @@ gateway and scheduler require an always-on process.
 role-weighted draws each use additive migrations and independently verified
 deploys. Applied migrations are never rewritten.
 **Why:** Small production releases reduce migration and rollback risk. S1, S2,
-the S2.5 parity follow-up, the first S3 points/rewards slice, and the first S4
-weighted-draw slice are complete; campaigns remain future work.
+the S2.5 parity follow-up, the first S3 points/rewards and campaigns slices,
+and the first S4 weighted-draw slice are complete in the application. Campaigns
+still require production migration and runtime deployment.
 
 ## D015 — Billing remains scaffolded but hidden
 
@@ -561,3 +562,18 @@ the numeric `/r/:id/banner` route.
 while recurring project names and renamed communities must never collide or
 break historical links. The trailing ID preserves stable resolution without a
 schema migration; canonical redirects keep the visible URL current.
+
+## D050 — Campaigns compose existing task, raffle, and points primitives
+
+**Status:** Accepted; implemented locally, not yet deployed
+**Decision:** Model a campaign as an organization-owned lifecycle record with
+ordered links to existing `TaskDefinition` and `Raffle` records plus one unique
+member enrollment. Members explicitly join. Completion is derived from verified
+task completions and raffle participation, then persisted once on the
+enrollment and optionally awarded once through `PointsLedger` source type
+`CAMPAIGN_COMPLETE`. Ship manager and member web surfaces together with the
+Discord `/campaigns` command, and let the existing bot scheduler own timed
+status transitions.
+**Why:** Task verification, raffle entry, scheduling, and points already have
+audited sources of truth. Composing them avoids parallel campaign-only evidence
+or balance systems and preserves Discord/web parity and idempotency.

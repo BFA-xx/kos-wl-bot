@@ -29,3 +29,4 @@ export default prisma;
 // Re-export the generated types and enums so consumers depend only on @kos/db.
 export * from "@prisma/client";
 export { Prisma } from "@prisma/client";
+export * from "./campaigns.js";

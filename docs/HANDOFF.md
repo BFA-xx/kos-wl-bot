@@ -1,6 +1,6 @@
 # Engineering Handoff
 
-Last updated: 2026-07-17
+Last updated: 2026-07-19
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
 Audited application commit: `75fb56e`
@@ -23,6 +23,8 @@ Phase 3 is implemented through S2.5:
 - S3 rewards/points-channel slice is committed, pushed, migrated, and deployed:
   configurable Discord points channels, web reward store/management, and
   Discord commands for points, tasks, and rewards.
+- The first S3 Campaigns slice is implemented and verified in the local working
+  tree. It is not committed, migrated, command-registered, or deployed yet.
 - Anonymous raffle sharing and configuration-only duplication are committed,
   pushed, and deployed on the production dashboard.
 - Member-aware community discovery and optional community X branding are
@@ -89,6 +91,75 @@ Phase 3 is implemented through S2.5:
   outcomes are atomically claimed, onboarding has `/config diagnose`, and the
   deploy script now fails unless tests, build, registration, PM2, and a real
   scheduler tick succeed.
+
+## Campaigns first slice — 2026-07-19
+
+### Delivered locally
+
+- Added additive Campaign models and migration
+  `20260719100000_campaigns`: organization-owned campaign lifecycle, ordered
+  reusable task/raffle steps, and unique member enrollments.
+- Replaced the organization Campaigns placeholder with a manager workspace for
+  draft creation, editing, publishing, scheduling, ending, cancelling, and
+  deletion. New `campaign:view`, `campaign:create`, and `campaign:edit`
+  permissions are enforced server-side and surfaced in built-in roles.
+- Added `/me/campaigns` for discovery, joining, task verification, raffle
+  navigation, progress refresh, and completion state.
+- Added Discord `/campaigns list|join|progress` with shared database semantics.
+  Production registration will contain eight commands after deployment.
+- Task verification and raffle entry now synchronize enrolled live campaigns
+  on both web and Discord. Completion transitions once and awards the optional
+  points bonus through the append-only ledger's unique
+  `CAMPAIGN_COMPLETE` source.
+- Extended the single-process scheduler with bounded scheduled-to-live and
+  live-to-ended campaign transitions.
+
+### Verification
+
+- Prisma schema validation passed.
+- `corepack pnpm typecheck` passed for DB, bot, and dashboard.
+- `corepack pnpm test` passed: 3 DB campaign tests, 15 bot tests, and 56
+  dashboard tests.
+- The full root production build passed for the DB package, bot, and Next.js
+  dashboard. Final formatting/diff checks also passed.
+
+### Modified files
+
+- `packages/db/prisma/schema.prisma`
+- `packages/db/prisma/migrations/20260719100000_campaigns/migration.sql`
+- `packages/db/src/campaigns.ts`, `campaigns.test.ts`, and `index.ts`
+- `apps/dashboard/app/[org]/campaigns/page.tsx`
+- `apps/dashboard/app/api/[org]/campaigns/*`
+- `apps/dashboard/app/me/campaigns/page.tsx`
+- `apps/dashboard/app/api/me/campaigns/*`
+- dashboard member/org navigation, permissions, task points, and raffle entry
+- `apps/bot/src/commands/campaigns.ts` and command registration
+- bot task points, raffle entry, and scheduler services
+- package manifests/lockfile and campaign-facing documentation
+
+### Assumptions and boundaries
+
+- Every step chosen in the first manager UI is required. The data model keeps
+  the required flag so optional-step controls can be added later.
+- Existing `TaskCompletion` and `Participant` rows are authoritative. Campaigns
+  do not duplicate evidence, raffle entry, rewards, or balances.
+- Members must explicitly join while a campaign is live. Already-completed
+  linked tasks/entries count immediately after joining. Web enrollment confirms
+  membership in at least one of the organization's connected Discord guilds.
+- A suspended organization cannot complete enrollments or award campaign
+  bonuses even if a stale campaign status remains live.
+- Completion is durable after it is earned; later raffle withdrawal does not
+  revoke the enrollment or points ledger award.
+- Campaign-specific reward fulfillment, leaderboards, teams, streaks, and
+  referrals are outside this first slice.
+
+### Deployment boundary and next task
+
+Do not expose this code against the old production schema. With explicit
+authorization, deploy migration first, then both dashboard projects, then build
+and restart the EC2 bot and register the eight global slash commands. Smoke-test
+one draft, one live join, one task/raffle completion, one points award, and one
+scheduled lifecycle transition before declaring Campaigns live.
 
 ## Wider rollout and protected CI — 2026-07-17
 

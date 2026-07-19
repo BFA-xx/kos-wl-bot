@@ -16,6 +16,7 @@ You can save your wallets so you never have to paste them again when you win.
 - **Or use the command:** `/wallet set` → pick a chain → paste your address.
 
 Other commands:
+
 - `/wallet view` — see what you've saved (only you can see it).
 - `/wallet remove` — delete a saved wallet.
 
@@ -28,9 +29,9 @@ asked to paste it again.
 1. Open the raffle post.
 2. Click **Enter Raffle**.
 3. You'll get one of:
-   - ✅ *Successfully entered the raffle.*
-   - *You are already participating.*
-   - ⛔ *You do not meet the requirements* (it lists what you're missing).
+   - ✅ _Successfully entered the raffle._
+   - _You are already participating._
+   - ⛔ _You do not meet the requirements_ (it lists what you're missing).
 
 Click **Leave** any time before it ends to withdraw.
 
@@ -38,6 +39,17 @@ Click **Leave** any time before it ends to withdraw.
 
 The bot announces winners and pings you. If you already registered a wallet,
 you're done. If not, you'll get a DM with a **Submit Wallet** button.
+
+### Join a campaign
+
+Campaigns group community tasks and raffle entries into one progress track.
+
+- On Discord, use `/campaigns list`, `/campaigns join`, and
+  `/campaigns progress`.
+- On the website, open **Campaigns** in your member area.
+- Complete each required task or raffle step through its normal KOS flow.
+- When all required steps are complete while the campaign is live, KOS marks
+  the campaign complete and awards its completion points once.
 
 ---
 
@@ -75,24 +87,31 @@ The bot posts a live embed (with countdown + Enter/Leave), opens and closes on
 schedule automatically, draws winners, announces them, and delivers a **proof
 package** (PDF + winner CSV + winner card) to your proof channel.
 
+### Run a campaign
+
+Open **Campaigns** in the organization dashboard. Create a draft, choose the
+existing tasks and raffles members must complete, set the dates and completion
+points, then publish. Future-dated campaigns schedule automatically; live
+campaigns can be ended or cancelled from the same workspace.
+
 ### Manage raffles
 
-| Need | Command |
-| --- | --- |
-| Edit a raffle | `/raffle edit id:<#>` |
-| End early & draw now | `/raffle end id:<#>` |
-| Reroll winners | `/raffle reroll id:<#> mode:single\|multiple\|all` |
-| List raffles | `/raffle list` |
-| Stats | `/raffle stats` |
-| Export entrants/winners | `/raffle export id:<#>` |
-| Delete | `/raffle delete id:<#>` |
+| Need                    | Command                                            |
+| ----------------------- | -------------------------------------------------- |
+| Edit a raffle           | `/raffle edit id:<#>`                              |
+| End early & draw now    | `/raffle end id:<#>`                               |
+| Reroll winners          | `/raffle reroll id:<#> mode:single\|multiple\|all` |
+| List raffles            | `/raffle list`                                     |
+| Stats                   | `/raffle stats`                                    |
+| Export entrants/winners | `/raffle export id:<#>`                            |
+| Delete                  | `/raffle delete id:<#>`                            |
 
 ### Get members' wallets
 
 - **Automatic:** when a raffle ends, each winner's registered wallet is included
   in the winner CSV + proof package sent to your proof channel.
 - **Whole registry:** `/wallet export` (CSV of every member's saved wallets).
-- **Dashboard:** the **Wallets** page → *Download CSV*.
+- **Dashboard:** the **Wallets** page → _Download CSV_.
 
 ### Anti-farming
 
@@ -110,6 +129,7 @@ their wallets. Pin it in an onboarding or #wallets channel.
 ## The dashboard
 
 At your dashboard URL (default `http://localhost:3001` in dev):
+
 - **Overview** — live raffles + stats (auto-refreshing).
 - **Raffles** — every raffle; open one to view winners, export CSV, end, or reroll.
 - **Wallets** — registry stats + CSV download.

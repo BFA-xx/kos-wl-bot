@@ -63,12 +63,13 @@ export function OrgSidebarContent({
       <OrgSwitcher onNavigate={onNavigate} collapsed={collapsed} />
 
       <nav className="mt-6 flex flex-1 flex-col gap-1 overflow-y-auto">
-        {NAV.filter(
-          (item) =>
-            item.seg !== "collabs" ||
-            org.isOwner ||
-            org.permissions.includes("collab:view"),
-        ).map(({ seg, label, Icon, soon }) => {
+        {NAV.filter((item) => {
+          if (item.seg === "collabs")
+            return org.isOwner || org.permissions.includes("collab:view");
+          if (item.seg === "campaigns")
+            return org.isOwner || org.permissions.includes("campaign:view");
+          return true;
+        }).map(({ seg, label, Icon, soon }) => {
           const active = isActive(seg);
           const cls = `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
             active

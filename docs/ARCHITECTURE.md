@@ -1,6 +1,6 @@
 # KOS Architecture
 
-Last verified against `main` on 2026-07-07.
+Last verified against the local `main` working tree on 2026-07-19.
 
 ## Product
 
@@ -10,8 +10,9 @@ Discord and web raffle participation, reusable verification tasks, linked X
 accounts, points, rewards, role-weighted draws, wallet collection, verifiable
 draws, proof artifacts, and platform administration.
 
-Phase 3 is delivered through S2.5 plus the first S3/S4 slices. Campaigns remain
-planned but are not implemented.
+Phase 3 is delivered through S2.5 plus the first S3/S4 slices. The first
+Campaigns slice is implemented locally and awaits production migration and
+runtime deployment.
 
 ## Runtime topology
 
@@ -117,8 +118,15 @@ same-page return when no session exists.
 - `RoleWeight`: organization role multipliers for weighted raffles.
 - `Reward`: organization reward catalog item.
 - `RewardRedemption`: member reward claim.
+- `Campaign`: organization quest with draft/scheduled/live/ended/cancelled
+  lifecycle, dates, and a one-time completion points bonus.
+- `CampaignTask`, `CampaignRaffle`: ordered links to existing task and raffle
+  primitives. The linked records remain the source of truth for verification
+  and entry.
+- `CampaignEnrollment`: one member's joined/completed state for a campaign.
 
-There are no campaign/redemption-campaign models yet.
+Campaign completion writes an idempotent `PointsLedger` row with source type
+`CAMPAIGN_COMPLETE`; it does not create a second task, raffle, or reward record.
 
 ### Member community discovery
 
@@ -129,6 +137,26 @@ their matching communities and the full non-suspended directory. Discord guild
 icons are used when an organization has not uploaded a dedicated logo. A
 failed membership lookup produces an explicit reconnect state, not an empty
 membership claim.
+
+## Campaign lifecycle and data flow
+
+1. An authorized organization member creates a draft in `/:org/campaigns`,
+   choosing organization tasks and connected-guild raffles.
+2. Publishing changes it to `SCHEDULED` when its start is in the future or
+   `LIVE` otherwise. The bot scheduler opens and ends campaigns by their dates.
+3. A Discord community member joins from `/me/campaigns` or `/campaigns join`;
+   web enrollment confirms membership in a connected guild before creating one
+   unique `CampaignEnrollment`.
+4. Task verification and raffle entry keep their existing records and trigger
+   a campaign progress sync in both web and Discord flows.
+5. When every required step is complete during the live window, the enrollment
+   transitions once to `COMPLETED` and the optional points bonus is appended
+   once to the shared ledger.
+
+The first slice treats every step selected in the manager UI as required. The
+schema retains a `required` flag for a later optional-step UI. It does not
+include campaign-specific reward fulfillment, leaderboards, teams, or referral
+mechanics.
 
 ## Raffle lifecycle and data flow
 

@@ -12,6 +12,9 @@ export const PERMISSIONS = {
   RAFFLE_DELETE: "raffle:delete",
   RAFFLE_REROLL: "raffle:reroll",
   RAFFLE_END: "raffle:end",
+  CAMPAIGN_VIEW: "campaign:view",
+  CAMPAIGN_CREATE: "campaign:create",
+  CAMPAIGN_EDIT: "campaign:edit",
   COLLAB_VIEW: "collab:view",
   COLLAB_CREATE: "collab:create",
   COLLAB_EDIT: "collab:edit",
@@ -44,6 +47,9 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "raffle:delete": "Delete raffles",
   "raffle:reroll": "Reroll winners",
   "raffle:end": "End raffles",
+  "campaign:view": "View campaigns",
+  "campaign:create": "Create campaigns",
+  "campaign:edit": "Edit and publish campaigns",
   "collab:view": "View collaborations",
   "collab:create": "Create collaborations",
   "collab:edit": "Edit collaborations",
@@ -67,6 +73,14 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
 
 export const PERMISSION_GROUPS: { label: string; permissions: Permission[] }[] =
   [
+    {
+      label: "Campaigns",
+      permissions: [
+        PERMISSIONS.CAMPAIGN_VIEW,
+        PERMISSIONS.CAMPAIGN_CREATE,
+        PERMISSIONS.CAMPAIGN_EDIT,
+      ],
+    },
     {
       label: "Collab Hub",
       permissions: [
@@ -131,6 +145,8 @@ export const BUILTIN_ROLES: { name: string; permissions: Permission[] }[] = [
       P.RAFFLE_EDIT,
       P.RAFFLE_REROLL,
       P.RAFFLE_END,
+      P.CAMPAIGN_VIEW,
+      P.CAMPAIGN_EDIT,
       P.PARTICIPANT_VIEW,
       P.WALLET_VIEW,
       P.ANALYTICS_VIEW,
@@ -151,6 +167,9 @@ export const BUILTIN_ROLES: { name: string; permissions: Permission[] }[] = [
       P.COLLAB_ARCHIVE,
       P.RAFFLE_CREATE,
       P.RAFFLE_EDIT,
+      P.CAMPAIGN_VIEW,
+      P.CAMPAIGN_CREATE,
+      P.CAMPAIGN_EDIT,
       P.PARTICIPANT_VIEW,
       P.ANALYTICS_VIEW,
       P.REPORT_VIEW,
@@ -160,6 +179,7 @@ export const BUILTIN_ROLES: { name: string; permissions: Permission[] }[] = [
     name: "Viewer",
     permissions: [
       P.COLLAB_VIEW,
+      P.CAMPAIGN_VIEW,
       P.PARTICIPANT_VIEW,
       P.WALLET_VIEW,
       P.ANALYTICS_VIEW,
