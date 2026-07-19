@@ -3,7 +3,7 @@
 Last updated: 2026-07-19
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited application commit: `75fb56e`
+Audited production application commit: `060ab72`
 
 ## Current state
 
@@ -23,8 +23,8 @@ Phase 3 is implemented through S2.5:
 - S3 rewards/points-channel slice is committed, pushed, migrated, and deployed:
   configurable Discord points channels, web reward store/management, and
   Discord commands for points, tasks, and rewards.
-- The first S3 Campaigns slice is implemented and verified in the local working
-  tree. It is not committed, migrated, command-registered, or deployed yet.
+- The first S3 Campaigns slice is committed, migrated, command-registered, and
+  deployed across both Vercel dashboards and the EC2 bot.
 - Anonymous raffle sharing and configuration-only duplication are committed,
   pushed, and deployed on the production dashboard.
 - Member-aware community discovery and optional community X branding are
@@ -85,16 +85,16 @@ Phase 3 is implemented through S2.5:
 - Authenticated production visual regression now also covers Member Raffles
   and Collab Hub with deterministic API fixtures on desktop Chromium and Pixel 7. Four reviewed baselines are committed, and the standard gitignored auth
   state is reusable without an extra storage-state environment override.
-- Wider-rollout bot hardening is deployed: seven slash commands are globally
+- Wider-rollout bot hardening is deployed: eight slash commands are globally
   registered, configured manager roles can use the manager surface without a
   conflicting Discord visibility gate, scheduler work is bounded, concurrent
   outcomes are atomically claimed, onboarding has `/config diagnose`, and the
   deploy script now fails unless tests, build, registration, PM2, and a real
   scheduler tick succeed.
 
-## Campaigns first slice — 2026-07-19
+## Campaigns first slice — production release 2026-07-19
 
-### Delivered locally
+### Delivered
 
 - Added additive Campaign models and migration
   `20260719100000_campaigns`: organization-owned campaign lifecycle, ordered
@@ -106,7 +106,7 @@ Phase 3 is implemented through S2.5:
 - Added `/me/campaigns` for discovery, joining, task verification, raffle
   navigation, progress refresh, and completion state.
 - Added Discord `/campaigns list|join|progress` with shared database semantics.
-  Production registration will contain eight commands after deployment.
+  Production now has eight globally registered commands.
 - Task verification and raffle entry now synchronize enrolled live campaigns
   on both web and Discord. Completion transitions once and awards the optional
   points bonus through the append-only ledger's unique
@@ -122,6 +122,24 @@ Phase 3 is implemented through S2.5:
   dashboard tests.
 - The full root production build passed for the DB package, bot, and Next.js
   dashboard. Final formatting/diff checks also passed.
+- Production Neon applied `20260719100000_campaigns`; `prisma migrate status`
+  reports all 26 migrations current. Read-only smoke checks found zero campaign
+  or enrollment test rows and 15 built-in roles with `campaign:view`.
+- Application commit `5aa785a` and clean Vercel-build fixes `8638fc6` and
+  `060ab72` are pushed to `origin/main`.
+- Both Vercel production deployments for `060ab72` completed successfully.
+  `https://raffle.koslabs.app` and
+  `https://kos-wl-bot-dashboard.vercel.app` return `401` from the member
+  Campaign API when signed out; the canonical member page preserves
+  `/me/campaigns` through the Discord login redirect.
+- The EC2 release reran all 15 bot tests, built DB/bot, registered eight global
+  commands, restarted `kos-bot`, and returned `ok: true`, `ready: true`, two
+  guilds, and a successful 30 ms scheduler tick at
+  `2026-07-19T05:36:37.007Z`.
+- The first Vercel attempt exposed that the dashboard's clean runner did not
+  compile the newly declared `@kos/db` workspace dependency. The committed
+  package script and `vercel.json` build command now build the shared package
+  first; a clean local reproduction and both Vercel builds passed afterward.
 
 ### Modified files
 
@@ -153,13 +171,13 @@ Phase 3 is implemented through S2.5:
 - Campaign-specific reward fulfillment, leaderboards, teams, streaks, and
   referrals are outside this first slice.
 
-### Deployment boundary and next task
+### Next task
 
-Do not expose this code against the old production schema. With explicit
-authorization, deploy migration first, then both dashboard projects, then build
-and restart the EC2 bot and register the eight global slash commands. Smoke-test
-one draft, one live join, one task/raffle completion, one points award, and one
-scheduled lifecycle transition before declaring Campaigns live.
+Run an owner-led acceptance campaign using a real community task and raffle:
+create one draft, publish it, join as a real member, complete the required
+steps, confirm the one-time points award, and observe one scheduled lifecycle
+transition. The automated deployment smoke checks remained read-only and did
+not create fake production campaigns, enrollments, or points.
 
 ## Wider rollout and protected CI — 2026-07-17
 

@@ -7,9 +7,8 @@ agent taking over KOS.
 
 KOS is a Discord-first whitelist raffle platform evolving into a reusable
 community-engagement platform. The production product is Phase 3 S2.5 plus
-the first S3/S4 slices. Phase 4 Collab Hub and its additive migration are live
-on the production dashboard and EC2 bot. The first Campaigns slice is
-implemented locally and awaiting migration/runtime deployment:
+the first S3/S4 slices. Phase 4 Collab Hub and the first Campaigns slice are
+live on the production dashboard, shared Neon database, and EC2 bot:
 
 - Discord raffle creation, entry, scheduling, winner draws, rerolls, wallet
   collection, announcements, and PDF/CSV/PNG proofs.

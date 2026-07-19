@@ -130,8 +130,7 @@ role-weighted draws each use additive migrations and independently verified
 deploys. Applied migrations are never rewritten.
 **Why:** Small production releases reduce migration and rollback risk. S1, S2,
 the S2.5 parity follow-up, the first S3 points/rewards and campaigns slices,
-and the first S4 weighted-draw slice are complete in the application. Campaigns
-still require production migration and runtime deployment.
+and the first S4 weighted-draw slice are deployed.
 
 ## D015 — Billing remains scaffolded but hidden
 
@@ -565,7 +564,7 @@ schema migration; canonical redirects keep the visible URL current.
 
 ## D050 — Campaigns compose existing task, raffle, and points primitives
 
-**Status:** Accepted; implemented locally, not yet deployed
+**Status:** Accepted; deployed 2026-07-19
 **Decision:** Model a campaign as an organization-owned lifecycle record with
 ordered links to existing `TaskDefinition` and `Raffle` records plus one unique
 member enrollment. Members explicitly join. Completion is derived from verified

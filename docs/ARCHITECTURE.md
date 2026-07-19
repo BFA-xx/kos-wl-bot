@@ -1,6 +1,6 @@
 # KOS Architecture
 
-Last verified against the local `main` working tree on 2026-07-19.
+Last verified against production application commit `060ab72` on 2026-07-19.
 
 ## Product
 
@@ -11,8 +11,8 @@ accounts, points, rewards, role-weighted draws, wallet collection, verifiable
 draws, proof artifacts, and platform administration.
 
 Phase 3 is delivered through S2.5 plus the first S3/S4 slices. The first
-Campaigns slice is implemented locally and awaits production migration and
-runtime deployment.
+Campaigns slice is deployed across both Vercel dashboards, Neon, and the EC2
+bot.
 
 ## Runtime topology
 

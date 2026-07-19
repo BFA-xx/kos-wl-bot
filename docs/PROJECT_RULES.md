@@ -92,10 +92,10 @@
   check. Robinhood Chain is a distinct selectable registry/raffle chain using
   the same EVM address format as Ethereum/Base. New chains must ship through
   the shared Prisma enum, bot, dashboard API, and member wallet editor.
-- Paid billing is not live. The first Campaigns slice is implemented locally
-  but is not a production capability until migration and both dashboard/bot
-  runtimes are deployed. Points, rewards, campaigns, and weighted draws must
-  remain Discord + web parity features.
+- Paid billing is not live. Campaign migration `20260719100000_campaigns` and
+  the first web/Discord Campaigns slice are deployed. Future campaign schema
+  changes must preserve migration-before-runtime ordering. Points, rewards,
+  campaigns, and weighted draws must remain Discord + web parity features.
 - `/c/*` community pages require sign-in.
   `/r/:community-x-:project-:id` is the only anonymous raffle surface and must
   never expose organization controls, entrant identities, or hidden entry
