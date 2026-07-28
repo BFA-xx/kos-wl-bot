@@ -76,7 +76,6 @@ model Guild {
   blacklists Blacklist[]
   logs       Log[]
   raids      Raid[]
-  pings      Ping[]
 
   @@map("guilds")
 }
@@ -517,7 +516,6 @@ model Organization {
   rewardRedemptions         RewardRedemption[]
   campaigns                 Campaign[]
   raids                     Raid[]
-  pings                     Ping[]
   collaborations            Collaboration[]
   collaborationPartners     CollaborationPartner[]
   collaborationTags         CollaborationTag[]
@@ -1054,22 +1052,6 @@ enum RaidProofKind {
   UNKNOWN
 }
 
-enum PingStatus {
-  DRAFT
-  SCHEDULED
-  SENDING
-  SENT
-  FAILED
-  CANCELLED
-}
-
-enum PingMentionMode {
-  NONE
-  HERE
-  EVERYONE
-  ROLES
-}
-
 /// A reusable task built by an organization. Referenced by raffles now and
 /// campaigns in S3 — build once, attach anywhere.
 model TaskDefinition {
@@ -1283,6 +1265,7 @@ model Raid {
   instructions              String
   proofType                 RaidProofType @default(AUTO)
   status                    RaidStatus    @default(DRAFT)
+  startPing                 String        @default("everyone")
   startAt                   DateTime
   endAt                     DateTime
   channelId                 String
@@ -1391,37 +1374,6 @@ model RaidSubmissionAttachment {
 
   @@index([submissionId])
   @@map("raid_submission_attachments")
-}
-
-/// A dashboard-composed Discord announcement. The bot claims due rows before
-/// sending so dashboard/serverless requests never need direct gateway access.
-model Ping {
-  id             String          @id @default(cuid())
-  organizationId String
-  guildId        String
-  title          String
-  message        String
-  channelId      String
-  mentionMode    PingMentionMode @default(NONE)
-  roleIds        String[]        @default([])
-  linkUrl        String?
-  status         PingStatus      @default(DRAFT)
-  scheduledAt    DateTime?
-  sendingAt      DateTime?
-  sentAt         DateTime?
-  messageId      String?
-  failureReason  String?
-  createdById    String
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  guild        Guild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
-
-  @@index([organizationId, status])
-  @@index([guildId, status])
-  @@index([status, scheduledAt])
-  @@map("pings")
 }
 
 /// Attach a task to a raffle. Required tasks gate entry.

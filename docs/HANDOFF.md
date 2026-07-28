@@ -25,10 +25,10 @@ Phase 3 is implemented through S2.5:
   Discord commands for points, tasks, and rewards.
 - The first S3 Campaigns slice is committed, migrated, command-registered, and
   deployed across both Vercel dashboards and the EC2 bot.
-- Raids and Pings are implemented and fully built locally. They are not
-  committed, migrated, or deployed; production still requires the additive
-  migration, dashboard release, Discord intent/permission update, and bot
-  release.
+- Raids are deployed with Discord proof collection and reward roles. A
+  corrective local release removes the mistakenly introduced standalone Ping
+  workspace and moves the established raffle-style start ping choice into Raid
+  creation.
 - Anonymous raffle sharing and configuration-only duplication are committed,
   pushed, and deployed on the production dashboard.
 - Member-aware community discovery and optional community X branding are
@@ -1970,7 +1970,92 @@ Recommended next task:
   the same branded paths from their own raffle subdomain without changing the
   canonical identity or tenant authorization model.
 
-### Raids and Pings dashboard/Discord slice — production deployed
+### Raid start-ping correction — implemented locally, not deployed
+
+- User clarification confirmed that “ping” meant the same start-notification
+  choice used while hosting a raffle, not a separate announcement product.
+- Raid create/edit now includes **Ping on start** with `@everyone`, `@here`, or
+  **No ping**. The value is persisted on `Raid`, copied by duplication, locked
+  once a Raid is live, and expanded by the bot through explicit
+  `allowedMentions`.
+- An optional Raid announcement is posted beneath the selected mention.
+  Free-text announcement copy cannot expand arbitrary Discord mentions.
+- The standalone Pings sidebar entry, command-center search jump, page, API
+  routes, composer/history UI, permissions, scheduler queue, bot service, tests,
+  Prisma model, relations, and enums are removed.
+- Corrective migration
+  `20260728143000_remove_standalone_pings_add_raid_start_ping` adds
+  `Raid.startPing`, removes stale `ping:*` permissions, and drops the unintended
+  `pings` table plus its two enums. A live pre-migration audit confirmed both
+  `pings` and `raids` contain zero rows, so the correction discards no manager
+  or participant data.
+
+Verification:
+
+- Prisma validation and DB build — passed.
+- DB tests — 9 passed.
+- Bot typecheck/build — passed.
+- Bot tests — 17 passed, including all three Raid start-ping choices.
+- Dashboard tests — 19 files, 61 tests passed.
+- Dashboard typecheck — passed after regenerating stale Next route types.
+- Dashboard production build — passed; `/[org]/raids` remains present and no
+  `/[org]/pings` page or API route is emitted.
+- Root typecheck and `git diff --check` — passed.
+- No corrective production migration, commit, push, dashboard release, or bot
+  release has been performed yet.
+
+Modified files:
+
+- `README.md`
+- `apps/bot/src/commands/config.ts`
+- `apps/bot/src/services/pingService.test.ts` (removed)
+- `apps/bot/src/services/pingService.ts` (removed)
+- `apps/bot/src/services/raidService.test.ts`
+- `apps/bot/src/services/raidService.ts`
+- `apps/bot/src/services/scheduler.ts`
+- `apps/dashboard/app/[org]/pings/page.tsx` (removed)
+- `apps/dashboard/app/api/[org]/pings/[id]/duplicate/route.ts` (removed)
+- `apps/dashboard/app/api/[org]/pings/[id]/route.ts` (removed)
+- `apps/dashboard/app/api/[org]/pings/route.ts` (removed)
+- `apps/dashboard/app/api/[org]/raids/[id]/duplicate/route.ts`
+- `apps/dashboard/app/api/[org]/raids/[id]/route.ts`
+- `apps/dashboard/components/OrgShell.tsx`
+- `apps/dashboard/components/OrgSidebar.tsx`
+- `apps/dashboard/components/PingManager.tsx` (removed)
+- `apps/dashboard/components/RaidManager.tsx`
+- `apps/dashboard/lib/permissions.ts`
+- `apps/dashboard/lib/ping-input.test.ts` (removed)
+- `apps/dashboard/lib/ping-input.ts` (removed)
+- `apps/dashboard/lib/raid-input.test.ts`
+- `apps/dashboard/lib/raid-input.ts`
+- `packages/db/prisma/migrations/20260728143000_remove_standalone_pings_add_raid_start_ping/migration.sql`
+- `packages/db/prisma/schema.prisma`
+- `docs/AGENTS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/DECISIONS.md`
+- `docs/HANDOFF.md`
+- `docs/PROJECT_RULES.md`
+- `docs/ROLLOUT.md`
+
+Assumptions:
+
+- “Just as during raffle hosting” means the exact existing choice:
+  `@everyone`, `@here`, or no ping. It does not introduce a standalone
+  scheduler, arbitrary role mentions, or free-form user mentions.
+
+Technical debt:
+
+- The original applied migration remains immutable history and therefore still
+  creates the short-lived Ping objects before the corrective migration removes
+  them on a brand-new database.
+
+Recommended next task:
+
+- Commit the correction, apply the empty-table removal migration before either
+  runtime changes, release both Vercel dashboards and the EC2 bot, then verify
+  `/pings` is gone and Raid start-ping data is live.
+
+### Superseded initial Raid and standalone Ping rollout — production deployed
 
 - The organization sidebar now has permission-gated **Raids** and **Pings**
   workspaces in the existing dark command-center design.

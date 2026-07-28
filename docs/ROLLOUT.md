@@ -32,8 +32,8 @@ In the Discord Developer Portal:
    Permission integer `326686469184` includes the established raffle
    permissions plus Add Reactions, Manage Roles, and public-thread
    create/send/manage permissions for Raids. Mention Everyone remains relevant
-   only when raffles or Pings use broad mentions. `/config diagnose` reports
-   missing rollout permissions.
+   only when raffle or Raid start settings use a broad mention.
+   `/config diagnose` reports missing rollout permissions.
 
 4. Before 100 guilds, submit Discord application verification and approval for
    both privileged intents. Start that process early; it is an external launch

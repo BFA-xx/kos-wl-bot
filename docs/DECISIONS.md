@@ -593,15 +593,19 @@ but Discord attachment URLs expire and X status URL shapes do not expose
 engagement type. Durable evidence plus explicit uncertainty automates the
 reliable parts without creating false verification claims.
 
-## D052 — Raid rewards and Pings remain bot-owned side effects
+## D052 — Raid rewards and start pings remain bot-owned side effects
 
-**Status:** Accepted; deployed 2026-07-28
+**Status:** Corrected and deployed 2026-07-28
 **Decision:** Let the bot resolve or create Raid reward roles, assign them to
-valid participants, lock proof threads, post staff summaries, and deliver due
-Pings. Dashboard routes only persist authorized intent. Ping mention expansion
-must use explicit Discord `allowedMentions` for none, here, everyone, or a
-selected role allowlist; message text cannot create arbitrary mentions.
+valid participants, lock proof threads, and post staff summaries. Raid creation
+must expose the same start-ping choice as raffle hosting: `@everyone`, `@here`,
+or none. The bot expands only that explicit choice through Discord
+`allowedMentions`; free-text announcements cannot create arbitrary mentions.
+Do not create a separate Ping dashboard, API, scheduler, permission model, or
+database table.
 **Why:** Role and message operations require the connected Discord gateway and
 background execution. Reusing the established database-mediated scheduler
 keeps Vercel stateless, makes delivery observable, and allows existing
 role-gated and weighted raffle eligibility to consume Raid rewards naturally.
+The user intent was a Raid start-notification control, not a second
+announcement product.

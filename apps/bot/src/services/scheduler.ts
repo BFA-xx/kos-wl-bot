@@ -23,7 +23,6 @@ import { audit } from "./auditService.js";
 import { processCollaborationAutomations } from "./collaborationService.js";
 import { backfillProofArtifacts } from "./proofService.js";
 import { processRaidLifecycle } from "./raidService.js";
-import { processPingQueue } from "./pingService.js";
 
 /**
  * Sweep-based scheduler. A single interval drives all raffle state machines,
@@ -115,7 +114,6 @@ export class Scheduler {
       await this.processEditRequests();
       await this.processCampaignLifecycle(now);
       await processRaidLifecycle(this.client, now, config.SCHEDULER_BATCH_SIZE);
-      await processPingQueue(this.client, now, config.SCHEDULER_BATCH_SIZE);
 
       // Open upcoming raffles whose start time has arrived.
       const toOpen = await prisma.raffle.findMany({

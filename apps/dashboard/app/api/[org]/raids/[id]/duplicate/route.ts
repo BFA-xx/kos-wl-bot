@@ -33,6 +33,7 @@ export async function POST(
         tweetUrls: source.tweetUrls,
         instructions: source.instructions,
         proofType: source.proofType,
+        startPing: source.startPing,
         startAt,
         endAt: new Date(startAt.getTime() + duration),
         channelId: source.channelId,

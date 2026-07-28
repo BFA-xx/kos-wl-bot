@@ -14,9 +14,9 @@ Phase 3 is delivered through S2.5 plus the first S3/S4 slices. The first
 Campaigns slice is deployed across both Vercel dashboards, Neon, and the EC2
 bot.
 
-Raids and Pings are implemented locally as the next additive platform slice.
-They are not deployed until migration `20260728120000_raids_and_pings` is
-applied and both dashboard and bot runtimes are released together.
+Raids are deployed across the dashboard, shared database, and bot. Raid
+creation uses the same `@everyone` / `@here` / no-ping start control as raffle
+hosting. There is no standalone Ping product.
 
 ## Runtime topology
 
@@ -34,8 +34,8 @@ flowchart LR
 
 - `apps/bot`: long-running Discord gateway process. It owns Discord
   interactions, scheduling, final draws, announcements, wallet DMs, and proof
-  generation. It also owns Raid threads/proof intake/reward roles and scheduled
-  Ping delivery.
+  generation. It also owns Raid threads, proof intake, start pings, and reward
+  roles.
 - `apps/dashboard`: Next.js 14 App Router application. It owns Discord OAuth,
   organization administration, member pages, signed-in community pages,
   anonymous public raffle pages, task verification, and web entry.
@@ -46,7 +46,7 @@ flowchart LR
 The bot still exposes an authenticated localhost control API on port 4000, but
 production dashboard actions no longer depend on it. Vercel queues publish,
 edit, end, and reroll work in PostgreSQL; the bot scheduler consumes it.
-Raid lifecycle requests and Pings use the same database-mediated boundary.
+Raid lifecycle requests use the same database-mediated boundary.
 
 ## Repository layout
 
@@ -432,15 +432,16 @@ The Hub reports relationship cards and source raffles as distinct totals.
 Repeated GTD/FCFS rounds can share one collaboration, while the organization
 Raffles page remains the one-row-per-raffle archive.
 
-## Raids and Pings
+## Raids
 
 `Raid` is organization-owned and also references one connected `Guild`.
 Managers configure X post URLs, instructions, proof shape, start/end times,
-Discord raid and staff channels, a reward role, an optional participant limit,
-and duplicate policy. The dashboard writes `DRAFT` or `SCHEDULED`; the bot
-scheduler owns `LIVE`, `ENDED`, and `CANCELLED` Discord transitions. On start,
-the bot resolves or creates the reward role, posts the branded embed, and
-creates a proof thread when channel permissions allow it.
+Discord raid and staff channels, the raffle-style `@everyone` / `@here` /
+no-ping start choice, a reward role, an optional participant limit, and
+duplicate policy. The dashboard writes `DRAFT` or `SCHEDULED`; the bot scheduler
+owns `LIVE`, `ENDED`, and `CANCELLED` Discord transitions. On start, the bot
+resolves or creates the reward role, posts the chosen safe mention with the
+branded embed, and creates a proof thread when channel permissions allow it.
 
 Every Discord proof message becomes a `RaidSubmission` attached to one unique
 `RaidParticipant`. The verifier recognizes normalized X status links and
@@ -462,19 +463,12 @@ needed. Manual review after completion can promote a pending participant and
 queues reward reconciliation; a rewarded participant cannot be invalidated
 after the raid closes.
 
-`Ping` is an organization/guild-owned durable announcement record. Dashboard
-users may save a draft, schedule delivery, send now, cancel, retry, edit, or
-duplicate. The scheduler atomically claims due rows through `SENDING`, recovers
-stale interrupted claims, and records `SENT` or `FAILED`. Per-message allowed
-mentions are explicit: none, `@here`, `@everyone`, or an allowlist of selected
-role IDs. User-authored message text is never allowed to expand arbitrary
-mentions. A stable enforced Discord nonce uses the Ping ID to prevent an
-interrupted scheduler retry from creating a second message.
-
 Raid permissions are `raid:view`, `raid:create`, `raid:edit`, and
-`raid:export`. Ping permissions are `ping:view`, `ping:create`, and
-`ping:edit`. The additive migration grants the expected access to existing
-built-in roles while leaving custom roles unchanged.
+`raid:export`. The original Raid migration granted those permissions to
+existing built-in roles while leaving custom roles unchanged. Corrective
+migration `20260728143000_remove_standalone_pings_add_raid_start_ping` adds
+`Raid.startPing`, removes the unintended `Ping` table/enums, and clears its
+permission strings.
 
 ## Deployment
 

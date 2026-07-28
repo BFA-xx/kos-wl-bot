@@ -19,6 +19,22 @@ describe("parseRaidInput", () => {
     expect(parsed).not.toHaveProperty("error");
     if ("error" in parsed) return;
     expect(parsed.tweetUrls).toEqual(["https://x.com/kos/status/100"]);
+    expect(parsed.startPing).toBe("everyone");
+  });
+
+  it("accepts the same start ping choices as raffle hosting", () => {
+    for (const startPing of ["everyone", "here", "none"]) {
+      const parsed = parseRaidInput({ ...valid, startPing });
+      expect(parsed).not.toHaveProperty("error");
+      if ("error" in parsed) continue;
+      expect(parsed.startPing).toBe(startPing);
+    }
+  });
+
+  it("rejects unsupported start ping values", () => {
+    expect(parseRaidInput({ ...valid, startPing: "role" })).toEqual({
+      error: "Select a valid start ping.",
+    });
   });
 
   it("rejects an invalid time range", () => {

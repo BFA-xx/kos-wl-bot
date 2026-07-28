@@ -125,13 +125,14 @@ export async function PATCH(
       (input.guildId !== raid.guildId ||
         input.channelId !== raid.channelId ||
         input.startAt.getTime() !== raid.startAt.getTime() ||
+        input.startPing !== raid.startPing ||
         input.rewardRoleId !== raid.rewardRoleId ||
         input.rewardRoleName !== raid.rewardRoleName)
     )
       return NextResponse.json(
         {
           error:
-            "Server, raid channel, start time, and reward role cannot change after a raid starts.",
+            "Server, raid channel, start time, start ping, and reward role cannot change after a raid starts.",
         },
         { status: 409 },
       );

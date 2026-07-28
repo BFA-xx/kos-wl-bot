@@ -24,10 +24,8 @@ live on the production dashboard, shared Neon database, and EC2 bot:
 - Organization campaigns that combine reusable tasks and raffle participation,
   with explicit member enrollment, progress tracking, and completion points.
 - Organization Raids with scheduled Discord proof threads, X/image proof-shape
-  classification, durable screenshots, participant review, and reward-role
-  assignment.
-- Organization Pings with draft/scheduled delivery, controlled mentions,
-  retries, duplication, and delivery history.
+  classification, raffle-style start pings, durable screenshots, participant
+  review, and reward-role assignment.
 - Role-weighted raffles with participant weight snapshots and deterministic
   weighted draws.
 - Organization-scoped Collab Hub CRM with overview analytics, Kanban/table/
@@ -199,8 +197,10 @@ Wallets and OAuth tokens reuse the AES-256-GCM `enc:v1` envelope and
   current web surfaces are `/:org/points`, `/:org/rewards`, `/me/points`,
   `/:org/campaigns`, `/me/raffles`, `/me/tasks` as a compatibility route,
   `/me/rewards`, and `/me/campaigns`.
-- Raids and Pings are manager dashboard surfaces. Their Discord side effects
-  remain bot-owned and database-mediated; they do not add slash commands.
+- Raids are a manager dashboard surface. Their Discord side effects remain
+  bot-owned and database-mediated; they do not add slash commands. Raid
+  creation includes the same `@everyone` / `@here` / no-ping start choice as
+  raffle hosting; there is no standalone Ping workspace.
 - Raid X verification is proof-shape classification under the existing
   link-and-attest policy. A distinct status URL is
   `X_COMMENT_OR_QUOTE`; do not claim paid X engagement verification.

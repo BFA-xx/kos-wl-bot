@@ -96,9 +96,11 @@
   the first web/Discord Campaigns slice are deployed. Future campaign schema
   changes must preserve migration-before-runtime ordering. Points, rewards,
   campaigns, and weighted draws must remain Discord + web parity features.
-- Raids and Pings are implemented locally behind additive migration
-  `20260728120000_raids_and_pings` and are not deployed. Apply that migration
-  before releasing either dashboard or bot. Raid X evidence is proof-shape
+- Raids are a manager dashboard feature deployed through migration
+  `20260728120000_raids_and_pings`. Corrective migration
+  `20260728143000_remove_standalone_pings_add_raid_start_ping` removes the
+  unintended standalone Ping product and gives Raid creation the raffle-style
+  `@everyone` / `@here` / no-ping start choice. Raid X evidence is proof-shape
   classification, not paid engagement verification; private screenshot bytes
   require tenant-authorized access.
 - `/c/*` community pages require sign-in.

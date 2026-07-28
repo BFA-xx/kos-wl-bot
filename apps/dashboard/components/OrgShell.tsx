@@ -38,8 +38,6 @@ export function OrgShell({
       campaigns: "campaigns",
       raid: "raids",
       raids: "raids",
-      ping: "pings",
-      pings: "pings",
       collab: "collabs",
       collabs: "collabs",
       collaboration: "collabs",

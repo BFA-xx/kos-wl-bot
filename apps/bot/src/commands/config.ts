@@ -415,7 +415,7 @@ async function diagnose(
     .setTitle(`${ready ? "✅" : "⚠️"} KOS rollout diagnostic`)
     .setDescription(
       ready
-        ? "This server is configured for raffles, raids, pings, proofs, points, and rewards."
+        ? "This server is configured for raffles, raids, proofs, points, and rewards."
         : "Complete the items below before inviting the wider community.",
     )
     .addFields(
@@ -424,7 +424,7 @@ async function diagnose(
       {
         name: "Developer Portal",
         value:
-          "Server Members Intent and Message Content Intent must stay enabled for role checks and raid proof detection. Mention Everyone is optional unless raffle or Ping notifications use it.",
+          "Server Members Intent and Message Content Intent must stay enabled for role checks and raid proof detection. Mention Everyone is optional unless raffle or Raid start notifications use it.",
       },
     )
     .setFooter({ text: KOS.footer });

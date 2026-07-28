@@ -41,6 +41,7 @@ interface Raid {
   tweetUrls: string[];
   instructions: string;
   proofType: string;
+  startPing: string;
   status: string;
   startAt: string;
   endAt: string;
@@ -108,6 +109,7 @@ interface RaidForm {
   tweetUrls: string;
   instructions: string;
   proofType: string;
+  startPing: string;
   startAt: string;
   endAt: string;
   channelId: string;
@@ -126,6 +128,7 @@ const EMPTY_FORM: RaidForm = {
   tweetUrls: "",
   instructions: "",
   proofType: "AUTO",
+  startPing: "everyone",
   startAt: "",
   endAt: "",
   channelId: "",
@@ -226,6 +229,7 @@ export function RaidManager() {
       tweetUrls: raid.tweetUrls.join("\n"),
       instructions: raid.instructions,
       proofType: raid.proofType,
+      startPing: raid.startPing,
       startAt: toLocalInput(raid.startAt),
       endAt: toLocalInput(raid.endAt),
       channelId: raid.channelId,
@@ -530,7 +534,7 @@ function RaidComposer({
           />
         </Field>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Expected proof">
             <select
               className="kos-input"
@@ -568,6 +572,19 @@ function RaidComposer({
                 setForm({ ...form, endAt: event.target.value })
               }
             />
+          </Field>
+          <Field label="Ping on start">
+            <select
+              className="kos-input"
+              value={form.startPing}
+              onChange={(event) =>
+                setForm({ ...form, startPing: event.target.value })
+              }
+            >
+              <option value="everyone">@everyone</option>
+              <option value="here">@here</option>
+              <option value="none">No ping</option>
+            </select>
           </Field>
         </div>
 

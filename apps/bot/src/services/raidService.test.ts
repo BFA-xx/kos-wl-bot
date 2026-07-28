@@ -1,7 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RaidStatus } from "@kos/db";
-import { buildRaidEmbed } from "./raidService.js";
+import { buildRaidEmbed, raidStartContent } from "./raidService.js";
+
+test("raid start ping matches raffle hosting choices", () => {
+  assert.deepEqual(raidStartContent("everyone", "Raid is live."), {
+    content: "@everyone\nRaid is live.",
+    allowedMentions: { parse: ["everyone"] },
+  });
+  assert.deepEqual(raidStartContent("here", null), {
+    content: "@here",
+    allowedMentions: { parse: ["everyone"] },
+  });
+  assert.deepEqual(raidStartContent("none", "Raid is live."), {
+    content: "Raid is live.",
+    allowedMentions: { parse: [] },
+  });
+});
 
 test("raid embed includes task, timing, reward, and submission guidance", () => {
   const json = buildRaidEmbed({

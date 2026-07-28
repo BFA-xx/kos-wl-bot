@@ -52,6 +52,28 @@ interface DurableAttachment {
 
 class ParticipantLimitReached extends Error {}
 
+/** Match raffle hosting: ping everyone, here, or nobody in the Raid post. */
+export function raidStartContent(
+  startPing: string,
+  announcementMessage: string | null | undefined,
+): {
+  content: string | undefined;
+  allowedMentions: { parse: "everyone"[] };
+} {
+  const mention =
+    startPing === "here"
+      ? "@here"
+      : startPing === "everyone"
+        ? "@everyone"
+        : "";
+  const announcement = announcementMessage?.trim() ?? "";
+  const content = [mention, announcement].filter(Boolean).join("\n");
+  return {
+    content: content || undefined,
+    allowedMentions: { parse: mention ? ["everyone"] : [] },
+  };
+}
+
 /** Run all database-driven raid transitions for one scheduler tick. */
 export async function processRaidLifecycle(
   client: Client,
@@ -254,15 +276,19 @@ async function startRaid(client: Client, raidId: string): Promise<void> {
   ) {
     throw new Error("The configured raid channel is unavailable.");
   }
+  const startContent = raidStartContent(
+    raid.startPing,
+    raid.announcementMessage,
+  );
   const post = await channel.send({
-    content: raid.announcementMessage ?? undefined,
+    content: startContent.content,
     embeds: [
       buildRaidEmbed({
         ...raid,
         rewardRoleId: rewardRole.id,
       }),
     ],
-    allowedMentions: { parse: [] },
+    allowedMentions: startContent.allowedMentions,
   });
   let threadId: string | null = null;
   if (
@@ -446,6 +472,7 @@ async function updateRaidPost(
     guildId?: string;
     channelId?: string;
     messageId?: string | null;
+    startPing?: string;
     announcementMessage?: string | null;
   },
   cancelled = false,
@@ -463,21 +490,25 @@ async function updateRaidPost(
     .fetch(raid.messageId)
     .catch(() => null);
   if (!message) return;
+  const startContent = raidStartContent(
+    raid.startPing ?? "none",
+    raid.announcementMessage,
+  );
   if (cancelled) {
     const embed = buildRaidEmbed({ ...raid, status: RaidStatus.ENDED })
       .setTitle(`✖ ${raid.title}`)
       .setDescription("This raid was cancelled. Submissions are closed.");
     await message.edit({
-      content: raid.announcementMessage ?? undefined,
+      content: startContent.content ?? null,
       embeds: [embed],
-      allowedMentions: { parse: [] },
+      allowedMentions: startContent.allowedMentions,
     });
     return;
   }
   await message.edit({
-    content: raid.announcementMessage ?? undefined,
+    content: startContent.content ?? null,
     embeds: [buildRaidEmbed(raid)],
-    allowedMentions: { parse: [] },
+    allowedMentions: startContent.allowedMentions,
   });
 }
 

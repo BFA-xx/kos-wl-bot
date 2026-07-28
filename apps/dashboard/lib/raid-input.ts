@@ -6,6 +6,7 @@ export interface RaidInput {
   tweetUrls: string[];
   instructions: string;
   proofType: RaidProofType;
+  startPing: "everyone" | "here" | "none";
   startAt: Date;
   endAt: Date;
   channelId: string;
@@ -24,6 +25,7 @@ export function parseRaidInput(
   const title = String(body.title ?? "").trim();
   const instructions = String(body.instructions ?? "").trim();
   const proofType = String(body.proofType ?? "AUTO") as RaidProofType;
+  const startPing = parseStartPing(body.startPing);
   const startAt = parseDate(body.startAt);
   const endAt = parseDate(body.endAt);
   const channelId = cleanId(body.channelId);
@@ -61,6 +63,7 @@ export function parseRaidInput(
     return { error: "A raid can contain at most five X post URLs." };
   if (!Object.values(RaidProofType).includes(proofType))
     return { error: "Select a valid proof type." };
+  if (!startPing) return { error: "Select a valid start ping." };
   if (!startAt || !endAt) return { error: "Start and end times are required." };
   if (endAt <= startAt) return { error: "Raid end must be after its start." };
   if (!channelId) return { error: "Select a Discord raid channel." };
@@ -79,6 +82,7 @@ export function parseRaidInput(
     tweetUrls,
     instructions,
     proofType,
+    startPing,
     startAt,
     endAt,
     channelId,
@@ -89,6 +93,15 @@ export function parseRaidInput(
     allowMultipleSubmissions,
     announcementMessage,
   };
+}
+
+function parseStartPing(
+  value: unknown,
+): "everyone" | "here" | "none" | null {
+  const ping = String(value ?? "everyone");
+  return ping === "everyone" || ping === "here" || ping === "none"
+    ? ping
+    : null;
 }
 
 function cleanId(value: unknown): string {
