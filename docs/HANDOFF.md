@@ -3,7 +3,7 @@
 Last updated: 2026-07-28
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited production application commit: `060ab72`
+Audited production application commit: `764316f`
 
 ## Current state
 
@@ -25,10 +25,9 @@ Phase 3 is implemented through S2.5:
   Discord commands for points, tasks, and rewards.
 - The first S3 Campaigns slice is committed, migrated, command-registered, and
   deployed across both Vercel dashboards and the EC2 bot.
-- Raids are deployed with Discord proof collection and reward roles. A
-  corrective local release removes the mistakenly introduced standalone Ping
-  workspace and moves the established raffle-style start ping choice into Raid
-  creation.
+- Raids are deployed with Discord proof collection, reward roles, and the
+  established raffle-style start ping choice. The mistakenly introduced
+  standalone Ping workspace has been removed from production.
 - Anonymous raffle sharing and configuration-only duplication are committed,
   pushed, and deployed on the production dashboard.
 - Member-aware community discovery and optional community X branding are
@@ -1970,7 +1969,7 @@ Recommended next task:
   the same branded paths from their own raffle subdomain without changing the
   canonical identity or tenant authorization model.
 
-### Raid start-ping correction — implemented locally, not deployed
+### Raid start-ping correction — production deployed
 
 - User clarification confirmed that “ping” meant the same start-notification
   choice used while hosting a raffle, not a separate announcement product.
@@ -2000,9 +1999,26 @@ Verification:
 - Dashboard typecheck — passed after regenerating stale Next route types.
 - Dashboard production build — passed; `/[org]/raids` remains present and no
   `/[org]/pings` page or API route is emitted.
+- Root tests — 87 passed across DB, bot, and dashboard.
 - Root typecheck and `git diff --check` — passed.
-- No corrective production migration, commit, push, dashboard release, or bot
-  release has been performed yet.
+- Application commit `764316f` was pushed to `main`; both Vercel dashboard
+  projects reported successful production deployments.
+- Production migration status — all 28 migrations applied. Direct database
+  canaries confirmed `public.pings` is absent, `Raid.startPing` is non-null
+  with default `everyone`, zero organization roles retain `ping:*`
+  permissions, and the empty Raid table remains intact.
+- EC2 bot release — remote bot tests passed 17/17, the build and global command
+  registration passed, PM2 restarted cleanly, and localhost health reported
+  `ok`, `ready`, two guilds, and successful scheduler ticks.
+- The first EC2 deploy attempt was safely blocked before restart because rsync
+  had retained the two deleted Ping service files. Those exact stale source
+  files and the other removed Ping dashboard files were deleted from the EC2
+  checkout, then the standard deployment passed.
+- Applying the removal migration before the corrected bot restart caused the
+  old running scheduler to log transient missing-`pings`-table errors during
+  that short deployment window. The corrected process has no Ping queue,
+  subsequent scheduler ticks are healthy, and no current post-restart error is
+  present.
 
 Modified files:
 
@@ -2051,9 +2067,9 @@ Technical debt:
 
 Recommended next task:
 
-- Commit the correction, apply the empty-table removal migration before either
-  runtime changes, release both Vercel dashboards and the EC2 bot, then verify
-  `/pings` is gone and Raid start-ping data is live.
+- Run one controlled Raid in a scratch channel to exercise the selected start
+  ping, proof capture, completion summary, and reward-role assignment through
+  Discord with no production participant impact.
 
 ### Superseded initial Raid and standalone Ping rollout — production deployed
 
