@@ -1970,7 +1970,7 @@ Recommended next task:
   the same branded paths from their own raffle subdomain without changing the
   canonical identity or tenant authorization model.
 
-### Raids and Pings dashboard/Discord slice — implemented locally, not deployed
+### Raids and Pings dashboard/Discord slice — production deployed
 
 - The organization sidebar now has permission-gated **Raids** and **Pings**
   workspaces in the existing dark command-center design.
@@ -2032,10 +2032,44 @@ Verification:
 - `pnpm --filter @kos/dashboard test` — 20 files, 61 tests passed.
 - Placeholder-database dashboard production build — passed and emitted the new
   `/[org]/raids`, `/[org]/pings`, and API routes.
-- `git diff --check` — passed before final documentation update and must be
-  rerun at handoff.
-- No production migration, Discord message/role action, authenticated browser
-  pass, commit, push, or deployment was performed.
+- `git diff --check` — passed before the application commit.
+
+Production release evidence:
+
+- Application commit `76c9011` (`feat: add raids and scheduled pings`) is
+  pushed to `origin/main`.
+- Additive migration `20260728120000_raids_and_pings` was applied from the EC2
+  production connection before either runtime changed. Prisma then reported
+  all 27 migrations current.
+- Both connected Vercel statuses succeeded for `76c9011`:
+  `Vercel – kos-wl-bot-dashboard` and
+  `Vercel – kos-wl-bot-dashboard-3a8x`.
+- Production route canaries on `https://raffle.koslabs.app` return `307` for
+  signed-out `/kos/raids` and `/kos/pings` page requests and `401`, not `404`,
+  for `/api/kos/raids` and `/api/kos/pings`.
+- Production database canaries found zero Raid and Ping rows, confirming that
+  validation created no customer-facing records. Every built-in Owner, Admin,
+  Collab Manager, and Moderator role has the seven new manager permissions;
+  Viewer roles received only `raid:view` and `ping:view`.
+- Discord Message Content Intent is enabled for application
+  `1518505497500717186`. Its persisted default guild-install permissions now
+  include the complete Raid role, thread, reaction, attachment, history, and
+  message set.
+- The existing KOS guild installation already has the complete required
+  permission bitset. Moon Mission still lacks **Manage Roles** and
+  **Manage Threads**; the available Discord account cannot authorize that
+  server, so Raid role creation/assignment and thread locking there remain
+  unavailable until a Moon Mission server manager reauthorizes the bot.
+- `./scripts/deploy-ec2.sh` passed all 19 bot tests, rebuilt the DB and bot,
+  registered eight global commands, and restarted PM2 process `kos-bot` as PID
+  `223533`. Health returned
+  `{"ok":true,"ready":true,"guilds":2}` with a successful scheduler tick.
+  Post-restart logs contain the online, scheduler, API, and guild-sync events
+  and no error-level event.
+- The current browser session was not authenticated to the KOS dashboard, so
+  signed-in manager visual QA was not performed. No live Raid, reward role, or
+  Ping was created as a production canary; doing so would send messages and
+  potentially mention members.
 
 Modified files:
 
@@ -2104,14 +2138,16 @@ Technical debt:
   approval dependency as KOS scales.
 - The Raid thread flow has no Submit Participation button yet; direct message
   submission is the shipped path.
-- Live Discord role/thread and authenticated dashboard interaction still need a
-  controlled acceptance test after migration and permission rollout.
+- Moon Mission needs a server manager to reauthorize the bot with
+  `permissions=326686469184`. Live Discord role/thread behavior and signed-in
+  dashboard interaction still need a controlled, staff-visible acceptance
+  test.
 
 Recommended next task:
 
-- Enable Message Content Intent and the new bot permissions in a test guild,
-  apply the additive migration, deploy dashboard then bot, and run a short
-  no-@everyone acceptance Raid plus a role-only Ping before production rollout.
+- Reauthorize KOS Raffles in Moon Mission, then run a short no-`@everyone`
+  acceptance Raid plus a no-mention or private test-role Ping with staff
+  awareness.
 
 ## Confirmed invariants and current product policies
 

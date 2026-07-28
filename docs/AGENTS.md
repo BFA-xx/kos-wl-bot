@@ -25,10 +25,9 @@ live on the production dashboard, shared Neon database, and EC2 bot:
   with explicit member enrollment, progress tracking, and completion points.
 - Organization Raids with scheduled Discord proof threads, X/image proof-shape
   classification, durable screenshots, participant review, and reward-role
-  assignment. This slice is implemented locally but not deployed.
+  assignment.
 - Organization Pings with draft/scheduled delivery, controlled mentions,
-  retries, duplication, and delivery history. This slice is implemented
-  locally but not deployed.
+  retries, duplication, and delivery history.
 - Role-weighted raffles with participant weight snapshots and deterministic
   weighted draws.
 - Organization-scoped Collab Hub CRM with overview analytics, Kanban/table/

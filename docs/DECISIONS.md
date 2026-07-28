@@ -579,7 +579,7 @@ or balance systems and preserves Discord/web parity and idempotency.
 
 ## D051 — Raids use durable Discord proof with honest X classification
 
-**Status:** Accepted; implemented locally, not deployed
+**Status:** Accepted; deployed 2026-07-28
 **Decision:** Model each Raid as an organization-owned, guild-targeted
 lifecycle executed by the bot through the shared database. Collect ordinary
 Discord thread messages as immutable submissions, keep one aggregate
@@ -595,7 +595,7 @@ reliable parts without creating false verification claims.
 
 ## D052 — Raid rewards and Pings remain bot-owned side effects
 
-**Status:** Accepted; implemented locally, not deployed
+**Status:** Accepted; deployed 2026-07-28
 **Decision:** Let the bot resolve or create Raid reward roles, assign them to
 valid participants, lock proof threads, post staff summaries, and deliver due
 Pings. Dashboard routes only persist authorized intent. Ping mention expansion
