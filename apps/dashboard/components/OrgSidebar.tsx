@@ -136,50 +136,16 @@ export function OrgSidebarContent({
             {collapsed ? null : "Super Admin"}
           </Link>
         ) : null}
-        <div
-          className={`flex items-center gap-2.5 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-2.5 py-2 ${collapsed ? "justify-center" : ""}`}
-        >
-          <Link
-            href="/me"
-            onClick={onNavigate}
-            className={`flex min-w-0 items-center gap-2.5 rounded-lg transition-opacity hover:opacity-80 ${collapsed ? "" : "flex-1"}`}
-            title="My KOS profile"
+        <form action="/api/auth/logout" method="post">
+          <button
+            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-kos-muted transition-colors hover:bg-white/[0.045] hover:text-kos-fg ${collapsed ? "justify-center" : ""}`}
+            aria-label="Sign out"
+            title={collapsed ? "Sign out" : undefined}
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-kos-panel text-[11px] font-bold">
-              {org.user.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={org.user.avatarUrl}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                org.user.name.slice(0, 2).toUpperCase()
-              )}
-            </div>
-            {collapsed ? null : (
-              <div className="min-w-0 leading-tight">
-                <div className="truncate text-xs font-medium">
-                  {org.user.name}
-                </div>
-                <div className="text-[11px] text-kos-muted">
-                  {org.isOwner ? "Owner" : "Member"} · My profile
-                </div>
-              </div>
-            )}
-          </Link>
-          {collapsed ? null : (
-            <form action="/api/auth/logout" method="post" className="ml-auto">
-              <button
-                className="rounded-lg p-1.5 text-kos-muted transition-colors hover:text-kos-fg"
-                aria-label="Sign out"
-                title="Sign out"
-              >
-                <IconLogout />
-              </button>
-            </form>
-          )}
-        </div>
+            <IconLogout className="text-kos-muted" />
+            {collapsed ? null : "Sign out"}
+          </button>
+        </form>
       </div>
     </div>
   );
