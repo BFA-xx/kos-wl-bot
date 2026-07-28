@@ -115,14 +115,31 @@ export async function POST(
       string,
       unknown
     >;
-    const input = parseRaidInput(body);
-    if ("error" in input)
-      return NextResponse.json({ error: input.error }, { status: 400 });
-    if (!guildIds.includes(input.guildId))
+    const requestedGuildId = String(body.guildId ?? "").trim();
+    if (!/^\d{5,25}$/u.test(requestedGuildId))
+      return NextResponse.json(
+        { error: "Select a Discord server." },
+        { status: 400 },
+      );
+    if (!guildIds.includes(requestedGuildId))
       return NextResponse.json(
         { error: "That Discord server is not connected to this organization." },
         { status: 403 },
       );
+    const requestedChannelId = String(body.channelId ?? "").trim();
+    const guildDefaults = requestedChannelId
+      ? null
+      : await prisma.guild.findUnique({
+          where: { id: requestedGuildId },
+          select: { defaultRaidChannelId: true },
+        });
+    const input = parseRaidInput({
+      ...body,
+      channelId:
+        requestedChannelId || guildDefaults?.defaultRaidChannelId || "",
+    });
+    if ("error" in input)
+      return NextResponse.json({ error: input.error }, { status: 400 });
     if (body.publish === true && input.endAt <= new Date())
       return NextResponse.json(
         { error: "A published raid must end in the future." },

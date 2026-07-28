@@ -13,7 +13,7 @@ const channelId = (value: unknown) => {
   return id;
 };
 
-/** Configure per-server dashboard defaults for new raffles. */
+/** Configure per-server dashboard defaults for new raffles and Raids. */
 export async function PATCH(
   req: Request,
   { params }: { params: { org: string; id: string } },
@@ -32,10 +32,12 @@ export async function PATCH(
 
     const body = await req.json().catch(() => ({}));
     const raffleChannelId = channelId(body.raffleChannelId);
+    const raidChannelId = channelId(body.raidChannelId);
     const announceChannelId = channelId(body.announceChannelId);
     const proofChannelId = channelId(body.proofChannelId);
     if (
       raffleChannelId === undefined ||
+      raidChannelId === undefined ||
       announceChannelId === undefined ||
       proofChannelId === undefined
     ) {
@@ -49,6 +51,7 @@ export async function PATCH(
       where: { id: params.id },
       data: {
         defaultRaffleChannelId: raffleChannelId,
+        defaultRaidChannelId: raidChannelId,
         defaultAnnounceChannelId: announceChannelId,
         defaultProofChannelId: proofChannelId,
       },
@@ -58,6 +61,7 @@ export async function PATCH(
       targetId: params.id,
       metadata: {
         raffleChannelId,
+        raidChannelId,
         announceChannelId,
         proofChannelId,
       },

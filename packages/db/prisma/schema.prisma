@@ -62,6 +62,8 @@ model Guild {
   managerRoleIds           String[] @default([])
   /// Default channel where new raffle posts should be published.
   defaultRaffleChannelId   String?
+  /// Default channel where new Raid posts and proof threads should be published.
+  defaultRaidChannelId     String?
   /// Default channel for winner announcements (overridable per raffle).
   defaultAnnounceChannelId String?
   /// Default channel for proof delivery (overridable per raffle).

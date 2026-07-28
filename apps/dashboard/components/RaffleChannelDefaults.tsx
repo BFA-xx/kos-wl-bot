@@ -12,6 +12,7 @@ interface ConnectedGuild {
   guildId: string;
   name: string;
   defaultRaffleChannelId: string | null;
+  defaultRaidChannelId: string | null;
   defaultAnnounceChannelId: string | null;
   defaultProofChannelId: string | null;
 }
@@ -24,6 +25,7 @@ interface Meta {
   hasBotToken: boolean;
   defaults?: {
     raffleChannelId: string | null;
+    raidChannelId: string | null;
     announceChannelId: string | null;
     proofChannelId: string | null;
   };
@@ -47,6 +49,7 @@ export function RaffleChannelDefaults() {
     [connected, guildId],
   );
   const [raffleChannelId, setRaffleChannelId] = useState("");
+  const [raidChannelId, setRaidChannelId] = useState("");
   const [announceChannelId, setAnnounceChannelId] = useState("");
   const [proofChannelId, setProofChannelId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -59,6 +62,7 @@ export function RaffleChannelDefaults() {
   useEffect(() => {
     if (!selected) return;
     setRaffleChannelId(selected.defaultRaffleChannelId ?? "");
+    setRaidChannelId(selected.defaultRaidChannelId ?? "");
     setAnnounceChannelId(selected.defaultAnnounceChannelId ?? "");
     setProofChannelId(selected.defaultProofChannelId ?? "");
     setMsg(null);
@@ -76,6 +80,7 @@ export function RaffleChannelDefaults() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           raffleChannelId,
+          raidChannelId,
           announceChannelId,
           proofChannelId,
         }),
@@ -84,7 +89,7 @@ export function RaffleChannelDefaults() {
     const body = await res.json().catch(() => ({}));
     setBusy(false);
     if (res.ok) {
-      setMsg("Default raffle channels saved.");
+      setMsg("Default channels saved.");
       mutate();
     } else {
       setMsg(body.error ?? "Couldn't save default channels.");
@@ -94,7 +99,7 @@ export function RaffleChannelDefaults() {
   if (data?.error) return <Empty>{data.error}</Empty>;
   if (!data) return <Empty>Loading connected servers…</Empty>;
   if (connected.length === 0) {
-    return <Empty>Connect a Discord server before setting raffle defaults.</Empty>;
+    return <Empty>Connect a Discord server before setting channel defaults.</Empty>;
   }
 
   return (
@@ -116,7 +121,7 @@ export function RaffleChannelDefaults() {
         </select>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <ChannelField
           label="Raffle posts"
           value={raffleChannelId}
@@ -124,6 +129,14 @@ export function RaffleChannelDefaults() {
           channels={meta?.channels ?? []}
           hasBotToken={meta?.hasBotToken ?? true}
           placeholder="Required for defaults"
+        />
+        <ChannelField
+          label="Raid posts"
+          value={raidChannelId}
+          onChange={setRaidChannelId}
+          channels={meta?.channels ?? []}
+          hasBotToken={meta?.hasBotToken ?? true}
+          emptyLabel="Select per Raid"
         />
         <ChannelField
           label="Winners"
@@ -144,8 +157,8 @@ export function RaffleChannelDefaults() {
       </div>
 
       <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3 text-xs text-kos-muted">
-        New raffles will prefill these channels automatically. Hosts can still
-        change any channel inside the raffle builder before publishing.
+        New raffles and Raids will prefill these channels automatically. Hosts
+        can still change them inside each builder before publishing.
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

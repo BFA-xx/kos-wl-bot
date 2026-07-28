@@ -6,7 +6,7 @@ import { fetchGuildChannels, fetchGuildRoles, hasBotToken } from "@/lib/discord-
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** Channels + roles for the New Raffle wizard. Needs DISCORD_BOT_TOKEN set. */
+/** Channels, roles, and defaults for the Raffle and Raid builders. */
 export async function GET(_req: Request, { params }: { params: { org: string; id: string } }) {
   try {
     const { guildIds } = await requireOrgAccess(params.org);
@@ -17,6 +17,7 @@ export async function GET(_req: Request, { params }: { params: { org: string; id
       where: { id: params.id },
       select: {
         defaultRaffleChannelId: true,
+        defaultRaidChannelId: true,
         defaultAnnounceChannelId: true,
         defaultProofChannelId: true,
         defaultPointsChannelId: true,
@@ -24,6 +25,7 @@ export async function GET(_req: Request, { params }: { params: { org: string; id
     });
     const defaults = {
       raffleChannelId: guild?.defaultRaffleChannelId ?? null,
+      raidChannelId: guild?.defaultRaidChannelId ?? null,
       announceChannelId: guild?.defaultAnnounceChannelId ?? null,
       proofChannelId: guild?.defaultProofChannelId ?? null,
       pointsChannelId: guild?.defaultPointsChannelId ?? null,

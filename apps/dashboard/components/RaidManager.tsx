@@ -32,7 +32,7 @@ interface GuildMeta {
   channels: DiscordOption[];
   roles: DiscordOption[];
   hasBotToken: boolean;
-  defaults?: { raffleChannelId: string | null };
+  defaults?: { raidChannelId: string | null };
 }
 
 interface Raid {
@@ -180,13 +180,13 @@ export function RaidManager() {
   }, [data?.guilds, form.guildId]);
 
   useEffect(() => {
-    if (form.guildId && !form.channelId && meta?.defaults?.raffleChannelId) {
+    if (form.guildId && !form.channelId && meta?.defaults?.raidChannelId) {
       setForm((current) => ({
         ...current,
-        channelId: meta.defaults?.raffleChannelId ?? "",
+        channelId: meta.defaults?.raidChannelId ?? "",
       }));
     }
-  }, [form.channelId, form.guildId, meta?.defaults?.raffleChannelId]);
+  }, [form.channelId, form.guildId, meta?.defaults?.raidChannelId]);
 
   const stats = useMemo(
     () => ({

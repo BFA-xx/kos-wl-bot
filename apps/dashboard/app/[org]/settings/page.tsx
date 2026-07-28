@@ -26,7 +26,7 @@ export default async function SettingsPage({
     <>
       <PageTitle
         title="Settings"
-        subtitle="Branding and connected Discord servers."
+        subtitle="Branding, connected Discord servers, and channel defaults."
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -49,7 +49,7 @@ export default async function SettingsPage({
         </Card>
 
         <Card className="lg:col-span-2">
-          <SectionTitle>Default raffle channels</SectionTitle>
+          <SectionTitle>Default channels</SectionTitle>
           <RaffleChannelDefaults />
         </Card>
 

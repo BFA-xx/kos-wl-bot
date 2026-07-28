@@ -45,6 +45,7 @@ export async function GET(_req: Request, { params }: { params: { org: string } }
         name: true,
         iconUrl: true,
         defaultRaffleChannelId: true,
+        defaultRaidChannelId: true,
         defaultAnnounceChannelId: true,
         defaultProofChannelId: true,
         defaultPointsChannelId: true,
@@ -59,6 +60,8 @@ export async function GET(_req: Request, { params }: { params: { org: string } }
       isPrimary: c.isPrimary,
       defaultRaffleChannelId:
         nameMap.get(c.guildId)?.defaultRaffleChannelId ?? null,
+      defaultRaidChannelId:
+        nameMap.get(c.guildId)?.defaultRaidChannelId ?? null,
       defaultAnnounceChannelId:
         nameMap.get(c.guildId)?.defaultAnnounceChannelId ?? null,
       defaultProofChannelId:

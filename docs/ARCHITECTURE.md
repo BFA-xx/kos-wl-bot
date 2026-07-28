@@ -442,6 +442,10 @@ duplicate policy. The dashboard writes `DRAFT` or `SCHEDULED`; the bot scheduler
 owns `LIVE`, `ENDED`, and `CANCELLED` Discord transitions. On start, the bot
 resolves or creates the reward role, posts the chosen safe mention with the
 branded embed, and creates a proof thread when channel permissions allow it.
+Each connected `Guild` can set `defaultRaidChannelId` from organization
+Settings. New Raid forms prefill that channel, the create API uses it when a
+client omits `channelId`, and a manager's explicit per-Raid selection always
+wins.
 
 Every Discord proof message becomes a `RaidSubmission` attached to one unique
 `RaidParticipant`. The verifier recognizes normalized X status links and
@@ -468,7 +472,9 @@ Raid permissions are `raid:view`, `raid:create`, `raid:edit`, and
 existing built-in roles while leaving custom roles unchanged. Corrective
 migration `20260728143000_remove_standalone_pings_add_raid_start_ping` adds
 `Raid.startPing`, removes the unintended `Ping` table/enums, and clears its
-permission strings.
+permission strings. Migration `20260728160000_default_raid_channel` adds the
+Raid-specific channel default and backfills it from each guild's existing
+raffle default to preserve the previous behavior.
 
 ## Deployment
 
