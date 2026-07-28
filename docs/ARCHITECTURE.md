@@ -1,6 +1,6 @@
 # KOS Architecture
 
-Last verified against production application commit `764316f` on 2026-07-28.
+Last verified against production application commit `8de71d0` on 2026-07-28.
 
 ## Product
 

@@ -3,7 +3,7 @@
 Last updated: 2026-07-28
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited production application commit: `764316f`
+Audited production application commit: `8de71d0`
 
 ## Current state
 
@@ -25,9 +25,10 @@ Phase 3 is implemented through S2.5:
   Discord commands for points, tasks, and rewards.
 - The first S3 Campaigns slice is committed, migrated, command-registered, and
   deployed across both Vercel dashboards and the EC2 bot.
-- Raids are deployed with Discord proof collection, reward roles, and the
-  established raffle-style start ping choice. The mistakenly introduced
-  standalone Ping workspace has been removed from production.
+- Raids are deployed with Discord proof collection, reward roles, the
+  established raffle-style start ping choice, and a per-server default Raid
+  channel in organization Settings. The mistakenly introduced standalone Ping
+  workspace has been removed from production.
 - Anonymous raffle sharing and configuration-only duplication are committed,
   pushed, and deployed on the production dashboard.
 - Member-aware community discovery and optional community X branding are
@@ -2070,6 +2071,56 @@ Recommended next task:
 - Run one controlled Raid in a scratch channel to exercise the selected start
   ping, proof capture, completion summary, and reward-role assignment through
   Discord with no production participant impact.
+
+### Default Raid channel — production deployed
+
+- Organization Settings now shows a **Raid posts** selector beside the existing
+  raffle, winner, and proof channel defaults for each connected Discord server.
+- `Guild.defaultRaidChannelId` is exposed through the guild list/meta APIs and
+  saved through the existing `settings:edit`-gated defaults route.
+- New Raid forms preselect the configured Raid channel. Managers can still
+  override it per Raid, and the create API falls back to the saved default when
+  a client omits `channelId`.
+- Migration `20260728160000_default_raid_channel` adds the nullable guild field
+  and backfills it from `defaultRaffleChannelId`, preserving the channel Raids
+  previously inherited implicitly.
+
+Verification:
+
+- Prisma validation and DB build — passed.
+- Root typecheck — passed.
+- Root tests — 89 passed: DB 9, bot 17, dashboard 63 across 20 files.
+- Placeholder-database dashboard production build — passed.
+- Application commit `8de71d0` was pushed to `main`; both Vercel dashboard
+  projects reported successful production deployments.
+- Production migration status — all 29 migrations applied. The migration row
+  is finished, both guilds remain present, the one existing raffle default was
+  copied into its Raid default, and both guilds match their prior raffle
+  default state.
+- The production Settings route resolves through the expected authentication
+  guard, and the unchanged EC2 bot remains ready in two guilds with successful
+  scheduler ticks. No bot restart was required.
+
+Modified files:
+
+- `apps/dashboard/app/[org]/settings/page.tsx`
+- `apps/dashboard/app/api/[org]/guilds/[id]/defaults/route.ts`
+- `apps/dashboard/app/api/[org]/guilds/[id]/meta/route.ts`
+- `apps/dashboard/app/api/[org]/guilds/route.ts`
+- `apps/dashboard/app/api/[org]/raids/route.test.ts`
+- `apps/dashboard/app/api/[org]/raids/route.ts`
+- `apps/dashboard/components/RaffleChannelDefaults.tsx`
+- `apps/dashboard/components/RaidManager.tsx`
+- `packages/db/prisma/migrations/20260728160000_default_raid_channel/migration.sql`
+- `packages/db/prisma/schema.prisma`
+- `docs/ARCHITECTURE.md`
+- `docs/HANDOFF.md`
+
+Recommended next task:
+
+- Run one controlled Raid in a scratch channel after choosing a distinct Raid
+  default in Settings, then confirm the builder prefills it and the Discord
+  post/thread lands in that channel.
 
 ### Superseded initial Raid and standalone Ping rollout — production deployed
 
