@@ -36,6 +36,10 @@ export function OrgShell({
       home: "dashboard",
       campaign: "campaigns",
       campaigns: "campaigns",
+      raid: "raids",
+      raids: "raids",
+      ping: "pings",
+      pings: "pings",
       collab: "collabs",
       collabs: "collabs",
       collaboration: "collabs",
@@ -151,7 +155,7 @@ export function OrgShell({
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search raffle #, project, collab, or jump…"
+                  placeholder="Search raffle #, project, raid, or jump…"
                   className="kos-input h-10 pl-9"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-md border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-kos-muted sm:block">

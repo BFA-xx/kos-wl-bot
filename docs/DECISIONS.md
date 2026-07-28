@@ -576,3 +576,32 @@ status transitions.
 **Why:** Task verification, raffle entry, scheduling, and points already have
 audited sources of truth. Composing them avoids parallel campaign-only evidence
 or balance systems and preserves Discord/web parity and idempotency.
+
+## D051 — Raids use durable Discord proof with honest X classification
+
+**Status:** Accepted; implemented locally, not deployed
+**Decision:** Model each Raid as an organization-owned, guild-targeted
+lifecycle executed by the bot through the shared database. Collect ordinary
+Discord thread messages as immutable submissions, keep one aggregate
+participant row, persist supported screenshot bytes privately, fingerprint
+duplicates, and let staff review `PENDING` evidence. Treat the original target
+status URL as repost-shaped proof and a distinct X status URL as
+comment-or-quote-shaped proof. Do not claim comment-versus-quote or engagement
+verification that the current free-tier X integration cannot prove.
+**Why:** Direct thread submission is the lowest-friction member experience,
+but Discord attachment URLs expire and X status URL shapes do not expose
+engagement type. Durable evidence plus explicit uncertainty automates the
+reliable parts without creating false verification claims.
+
+## D052 — Raid rewards and Pings remain bot-owned side effects
+
+**Status:** Accepted; implemented locally, not deployed
+**Decision:** Let the bot resolve or create Raid reward roles, assign them to
+valid participants, lock proof threads, post staff summaries, and deliver due
+Pings. Dashboard routes only persist authorized intent. Ping mention expansion
+must use explicit Discord `allowedMentions` for none, here, everyone, or a
+selected role allowlist; message text cannot create arbitrary mentions.
+**Why:** Role and message operations require the connected Discord gateway and
+background execution. Reusing the established database-mediated scheduler
+keeps Vercel stateless, makes delivery observable, and allows existing
+role-gated and weighted raffle eligibility to consume Raid rewards naturally.

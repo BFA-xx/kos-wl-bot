@@ -23,6 +23,8 @@ dashboard.
 | **Auto scheduling** | Opens at start, closes at end, locks entries, draws winners — no manual action. |
 | **Winner selection** | Crypto-secure, **verifiable** draw (HMAC over a committed random seed); no duplicates. |
 | **Announcements** | Auto-posts winners with real pings. |
+| **Raids** | Scheduled Discord proof threads with X/image detection, duplicate handling, staff review, participant export, and automatic reward roles. |
+| **Pings** | Draft, schedule, retry, duplicate, and audit Discord announcements with safe role, `@here`, or `@everyone` mentions. |
 | **Proof system** | Auto-generates a PDF report, winner CSV, and a premium PNG winner card, delivered to a proof channel. |
 | **Wallet collection** | DMs winners a wallet form (ETH / SOL / BTC); addresses validated and **encrypted at rest**. |
 | **Anti-alt** | Min account age, min server age, required roles, required reaction; suspicious-account flagging. |
@@ -30,7 +32,7 @@ dashboard.
 | **Reroll** | `/raffle reroll` — single, multiple, or entire pool; fully logged. |
 | **Admin commands** | create / edit / delete / end / reroll / list / stats / export, gated by manager roles. |
 | **Audit logging** | Every meaningful action is written to an immutable log table. |
-| **Dashboard** | Next.js + Tailwind: overview, raffles, participants, winners, reroll, blacklist, CSV export, live polling. |
+| **Dashboard** | Next.js + Tailwind: overview, raffles, raids, pings, campaigns, participants, rewards, analytics, exports, and live polling. |
 
 ---
 
@@ -106,7 +108,7 @@ cp .env apps/dashboard/.env.local   # or: ln -s ../../.env apps/dashboard/.env.l
 ## ✦ Using it in Discord
 
 1. Invite the bot (see [docs/DISCORD-SETUP.md](docs/DISCORD-SETUP.md)) — enable
-   the **Server Members Intent**.
+   the **Server Members Intent** and **Message Content Intent**.
 2. Grant a manager role (anyone with *Manage Server* / *Administrator* already
    qualifies). Configure manager roles via the `guilds.managerRoleIds` column or
    the seed script.

@@ -75,6 +75,8 @@ model Guild {
   raffles    Raffle[]
   blacklists Blacklist[]
   logs       Log[]
+  raids      Raid[]
+  pings      Ping[]
 
   @@map("guilds")
 }
@@ -117,6 +119,8 @@ model User {
   notifications        Notification[]
   collaborationWallets CollaborationWallet[]
   campaignEnrollments  CampaignEnrollment[]
+  raidParticipants     RaidParticipant[]
+  raidSubmissions      RaidSubmission[]
 
   /// Last time the user opened their notification feed (announcement unread
   /// counts are computed against this instead of materializing rows).
@@ -512,6 +516,8 @@ model Organization {
   rewards                   Reward[]
   rewardRedemptions         RewardRedemption[]
   campaigns                 Campaign[]
+  raids                     Raid[]
+  pings                     Ping[]
   collaborations            Collaboration[]
   collaborationPartners     CollaborationPartner[]
   collaborationTags         CollaborationTag[]
@@ -1016,6 +1022,54 @@ enum CampaignEnrollmentStatus {
   COMPLETED
 }
 
+enum RaidStatus {
+  DRAFT
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+enum RaidProofType {
+  AUTO
+  COMMENT
+  QUOTE
+  REPOST
+  IMAGE
+  ANY
+}
+
+enum RaidSubmissionStatus {
+  PENDING
+  VALID
+  INVALID
+  DUPLICATE
+}
+
+enum RaidProofKind {
+  X_REPOST
+  X_COMMENT_OR_QUOTE
+  IMAGE
+  MIXED
+  UNKNOWN
+}
+
+enum PingStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum PingMentionMode {
+  NONE
+  HERE
+  EVERYONE
+  ROLES
+}
+
 /// A reusable task built by an organization. Referenced by raffles now and
 /// campaigns in S3 — build once, attach anywhere.
 model TaskDefinition {
@@ -1215,6 +1269,159 @@ model CampaignEnrollment {
   @@index([userId, updatedAt])
   @@index([campaignId, status])
   @@map("campaign_enrollments")
+}
+
+/// A scheduled Discord engagement raid owned by an organization. The
+/// dashboard persists intent and the long-running bot owns every Discord-side
+/// effect: role creation, post/thread lifecycle, proof intake, and rewards.
+model Raid {
+  id                        String        @id @default(cuid())
+  organizationId            String
+  guildId                   String
+  title                     String
+  tweetUrls                 String[]      @default([])
+  instructions              String
+  proofType                 RaidProofType @default(AUTO)
+  status                    RaidStatus    @default(DRAFT)
+  startAt                   DateTime
+  endAt                     DateTime
+  channelId                 String
+  staffChannelId            String?
+  messageId                 String?
+  threadId                  String?
+  rewardRoleId              String?
+  rewardRoleName            String
+  rewardRoleCreated         Boolean       @default(false)
+  participantLimit          Int?
+  allowMultipleSubmissions  Boolean       @default(false)
+  announcementMessage       String?
+  validParticipantCount     Int           @default(0)
+  failureReason             String?
+  summaryChannelId          String?
+  summaryMessageId          String?
+  roleAssignmentCount       Int           @default(0)
+  roleAssignmentFailedCount Int           @default(0)
+  startedAt                 DateTime?
+  endedAt                   DateTime?
+  cancelledAt               DateTime?
+  finalizedAt               DateTime?
+  editRequestedAt           DateTime?
+  createdById               String
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  guild        Guild             @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  participants RaidParticipant[]
+  submissions  RaidSubmission[]
+
+  @@index([organizationId, status])
+  @@index([guildId, status])
+  @@index([status, startAt])
+  @@index([status, endAt])
+  @@index([threadId])
+  @@map("raids")
+}
+
+/// One member's current aggregate state in a raid. Individual attempts remain
+/// in RaidSubmission so duplicates and retries stay auditable.
+model RaidParticipant {
+  id                  String               @id @default(cuid())
+  raidId              String
+  userId              String
+  status              RaidSubmissionStatus @default(PENDING)
+  roleAssignedAt      DateTime?
+  roleAssignmentError String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  raid        Raid             @relation(fields: [raidId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  submissions RaidSubmission[]
+
+  @@unique([raidId, userId])
+  @@index([raidId, status])
+  @@index([userId, updatedAt])
+  @@map("raid_participants")
+}
+
+/// A proof message submitted in the raid thread/channel. Message ids and
+/// fingerprints make gateway retries and repeated evidence idempotent.
+model RaidSubmission {
+  id            String               @id @default(cuid())
+  raidId        String
+  participantId String
+  userId        String
+  messageId     String               @unique
+  channelId     String
+  content       String?
+  status        RaidSubmissionStatus @default(PENDING)
+  proofKind     RaidProofKind        @default(UNKNOWN)
+  fingerprint   String
+  evidence      Json?
+  reviewedAt    DateTime?
+  reviewedById  String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  raid        Raid                       @relation(fields: [raidId], references: [id], onDelete: Cascade)
+  participant RaidParticipant            @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  user        User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attachments RaidSubmissionAttachment[]
+
+  @@index([raidId, status])
+  @@index([raidId, userId])
+  @@index([participantId, createdAt])
+  @@index([raidId, fingerprint])
+  @@map("raid_submissions")
+}
+
+/// Durable screenshot proof. Discord attachment URLs expire, so supported
+/// images are copied into shared PostgreSQL storage at submission time.
+model RaidSubmissionAttachment {
+  id           String   @id @default(cuid())
+  submissionId String
+  fileName     String
+  contentType  String
+  byteLength   Int
+  data         Bytes
+  createdAt    DateTime @default(now())
+
+  submission RaidSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@map("raid_submission_attachments")
+}
+
+/// A dashboard-composed Discord announcement. The bot claims due rows before
+/// sending so dashboard/serverless requests never need direct gateway access.
+model Ping {
+  id             String          @id @default(cuid())
+  organizationId String
+  guildId        String
+  title          String
+  message        String
+  channelId      String
+  mentionMode    PingMentionMode @default(NONE)
+  roleIds        String[]        @default([])
+  linkUrl        String?
+  status         PingStatus      @default(DRAFT)
+  scheduledAt    DateTime?
+  sendingAt      DateTime?
+  sentAt         DateTime?
+  messageId      String?
+  failureReason  String?
+  createdById    String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  guild        Guild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([guildId, status])
+  @@index([status, scheduledAt])
+  @@map("pings")
 }
 
 /// Attach a task to a raffle. Required tasks gate entry.

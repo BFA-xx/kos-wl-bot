@@ -12,7 +12,7 @@
 2. **Reset Token** → copy it → this is `DISCORD_TOKEN`. Keep it secret.
 3. Under **Privileged Gateway Intents**, enable:
    - ✅ **Server Members Intent** (required — role checks & server-join-age anti-alt)
-   - Message Content Intent is **not** required.
+   - ✅ **Message Content Intent** (required — Raid proof URL detection)
 
 ## 3. Invite the bot
 
@@ -26,12 +26,17 @@ Build an OAuth2 URL (Developer Portal → **OAuth2 → URL Generator**):
   - Attach Files
   - Read Message History
   - Mention Everyone _(only if you want winner pings to bypass suppression)_
+  - Add Reactions
+  - Manage Roles _(Raid reward roles)_
+  - Create Public Threads
+  - Send Messages in Threads
+  - Manage Threads
   - Use Slash Commands
 
 Example:
 
 ```
-https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=248832&scope=bot%20applications.commands
+https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=326686469184&scope=bot%20applications.commands
 ```
 
 Open the URL and add the bot to your server.
@@ -71,6 +76,7 @@ Create (or pick) channels for:
 - **winner announcements** (`announce_channel`),
 - **proof delivery** (`proof_channel`).
 - **points and rewards activity**.
+- **raid posts, proof threads, and staff summaries**.
 
 Make sure the bot can **View / Send / Embed / Attach Files** where each channel
 needs them.
@@ -83,9 +89,11 @@ web organization.
 | Symptom                           | Fix                                                                                 |
 | --------------------------------- | ----------------------------------------------------------------------------------- |
 | Commands don't appear             | Run `pnpm deploy:commands`; for global, wait up to 1h, or set `DISCORD_GUILD_ID`.   |
-| "Used disallowed intents" on boot | Enable **Server Members Intent** in the portal.                                     |
+| "Used disallowed intents" on boot | Enable **Server Members Intent** and **Message Content Intent** in the portal.      |
 | Buttons do nothing                | Bot lacks Send/Embed permission in that channel.                                    |
 | Winner DMs not received           | The winner has DMs disabled; export wallets later via dashboard / `/raffle export`. |
+| Raid role was not assigned        | Put the KOS bot role above the reward role and grant **Manage Roles**.              |
+| Raid thread was not created       | Grant Create/Send/Manage Threads in the configured raid channel.                    |
 
 For staged rollout limits, verification milestones, and the onboarding smoke
 test, see `docs/ROLLOUT.md`.

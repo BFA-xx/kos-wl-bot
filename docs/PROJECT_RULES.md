@@ -96,6 +96,11 @@
   the first web/Discord Campaigns slice are deployed. Future campaign schema
   changes must preserve migration-before-runtime ordering. Points, rewards,
   campaigns, and weighted draws must remain Discord + web parity features.
+- Raids and Pings are implemented locally behind additive migration
+  `20260728120000_raids_and_pings` and are not deployed. Apply that migration
+  before releasing either dashboard or bot. Raid X evidence is proof-shape
+  classification, not paid engagement verification; private screenshot bytes
+  require tenant-authorized access.
 - `/c/*` community pages require sign-in.
   `/r/:community-x-:project-:id` is the only anonymous raffle surface and must
   never expose organization controls, entrant identities, or hidden entry

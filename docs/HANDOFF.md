@@ -1,6 +1,6 @@
 # Engineering Handoff
 
-Last updated: 2026-07-19
+Last updated: 2026-07-28
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
 Audited production application commit: `060ab72`
@@ -25,6 +25,10 @@ Phase 3 is implemented through S2.5:
   Discord commands for points, tasks, and rewards.
 - The first S3 Campaigns slice is committed, migrated, command-registered, and
   deployed across both Vercel dashboards and the EC2 bot.
+- Raids and Pings are implemented and fully built locally. They are not
+  committed, migrated, or deployed; production still requires the additive
+  migration, dashboard release, Discord intent/permission update, and bot
+  release.
 - Anonymous raffle sharing and configuration-only duplication are committed,
   pushed, and deployed on the production dashboard.
 - Member-aware community discovery and optional community X branding are
@@ -1965,6 +1969,149 @@ Recommended next task:
 - Add optional organization custom domains so approved communities can share
   the same branded paths from their own raffle subdomain without changing the
   canonical identity or tenant authorization model.
+
+### Raids and Pings dashboard/Discord slice — implemented locally, not deployed
+
+- The organization sidebar now has permission-gated **Raids** and **Pings**
+  workspaces in the existing dark command-center design.
+- Raid managers can create/edit/publish/cancel/duplicate raids with one or more
+  normalized X post URLs, instructions, Auto/Comment/Quote/Repost/Image/Any
+  proof shapes, start/end time, Discord raid/staff channels, existing or new
+  reward role, optional participant cap, announcement copy, and multiple-proof
+  policy.
+- The bot owns scheduled start/end transitions. It resolves or creates the
+  reward role, posts the Raid embed, opens a proof thread when permitted,
+  ingests ordinary Discord messages, reacts/replies with immediate status,
+  locks the thread at completion, assigns roles, and posts/updates the staff
+  summary.
+- Proof intake normalizes X/Twitter status URLs, identifies the original target
+  link versus a distinct comment/quote-shaped status, detects screenshots,
+  fingerprints exact duplicates, enforces one valid proof by default, and
+  maintains Pending/Valid/Invalid/Duplicate submission history.
+- Comment and quote post URLs are intentionally classified together because
+  their public URL shape is identical without X read access. Screenshot-only
+  evidence for a link task is Pending for staff review. This is proof-shape
+  verification under the established KOS attestation policy, not paid X
+  engagement verification.
+- Up to three supported 5 MB screenshots per message are copied from temporary
+  Discord URLs into private PostgreSQL byte records and served only through
+  `raid:view` tenant-authorized routes.
+- Participant review updates the aggregate participant state and participant
+  cap atomically. A Pending participant promoted after completion queues bot
+  reward reconciliation; an already rewarded participant cannot be invalidated
+  after completion.
+- The Raid dashboard includes Active/Scheduled/Completed views, aggregate
+  analytics, participant/submission review, failure feedback, role-assignment
+  state, and tenant-authorized CSV export.
+- The Ping dashboard supports draft, send-now, scheduling, edit, cancel, retry,
+  duplicate, delivery history, optional links, and none/@here/@everyone/role
+  mention modes. The bot atomically claims due Pings, recovers stale
+  interrupted sends, records Sent/Failed state, and uses explicit
+  `allowedMentions` so user copy cannot expand arbitrary mentions.
+  Delivery also uses the Ping ID as an enforced Discord nonce so an interrupted
+  retry cannot create a second announcement.
+- Migration `20260728120000_raids_and_pings` creates Raid, participant,
+  submission, durable attachment, and Ping records plus the new permission
+  strings. It grants expected permissions to existing built-in roles and
+  leaves custom organization roles unchanged.
+- Existing standard, weighted, role-gated, FCFS, and GTD raffle behavior needs
+  no parallel integration table: it already evaluates live Discord roles, so a
+  successfully assigned Raid role is immediately eligible for those products.
+- No slash command definitions changed. Command re-registration is not needed
+  for this slice.
+
+Verification:
+
+- Placeholder-database Prisma validation — passed.
+- `pnpm --filter @kos/db build` — passed.
+- `pnpm --filter @kos/db test` — 9 tests passed.
+- `pnpm --filter @kos/bot typecheck` — passed.
+- `pnpm --filter @kos/bot test` — 19 tests passed.
+- `pnpm --filter @kos/bot build` — passed.
+- `pnpm --filter @kos/dashboard typecheck` — passed.
+- `pnpm --filter @kos/dashboard test` — 20 files, 61 tests passed.
+- Placeholder-database dashboard production build — passed and emitted the new
+  `/[org]/raids`, `/[org]/pings`, and API routes.
+- `git diff --check` — passed before final documentation update and must be
+  rerun at handoff.
+- No production migration, Discord message/role action, authenticated browser
+  pass, commit, push, or deployment was performed.
+
+Modified files:
+
+- `README.md`
+- `apps/bot/src/client.ts`
+- `apps/bot/src/commands/config.ts`
+- `apps/bot/src/index.ts`
+- `apps/bot/src/services/pingService.test.ts`
+- `apps/bot/src/services/pingService.ts`
+- `apps/bot/src/services/raidService.test.ts`
+- `apps/bot/src/services/raidService.ts`
+- `apps/bot/src/services/scheduler.ts`
+- `apps/dashboard/app/[org]/pings/page.tsx`
+- `apps/dashboard/app/[org]/raids/page.tsx`
+- `apps/dashboard/app/api/[org]/pings/[id]/duplicate/route.ts`
+- `apps/dashboard/app/api/[org]/pings/[id]/route.ts`
+- `apps/dashboard/app/api/[org]/pings/route.ts`
+- `apps/dashboard/app/api/[org]/raids/[id]/duplicate/route.ts`
+- `apps/dashboard/app/api/[org]/raids/[id]/export/route.ts`
+- `apps/dashboard/app/api/[org]/raids/[id]/route.ts`
+- `apps/dashboard/app/api/[org]/raids/[id]/submissions/[submissionId]/attachments/[attachmentId]/route.ts`
+- `apps/dashboard/app/api/[org]/raids/[id]/submissions/[submissionId]/route.ts`
+- `apps/dashboard/app/api/[org]/raids/route.ts`
+- `apps/dashboard/components/OrgShell.tsx`
+- `apps/dashboard/components/OrgSidebar.tsx`
+- `apps/dashboard/components/PingManager.tsx`
+- `apps/dashboard/components/RaidManager.tsx`
+- `apps/dashboard/lib/discord-oauth.ts`
+- `apps/dashboard/lib/format.ts`
+- `apps/dashboard/lib/permissions.ts`
+- `apps/dashboard/lib/ping-input.test.ts`
+- `apps/dashboard/lib/ping-input.ts`
+- `apps/dashboard/lib/raid-input.test.ts`
+- `apps/dashboard/lib/raid-input.ts`
+- `packages/db/prisma/migrations/20260728120000_raids_and_pings/migration.sql`
+- `packages/db/prisma/schema.prisma`
+- `packages/db/src/index.ts`
+- `packages/db/src/raids.test.ts`
+- `packages/db/src/raids.ts`
+- `docs/AGENTS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/DECISIONS.md`
+- `docs/DISCORD-SETUP.md`
+- `docs/HANDOFF.md`
+- `docs/PROJECT_RULES.md`
+- `docs/ROLLOUT.md`
+
+Assumptions:
+
+- “Ping tab” means a manager-facing Discord announcement composer/scheduler
+  with controlled broad/role mentions and delivery history.
+- If a Raid staff channel is omitted, the bot may use the configured guild log
+  channel and then the raid channel as fallbacks.
+- Public X URLs are accepted under the existing link-and-attest product policy;
+  KOS does not have paid X read verification in this slice.
+- The long-running bot remains a single scheduler process as documented.
+
+Technical debt:
+
+- Public X status URLs cannot prove the submitting Discord member owns the X
+  account or distinguish a reply from a quote. Paid/API-backed enrichment can
+  replace the verifier boundary later without changing Raid records.
+- Durable screenshot bytes live in PostgreSQL. A future retention policy and
+  private object-store backend will be more economical at large Raid volume.
+- Message Content is a privileged Discord intent and becomes an external
+  approval dependency as KOS scales.
+- The Raid thread flow has no Submit Participation button yet; direct message
+  submission is the shipped path.
+- Live Discord role/thread and authenticated dashboard interaction still need a
+  controlled acceptance test after migration and permission rollout.
+
+Recommended next task:
+
+- Enable Message Content Intent and the new bot permissions in a test guild,
+  apply the additive migration, deploy dashboard then bot, and run a short
+  no-@everyone acceptance Raid plus a role-only Ping before production rollout.
 
 ## Confirmed invariants and current product policies
 

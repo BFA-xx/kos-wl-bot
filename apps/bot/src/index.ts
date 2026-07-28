@@ -9,6 +9,7 @@ import { ensureGuild } from "./services/userService.js";
 import { entryLimiter } from "./interactions/buttons.js";
 import { startInternalApi } from "./http/server.js";
 import type { Server } from "node:http";
+import { handleRaidSubmission } from "./services/raidService.js";
 
 async function main() {
   const client = createClient();
@@ -39,6 +40,20 @@ async function main() {
 
   client.on(Events.InteractionCreate, (interaction) => {
     void handleInteraction(interaction);
+  });
+
+  client.on(Events.MessageCreate, (message) => {
+    void handleRaidSubmission(message).catch((err) =>
+      logger.error(
+        {
+          err,
+          guildId: message.guildId,
+          channelId: message.channelId,
+          messageId: message.id,
+        },
+        "raid submission handler failed",
+      ),
+    );
   });
 
   client.on(Events.GuildCreate, (guild) => {

@@ -30,6 +30,8 @@ const NAV: {
   soon?: boolean;
 }[] = [
   { seg: "dashboard", label: "Dashboard", Icon: IconGrid },
+  { seg: "raids", label: "Raids", Icon: IconUsers },
+  { seg: "pings", label: "Pings", Icon: IconMegaphone },
   { seg: "campaigns", label: "Campaigns", Icon: IconMegaphone },
   { seg: "collabs", label: "Collab Hub", Icon: IconTag },
   { seg: "raffles", label: "Raffles", Icon: IconTicket },
@@ -68,6 +70,10 @@ export function OrgSidebarContent({
             return org.isOwner || org.permissions.includes("collab:view");
           if (item.seg === "campaigns")
             return org.isOwner || org.permissions.includes("campaign:view");
+          if (item.seg === "raids")
+            return org.isOwner || org.permissions.includes("raid:view");
+          if (item.seg === "pings")
+            return org.isOwner || org.permissions.includes("ping:view");
           return true;
         }).map(({ seg, label, Icon, soon }) => {
           const active = isActive(seg);

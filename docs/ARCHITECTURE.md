@@ -14,6 +14,10 @@ Phase 3 is delivered through S2.5 plus the first S3/S4 slices. The first
 Campaigns slice is deployed across both Vercel dashboards, Neon, and the EC2
 bot.
 
+Raids and Pings are implemented locally as the next additive platform slice.
+They are not deployed until migration `20260728120000_raids_and_pings` is
+applied and both dashboard and bot runtimes are released together.
+
 ## Runtime topology
 
 ```mermaid
@@ -30,7 +34,8 @@ flowchart LR
 
 - `apps/bot`: long-running Discord gateway process. It owns Discord
   interactions, scheduling, final draws, announcements, wallet DMs, and proof
-  generation.
+  generation. It also owns Raid threads/proof intake/reward roles and scheduled
+  Ping delivery.
 - `apps/dashboard`: Next.js 14 App Router application. It owns Discord OAuth,
   organization administration, member pages, signed-in community pages,
   anonymous public raffle pages, task verification, and web entry.
@@ -41,6 +46,7 @@ flowchart LR
 The bot still exposes an authenticated localhost control API on port 4000, but
 production dashboard actions no longer depend on it. Vercel queues publish,
 edit, end, and reroll work in PostgreSQL; the bot scheduler consumes it.
+Raid lifecycle requests and Pings use the same database-mediated boundary.
 
 ## Repository layout
 
@@ -425,6 +431,50 @@ reconstructed.
 The Hub reports relationship cards and source raffles as distinct totals.
 Repeated GTD/FCFS rounds can share one collaboration, while the organization
 Raffles page remains the one-row-per-raffle archive.
+
+## Raids and Pings
+
+`Raid` is organization-owned and also references one connected `Guild`.
+Managers configure X post URLs, instructions, proof shape, start/end times,
+Discord raid and staff channels, a reward role, an optional participant limit,
+and duplicate policy. The dashboard writes `DRAFT` or `SCHEDULED`; the bot
+scheduler owns `LIVE`, `ENDED`, and `CANCELLED` Discord transitions. On start,
+the bot resolves or creates the reward role, posts the branded embed, and
+creates a proof thread when channel permissions allow it.
+
+Every Discord proof message becomes a `RaidSubmission` attached to one unique
+`RaidParticipant`. The verifier recognizes normalized X status links and
+supported image attachments, distinguishes the original target link from a
+new comment/quote status, detects exact fingerprints, and enforces one valid
+submission unless the raid enables multiples. Comment and quote URLs have the
+same public URL shape, so they are represented honestly as
+`X_COMMENT_OR_QUOTE`; KOS does not claim paid X read/API verification.
+Screenshot-only evidence for a link task remains `PENDING` for staff review.
+Supported Discord images are copied into private
+`RaidSubmissionAttachment` byte records with count, type, size, and timeout
+limits so signed CDN URLs cannot expire out of the audit history.
+
+At the end, the bot ignores further messages, locks/archives the thread, assigns
+the resolved Discord role to every valid participant, and creates or updates a
+staff summary. Because existing standard, weighted, role-gated, FCFS, and GTD
+raffles evaluate live Discord roles, no parallel raffle entitlement table is
+needed. Manual review after completion can promote a pending participant and
+queues reward reconciliation; a rewarded participant cannot be invalidated
+after the raid closes.
+
+`Ping` is an organization/guild-owned durable announcement record. Dashboard
+users may save a draft, schedule delivery, send now, cancel, retry, edit, or
+duplicate. The scheduler atomically claims due rows through `SENDING`, recovers
+stale interrupted claims, and records `SENT` or `FAILED`. Per-message allowed
+mentions are explicit: none, `@here`, `@everyone`, or an allowlist of selected
+role IDs. User-authored message text is never allowed to expand arbitrary
+mentions. A stable enforced Discord nonce uses the Ping ID to prevent an
+interrupted scheduler retry from creating a second message.
+
+Raid permissions are `raid:view`, `raid:create`, `raid:edit`, and
+`raid:export`. Ping permissions are `ping:view`, `ping:create`, and
+`ping:edit`. The additive migration grants the expected access to existing
+built-in roles while leaving custom roles unchanged.
 
 ## Deployment
 

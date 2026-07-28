@@ -342,9 +342,35 @@ async function diagnose(
     [PermissionFlagsBits.EmbedLinks, "Embed Links"],
     [PermissionFlagsBits.AttachFiles, "Attach Files"],
     [PermissionFlagsBits.ReadMessageHistory, "Read Message History"],
+    [PermissionFlagsBits.ManageRoles, "Manage Roles"],
+    [PermissionFlagsBits.CreatePublicThreads, "Create Public Threads"],
+    [PermissionFlagsBits.SendMessagesInThreads, "Send Messages in Threads"],
+    [PermissionFlagsBits.ManageThreads, "Manage Threads"],
   ]);
   const results: string[] = [];
   let ready = Boolean(connection && botMember);
+
+  if (botMember) {
+    const raidPermissions = [
+      PermissionFlagsBits.ManageRoles,
+      PermissionFlagsBits.CreatePublicThreads,
+      PermissionFlagsBits.SendMessagesInThreads,
+      PermissionFlagsBits.ManageThreads,
+    ];
+    const missing = raidPermissions.filter(
+      (permission) => !botMember.permissions.has(permission),
+    );
+    if (missing.length > 0) {
+      ready = false;
+      results.push(
+        `❌ **Raid automation:** missing ${missing
+          .map((permission) => permissionLabels.get(permission) ?? "permission")
+          .join(", ")}`,
+      );
+    } else {
+      results.push("✅ **Raid automation:** roles and threads ready");
+    }
+  }
 
   for (const check of channelChecks) {
     if (!check.id) {
@@ -389,7 +415,7 @@ async function diagnose(
     .setTitle(`${ready ? "✅" : "⚠️"} KOS rollout diagnostic`)
     .setDescription(
       ready
-        ? "This server is configured for raffles, proofs, points, and rewards."
+        ? "This server is configured for raffles, raids, pings, proofs, points, and rewards."
         : "Complete the items below before inviting the wider community.",
     )
     .addFields(
@@ -398,7 +424,7 @@ async function diagnose(
       {
         name: "Developer Portal",
         value:
-          "Server Members Intent must stay enabled for role and server-age checks. Mention Everyone is optional unless live raffle pings should notify everyone.",
+          "Server Members Intent and Message Content Intent must stay enabled for role checks and raid proof detection. Mention Everyone is optional unless raffle or Ping notifications use it.",
       },
     )
     .setFooter({ text: KOS.footer });

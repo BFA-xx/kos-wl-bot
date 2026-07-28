@@ -30,3 +30,4 @@ export default prisma;
 export * from "@prisma/client";
 export { Prisma } from "@prisma/client";
 export * from "./campaigns.js";
+export * from "./raids.js";

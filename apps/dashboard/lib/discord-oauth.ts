@@ -207,12 +207,12 @@ export function guildIconUrl(g: {
  */
 export function botInviteUrl(guildId?: string): string {
   const clientId = process.env.DISCORD_CLIENT_ID ?? "";
-  // View Channels, Send Messages, Embed Links, Attach Files, Read History,
-  // Mention Everyone, Add Reactions, Use External Emojis, Manage Messages.
+  // Existing raffle permissions plus Manage Roles and public-thread
+  // create/send/manage permissions required by Raids.
   const params = new URLSearchParams({
     client_id: clientId,
     scope: "bot applications.commands",
-    permissions: "519232",
+    permissions: "326686469184",
   });
   if (guildId) {
     params.set("guild_id", guildId);

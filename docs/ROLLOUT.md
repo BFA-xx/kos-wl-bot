@@ -21,22 +21,23 @@ one active PM2 process.
 In the Discord Developer Portal:
 
 1. Enable **Guild Install** with `bot` and `applications.commands` scopes.
-2. Enable **Server Members Intent**. KOS needs it for membership, role, and
-   server-age eligibility checks.
+2. Enable **Server Members Intent** and **Message Content Intent**. KOS needs
+   them for membership/role checks and Raid proof URL detection.
 3. Use this minimum-permission install URL, replacing the client ID:
 
    ```text
-   https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=248832&scope=bot%20applications.commands
+   https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=326686469184&scope=bot%20applications.commands
    ```
 
-   Permission integer `248832` grants View Channels, Send Messages, Embed
-   Links, Attach Files, Read Message History, and Mention Everyone. Remove
-   Mention Everyone in the URL if communities do not need live raffle pings;
-   `/config diagnose` reports the permissions that configured channels need.
+   Permission integer `326686469184` includes the established raffle
+   permissions plus Add Reactions, Manage Roles, and public-thread
+   create/send/manage permissions for Raids. Mention Everyone remains relevant
+   only when raffles or Pings use broad mentions. `/config diagnose` reports
+   missing rollout permissions.
 
-4. Before 100 guilds, submit Discord application verification and the
-   privileged-intent approval. Start that process early; it is an external
-   launch dependency.
+4. Before 100 guilds, submit Discord application verification and approval for
+   both privileged intents. Start that process early; it is an external launch
+   dependency.
 5. Register production commands globally:
 
    ```bash
@@ -59,7 +60,11 @@ An administrator should complete this sequence in every new server:
    connection warning.
 6. Create a short, low-stakes test raffle; enter from one ordinary member
    account; close it; confirm the announcement and all proof artifacts.
-7. Test `/tasks`, `/points`, `/rewards`, and `/wallet register` from an ordinary
+7. Create a short Raid from the dashboard; submit one X link and one screenshot
+   from ordinary member accounts; confirm thread locking and role assignment.
+8. Send a no-mention test Ping, then a role-only Ping. Do not use @everyone for
+   onboarding checks.
+9. Test `/tasks`, `/points`, `/rewards`, and `/wallet register` from an ordinary
    member account, not only an administrator account.
 
 Configured manager roles are authorized at runtime. `/raffle` and `/blacklist`
