@@ -203,6 +203,10 @@ export default async function RaffleDetailPage({
             Details
           </h3>
           <dl className="space-y-2 text-sm">
+            <Row
+              label="Hosted by"
+              value={raffle.createdByName ?? raffle.createdById}
+            />
             <Row label="Start" value={fmtDate(raffle.startAt)} />
             <Row label="End" value={fmtDate(raffle.endAt)} />
             <Row label="Drawn" value={fmtDate(raffle.drawnAt)} />

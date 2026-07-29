@@ -39,6 +39,7 @@ export async function GET(
             { projectName: { contains: q, mode: "insensitive" } },
             { title: { contains: q, mode: "insensitive" } },
             { description: { contains: q, mode: "insensitive" } },
+            { createdByName: { contains: q, mode: "insensitive" } },
           ],
         }
       : undefined;

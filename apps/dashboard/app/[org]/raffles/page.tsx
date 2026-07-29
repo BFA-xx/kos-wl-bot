@@ -28,6 +28,7 @@ interface Raffle {
   entryCount: number;
   startAt: string;
   endAt: string;
+  createdByName: string | null;
 }
 
 const FILTERS = [
@@ -137,6 +138,9 @@ function RafflesInner() {
                     <Link href={`/${org}/raffles/${r.id}`} className="block">
                       <div className="font-medium">{r.projectName}</div>
                       <div className="text-xs text-kos-muted">{r.title}</div>
+                      <div className="mt-0.5 text-[11px] text-kos-muted/80">
+                        Hosted by {r.createdByName ?? "Unknown host"}
+                      </div>
                     </Link>
                   </td>
                   <td className="px-4 py-3">

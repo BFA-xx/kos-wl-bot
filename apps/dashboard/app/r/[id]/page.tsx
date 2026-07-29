@@ -105,9 +105,11 @@ export default async function ShareableRafflePage({
   const kind = inferRaffleKind(raffle.title);
   const bannerUrl = canonicalRaffleBannerUrl(raffle.id, raffle.bannerUrl);
   const projectUrl = sanitizeHttpUrl(raffle.externalUrl);
+  const hostAvatarUrl = sanitizeHttpUrl(raffle.createdByAvatar);
   const logoUrl =
     sanitizeHttpUrl(organization.logoUrl) ||
     sanitizeHttpUrl(raffle.guild.iconUrl);
+  const hostImageUrl = hostAvatarUrl || logoUrl || undefined;
 
   return (
     <main className="kos-public-dark dark min-h-dvh overflow-hidden bg-[#0A0A0A] text-white [color-scheme:dark]">
@@ -190,15 +192,17 @@ export default async function ShareableRafflePage({
               <aside className="rounded-3xl border border-white/[0.09] bg-white/[0.035] p-4 shadow-[0_1px_0_rgba(255,255,255,0.05)_inset] sm:p-5">
                 <div className="flex items-center gap-3">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.06] text-xs font-bold">
-                    {logoUrl ? (
+                    {hostImageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={logoUrl}
-                        alt={`${organization.name} logo`}
+                        src={hostImageUrl}
+                        alt=""
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      organization.name.slice(0, 2).toUpperCase()
+                      (raffle.createdByName || organization.name)
+                        .slice(0, 2)
+                        .toUpperCase()
                     )}
                   </div>
                   <div className="min-w-0">
@@ -206,10 +210,12 @@ export default async function ShareableRafflePage({
                       Hosted by
                     </div>
                     <div className="truncate text-sm font-semibold text-white">
-                      {organization.name}
+                      {raffle.createdByName || organization.name}
                     </div>
                     <div className="truncate text-xs text-kos-muted">
-                      {raffle.guild.name || "Discord community"}
+                      {raffle.createdByName
+                        ? `${organization.name} · ${raffle.guild.name || "Discord community"}`
+                        : raffle.guild.name || "Discord community"}
                     </div>
                   </div>
                 </div>
