@@ -1,9 +1,9 @@
 # Engineering Handoff
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited production application commit: `8de71d0`
+Audited production application commit: `7560c66`
 
 ## Current state
 
@@ -31,6 +31,8 @@ Phase 3 is implemented through S2.5:
   workspace has been removed from production.
 - Anonymous raffle sharing and configuration-only duplication are committed,
   pushed, and deployed on the production dashboard.
+- Raffle management lists, details, public share pages, and search now expose
+  the recorded individual host while retaining community context.
 - Member-aware community discovery and optional community X branding are
   migrated and deployed.
 - Organization-scoped member activity pages and community-branded Discord
@@ -2121,6 +2123,43 @@ Recommended next task:
 - Run one controlled Raid in a scratch channel after choosing a distinct Raid
   default in Settings, then confirm the builder prefills it and the Discord
   post/thread lands in that channel.
+
+### Raffle host visibility — production deployed
+
+- The organization Raffles table now shows **Hosted by** beneath each raffle
+  title, using the creator identity already recorded by Discord/dashboard
+  raffle creation.
+- Raffle details include the host in the Details card.
+- Public raffle pages show the recorded host name/avatar while retaining the
+  organization and Discord server as community context. Historical rows without
+  a stored display name fall back to the existing community identity.
+- Organization raffle search now matches `createdByName`, so managers can find
+  raffles by host.
+- No schema migration or bot restart was required; Discord raffle embeds
+  already displayed the same recorded host identity.
+
+Verification:
+
+- Root typecheck — passed.
+- Dashboard tests — 63 passed across 20 files.
+- Placeholder-database dashboard production build — passed.
+- Application commit `7560c66` was pushed to `main`; both Vercel dashboard
+  projects reported successful production deployments.
+- Production public raffle canary returned `200` with the **Hosted by** block
+  present.
+- Production data audit found 91 raffles, including 75 with stored host names;
+  unnamed historical rows use the documented fallback.
+- An unrelated concurrent `apps/dashboard/components/CollabHub.tsx` worktree
+  change was preserved, excluded from this commit, and not deployed.
+
+Modified files:
+
+- `apps/dashboard/app/[org]/raffles/[id]/page.tsx`
+- `apps/dashboard/app/[org]/raffles/page.tsx`
+- `apps/dashboard/app/api/[org]/raffles/route.ts`
+- `apps/dashboard/app/r/[id]/page.tsx`
+- `docs/ARCHITECTURE.md`
+- `docs/HANDOFF.md`
 
 ### Superseded initial Raid and standalone Ping rollout — production deployed
 
