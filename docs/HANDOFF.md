@@ -91,14 +91,14 @@ Phase 3 is implemented through S2.5:
 - Authenticated production visual regression now also covers Member Raffles
   and Collab Hub with deterministic API fixtures on desktop Chromium and Pixel 7. Four reviewed baselines are committed, and the standard gitignored auth
   state is reusable without an extra storage-state environment override.
-- Wider-rollout bot hardening is deployed: eight slash commands are globally
+- Wider-rollout bot hardening is deployed: nine slash commands are globally
   registered, configured manager roles can use the manager surface without a
   conflicting Discord visibility gate, scheduler work is bounded, concurrent
   outcomes are atomically claimed, onboarding has `/config diagnose`, and the
   deploy script now fails unless tests, build, registration, PM2, and a real
   scheduler tick succeed.
 
-## Discord and web member verification — release candidate 2026-07-29
+## Discord and web member verification — production release 2026-07-29
 
 ### Delivered
 
@@ -167,6 +167,32 @@ Phase 3 is implemented through S2.5:
 - DB, bot, and dashboard production builds pass. The dashboard build used the
   documented placeholder `DATABASE_URL` and emitted its complete route set.
 - Focused Prettier formatting and `git diff --check` pass.
+
+### Production release evidence
+
+- Application commit `43b2881` was pushed to `origin/main`.
+- Both additive verification migrations were applied to the production Neon
+  database before the application push. All 31 migrations are complete, all
+  nine web-control columns are present, and the initial production counts were
+  zero settings, zero codes, zero verification logs, and zero pending control
+  requests.
+- The standard EC2 deploy passed its frozen install, shared DB build, 28 bot
+  tests, bot production build, global command registration, PM2 restart, and
+  scheduler readiness gate. Discord reports nine global commands, including
+  `verification` with `setup`, `status`, `publish`, and
+  `code:create/edit/delete/list`.
+- Post-restart bot health is `ok: true`, `ready: true` with two guilds and
+  successful scheduler ticks. PM2 is online, the current error log is empty,
+  and startup logs show the bot, scheduler, internal API, and guild metadata
+  sync all initialized normally.
+- Both Vercel projects reported success for application commit `43b2881`.
+  Signed-in production QA on `https://raffle.koslabs.app/kos/settings`
+  confirmed the disabled-by-default setup state, zero metrics, live Discord
+  channel and role metadata, welcome/modal controls, code creation with role
+  grants and limits, and the activity empty state. Browser console inspection
+  found no warnings or errors.
+- Production QA was read-only. No verification settings, codes, channel
+  overwrites, roles, member state, or panel messages were created or changed.
 
 ### Modified files
 
@@ -240,15 +266,13 @@ Phase 3 is implemented through S2.5:
   log-channel smoke test still requires a dedicated scratch guild/member; the
   release does not enable verification on an existing production guild by
   default because doing so would alter member access.
-- The migration has not been applied to production; commands have not been
-  registered; and no commit, push, bot restart, or deployment was performed.
 
 ### Recommended next task
 
-Apply the additive migration before runtime deployment, deploy the bot, register
-the ninth global slash command, then use a controlled scratch server/member to
-verify join lockdown, modal code entry, rules acceptance, one-use exhaustion,
-role hierarchy failure logging, success roles, and disable/overwrite cleanup.
+Use a controlled scratch server/member to verify join lockdown, modal code
+entry, rules acceptance, one-use exhaustion, role hierarchy failure logging,
+success roles, and disable/overwrite cleanup before enabling verification in a
+live community.
 
 ## Campaigns first slice — production release 2026-07-19
 
