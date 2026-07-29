@@ -235,6 +235,7 @@ export function CollabHub() {
   const [sort, setSort] = useState("updatedAt");
   const [direction, setDirection] = useState<"asc" | "desc">("desc");
   const [showCreate, setShowCreate] = useState(false);
+  const [showControls, setShowControls] = useState(true);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [importingHistory, setImportingHistory] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -258,6 +259,7 @@ export function CollabHub() {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const searchRef = useRef<HTMLInputElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(
@@ -272,7 +274,8 @@ export function CollabHub() {
         target?.tagName === "SELECT";
       if (event.key === "/" && !typing) {
         event.preventDefault();
-        searchRef.current?.focus();
+        setShowControls(true);
+        window.requestAnimationFrame(() => searchRef.current?.focus());
       }
       if (!typing && event.key.toLowerCase() === "n" && canCreate)
         setShowCreate(true);
@@ -289,9 +292,27 @@ export function CollabHub() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  function closeControls() {
+    setShowControls(false);
+    setShowMobileFilters(false);
+    setShowSave(false);
+    window.setTimeout(() => {
+      workspaceRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 300);
+  }
+
   function changeView(next: View) {
     setView(next);
     window.localStorage.setItem(`kos-collab-view:${org}`, next);
+    closeControls();
+  }
+
+  function changeMode(next: HubMode) {
+    setMode(next);
+    setShowControls(true);
   }
 
   const query = useMemo(() => {
@@ -493,6 +514,8 @@ export function CollabHub() {
     setDirection(criteria.direction === "asc" ? "asc" : "desc");
     if (savedView && ["BOARD", "TABLE", "CALENDAR"].includes(savedView)) {
       changeView(savedView as View);
+    } else {
+      closeControls();
     }
   }
 
@@ -523,13 +546,13 @@ export function CollabHub() {
           <>
             <button
               className={`kos-btn ${mode === "WORKSPACE" ? "border-blue-400/30 bg-blue-500/10" : ""}`}
-              onClick={() => setMode("WORKSPACE")}
+              onClick={() => changeMode("WORKSPACE")}
             >
               Workspace
             </button>
             <button
               className={`kos-btn ${mode === "PARTNERS" ? "border-blue-400/30 bg-blue-500/10" : ""}`}
-              onClick={() => setMode("PARTNERS")}
+              onClick={() => changeMode("PARTNERS")}
             >
               Partner directory
             </button>
@@ -545,7 +568,16 @@ export function CollabHub() {
         }
       />
 
-      <div className="relative z-10 mb-6 rounded-3xl border border-white/[0.08] bg-[#0D0D0D]/95 p-3 shadow-xl backdrop-blur-2xl lg:sticky lg:top-[65px]">
+      <div
+        data-testid="collab-controls"
+        aria-hidden={!showControls}
+        inert={showControls ? undefined : true}
+        className={`relative z-10 rounded-3xl bg-[#0D0D0D]/95 shadow-xl backdrop-blur-2xl transition-all duration-300 ease-out ${
+          showControls
+            ? "mb-6 max-h-[40rem] translate-y-0 border border-white/[0.08] p-3 opacity-100"
+            : "pointer-events-none mb-0 max-h-0 -translate-y-6 overflow-hidden border-0 p-0 opacity-0"
+        }`}
+      >
         <div className="gap-3 xl:flex xl:items-center">
           <div className="flex min-w-0 flex-1 gap-2">
             <div className="relative min-w-0 flex-1">
@@ -710,6 +742,12 @@ export function CollabHub() {
                 </button>
               ) : null}
               <button
+                className="kos-btn h-9 px-3 text-xs"
+                onClick={closeControls}
+              >
+                Done
+              </button>
+              <button
                 className="kos-btn ml-auto h-9 px-3 text-xs"
                 onClick={exportCsv}
               >
@@ -740,64 +778,75 @@ export function CollabHub() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
-            <button
-              type="button"
-              className={`rounded-2xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${status === "ACTIVE" ? "ring-2 ring-blue-400" : ""}`}
-              onClick={() => setStatus(status === "ACTIVE" ? "" : "ACTIVE")}
-              aria-pressed={status === "ACTIVE"}
-              aria-label="Filter the workspace to active collaborations"
-            >
-              <StatCard
-                accent
-                label="Active"
-                value={data?.summary.active ?? "—"}
-                hint={
-                  status === "ACTIVE" ? "showing active" : "click to filter"
-                }
-              />
-            </button>
-            <StatCard
-              label="Raffles"
-              value={data?.summary.linkedRafflesAllTime ?? "—"}
-              hint="connected records"
-            />
-            <StatCard
-              label="Hosting today"
-              value={data?.summary.hostingToday ?? "—"}
-              hint="scheduled now"
-            />
-            <StatCard
-              label="Waiting wallets"
-              value={data?.summary.waitingForWallets ?? "—"}
-              hint="needs collection"
-            />
-            <StatCard
-              label="Ready"
-              value={data?.summary.readyForSubmission ?? "—"}
-              hint="for submission"
-            />
-            <StatCard
-              label="Completed"
-              value={data?.summary.completedAllTime ?? "—"}
-              hint="all time"
-            />
-            <StatCard
-              label="WL spots"
-              value={data?.summary.totalWlSpots ?? "—"}
-              hint="total collected"
-            />
-          </div>
+          {view !== "CALENDAR" ? (
+            <>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
+                <button
+                  type="button"
+                  className={`rounded-2xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${status === "ACTIVE" ? "ring-2 ring-blue-400" : ""}`}
+                  onClick={() => setStatus(status === "ACTIVE" ? "" : "ACTIVE")}
+                  aria-pressed={status === "ACTIVE"}
+                  aria-label="Filter the workspace to active collaborations"
+                >
+                  <StatCard
+                    accent
+                    label="Active"
+                    value={data?.summary.active ?? "—"}
+                    hint={
+                      status === "ACTIVE" ? "showing active" : "click to filter"
+                    }
+                  />
+                </button>
+                <StatCard
+                  label="Raffles"
+                  value={data?.summary.linkedRafflesAllTime ?? "—"}
+                  hint="connected records"
+                />
+                <StatCard
+                  label="Hosting today"
+                  value={data?.summary.hostingToday ?? "—"}
+                  hint="scheduled now"
+                />
+                <StatCard
+                  label="Waiting wallets"
+                  value={data?.summary.waitingForWallets ?? "—"}
+                  hint="needs collection"
+                />
+                <StatCard
+                  label="Ready"
+                  value={data?.summary.readyForSubmission ?? "—"}
+                  hint="for submission"
+                />
+                <StatCard
+                  label="Completed"
+                  value={data?.summary.completedAllTime ?? "—"}
+                  hint="all time"
+                />
+                <StatCard
+                  label="WL spots"
+                  value={data?.summary.totalWlSpots ?? "—"}
+                  hint="total collected"
+                />
+              </div>
 
-          <div className="mt-5 grid gap-4 lg:grid-cols-3">
-            <ActivityPanel data={data} org={org} />
-            <DeadlinePanel data={data} org={org} />
-            <NotesPanel data={data} org={org} />
-          </div>
+              <div className="mt-5 grid gap-4 lg:grid-cols-3">
+                <ActivityPanel data={data} org={org} />
+                <DeadlinePanel data={data} org={org} />
+                <NotesPanel data={data} org={org} />
+              </div>
+            </>
+          ) : null}
 
-          <div className="mt-8 flex items-end justify-between gap-4">
+          <div
+            ref={workspaceRef}
+            className={`${view === "CALENDAR" ? "mt-2" : "mt-8"} flex scroll-mt-20 items-end justify-between gap-4`}
+          >
             <div>
-              <SectionTitle>Pipeline workspace</SectionTitle>
+              <SectionTitle>
+                {view === "CALENDAR"
+                  ? "Collaboration calendar"
+                  : "Pipeline workspace"}
+              </SectionTitle>
               <p className="text-sm text-kos-muted">
                 {rows.length} grouped collaboration
                 {rows.length === 1 ? "" : "s"} in this view ·{" "}
@@ -809,9 +858,24 @@ export function CollabHub() {
               {isLoading ? (
                 <span className="text-xs text-kos-muted">Refreshing…</span>
               ) : null}
-              <Link href={`/${org}/raffles`} className="kos-btn h-9 text-xs">
-                View all {data?.summary.linkedRafflesAllTime ?? ""} raffles
-              </Link>
+              {!showControls ? (
+                <button
+                  className="kos-btn h-9 text-xs"
+                  onClick={() => setShowControls(true)}
+                >
+                  Filters & views
+                  {[status, priority, owner, tag].filter(Boolean).length ? (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] text-white">
+                      {[status, priority, owner, tag].filter(Boolean).length}
+                    </span>
+                  ) : null}
+                </button>
+              ) : null}
+              {view !== "CALENDAR" ? (
+                <Link href={`/${org}/raffles`} className="kos-btn h-9 text-xs">
+                  View all {data?.summary.linkedRafflesAllTime ?? ""} raffles
+                </Link>
+              ) : null}
             </div>
           </div>
 
@@ -888,7 +952,7 @@ export function CollabHub() {
             )}
           </div>
 
-          <AnalyticsPanel data={data} />
+          {view !== "CALENDAR" ? <AnalyticsPanel data={data} /> : null}
         </>
       )}
 
@@ -1632,6 +1696,94 @@ function Sortable({
   );
 }
 
+type CalendarTone = "blue" | "amber" | "red" | "violet";
+
+interface CalendarEvent {
+  row: CollabRow;
+  label: string;
+  tone: CalendarTone;
+  date: Date;
+}
+
+const CALENDAR_TONE_STYLES: Record<
+  CalendarTone,
+  { fill: string; text: string; dot: string }
+> = {
+  blue: { fill: "#1D2B42", text: "#C7DCFF", dot: "#60A5FA" },
+  amber: { fill: "#382A16", text: "#FDE7B1", dot: "#FBBF24" },
+  red: { fill: "#3A1E22", text: "#FFD0D6", dot: "#FB7185" },
+  violet: { fill: "#2F2446", text: "#E5D8FF", dot: "#A78BFA" },
+};
+
+function buildCalendarEvents(
+  rows: CollabRow[],
+  year: number,
+  monthIndex: number,
+) {
+  const events = rows.flatMap<CalendarEvent>((row) => {
+    const rowEvents: CalendarEvent[] = [];
+    const addEvent = (
+      value: string | null,
+      label: string,
+      tone: CalendarTone,
+    ) => {
+      if (!value) return;
+      rowEvents.push({ row, label, tone, date: new Date(value) });
+    };
+
+    addEvent(row.hostAt, "Host", "blue");
+    addEvent(row.walletSubmissionDeadline, "Wallets", "amber");
+    addEvent(row.collaborationDeadline, "Deadline", "red");
+    addEvent(row.followUpAt, "Follow up", "violet");
+    row.reminders.forEach((reminder) =>
+      addEvent(reminder.dueAt, "Reminder", "violet"),
+    );
+    return rowEvents;
+  });
+
+  return events
+    .filter(
+      (event) =>
+        event.date.getFullYear() === year &&
+        event.date.getMonth() === monthIndex,
+    )
+    .sort((left, right) => left.date.getTime() - right.date.getTime());
+}
+
+function roundedCanvasRect(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + safeRadius, y);
+  context.arcTo(x + width, y, x + width, y + height, safeRadius);
+  context.arcTo(x + width, y + height, x, y + height, safeRadius);
+  context.arcTo(x, y + height, x, y, safeRadius);
+  context.arcTo(x, y, x + width, y, safeRadius);
+  context.closePath();
+}
+
+function fitCanvasText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+) {
+  if (context.measureText(text).width <= maxWidth) return text;
+  let fitted = text;
+  while (
+    fitted.length > 1 &&
+    context.measureText(`${fitted}…`).width > maxWidth
+  ) {
+    fitted = fitted.slice(0, -1);
+  }
+  return `${fitted}…`;
+}
+
 function CalendarView({
   rows,
   org,
@@ -1643,6 +1795,7 @@ function CalendarView({
   month: Date;
   setMonth: (date: Date) => void;
 }) {
+  const [exporting, setExporting] = useState(false);
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
   const firstWeekday = new Date(year, monthIndex, 1).getDay();
@@ -1651,99 +1804,275 @@ function CalendarView({
     { length: Math.ceil((firstWeekday + days) / 7) * 7 },
     (_, index) => index - firstWeekday + 1,
   );
-  const events = (day: number) => {
-    const dateKey = new Date(year, monthIndex, day).toDateString();
-    return rows.flatMap((row) => [
-      ...(row.hostAt && new Date(row.hostAt).toDateString() === dateKey
-        ? [{ row, label: "Host", tone: "blue" }]
-        : []),
-      ...(row.walletSubmissionDeadline &&
-      new Date(row.walletSubmissionDeadline).toDateString() === dateKey
-        ? [{ row, label: "Wallets", tone: "amber" }]
-        : []),
-      ...(row.collaborationDeadline &&
-      new Date(row.collaborationDeadline).toDateString() === dateKey
-        ? [{ row, label: "Deadline", tone: "red" }]
-        : []),
-      ...(row.followUpAt && new Date(row.followUpAt).toDateString() === dateKey
-        ? [{ row, label: "Follow up", tone: "violet" }]
-        : []),
-      ...row.reminders
-        .filter(
-          (reminder) => new Date(reminder.dueAt).toDateString() === dateKey,
-        )
-        .map(() => ({ row, label: "Reminder", tone: "violet" })),
-    ]);
-  };
-  const agenda = rows
-    .flatMap((row) => [
-      ...(row.hostAt
-        ? [{ row, label: "Host", tone: "blue", date: new Date(row.hostAt) }]
-        : []),
-      ...(row.walletSubmissionDeadline
-        ? [
-            {
-              row,
-              label: "Wallets",
-              tone: "amber",
-              date: new Date(row.walletSubmissionDeadline),
-            },
-          ]
-        : []),
-      ...(row.collaborationDeadline
-        ? [
-            {
-              row,
-              label: "Deadline",
-              tone: "red",
-              date: new Date(row.collaborationDeadline),
-            },
-          ]
-        : []),
-      ...(row.followUpAt
-        ? [
-            {
-              row,
-              label: "Follow up",
-              tone: "violet",
-              date: new Date(row.followUpAt),
-            },
-          ]
-        : []),
-      ...row.reminders.map((reminder) => ({
-        row,
-        label: reminder.title || "Reminder",
-        tone: "violet",
-        date: new Date(reminder.dueAt),
-      })),
-    ])
-    .filter(
-      (event) =>
-        event.date.getFullYear() === year &&
-        event.date.getMonth() === monthIndex,
-    )
-    .sort((left, right) => left.date.getTime() - right.date.getTime());
+  const weekRows = cells.length / 7;
+  const visibleEventLimit = weekRows === 6 ? 2 : 3;
+  const agenda = useMemo(
+    () => buildCalendarEvents(rows, year, monthIndex),
+    [monthIndex, rows, year],
+  );
+  const eventsByDay = useMemo(() => {
+    const grouped = new Map<number, CalendarEvent[]>();
+    agenda.forEach((event) => {
+      const day = event.date.getDate();
+      grouped.set(day, [...(grouped.get(day) ?? []), event]);
+    });
+    return grouped;
+  }, [agenda]);
+  const monthLabel = month.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+
+  function exportCalendarImage() {
+    setExporting(true);
+    try {
+      const width = 1920;
+      const headerHeight = 220;
+      const weekdayHeight = 72;
+      const rowHeight = 220;
+      const footerHeight = 72;
+      const height =
+        headerHeight + weekdayHeight + weekRows * rowHeight + footerHeight;
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Canvas is not supported.");
+
+      context.fillStyle = "#0A0A0B";
+      context.fillRect(0, 0, width, height);
+
+      const headerGradient = context.createLinearGradient(0, 0, width, 0);
+      headerGradient.addColorStop(0, "#111827");
+      headerGradient.addColorStop(0.52, "#101114");
+      headerGradient.addColorStop(1, "#211637");
+      context.fillStyle = headerGradient;
+      context.fillRect(0, 0, width, headerHeight);
+      context.fillStyle = "#3B82F6";
+      context.fillRect(0, 0, width, 8);
+
+      context.textBaseline = "alphabetic";
+      context.fillStyle = "#93C5FD";
+      context.font =
+        '700 24px "SF Pro Display", Inter, ui-sans-serif, system-ui, sans-serif';
+      context.fillText("KOS  ·  COLLAB CALENDAR", 64, 62);
+      context.fillStyle = "#FFFFFF";
+      context.font =
+        '700 64px "SF Pro Display", Inter, ui-sans-serif, system-ui, sans-serif';
+      context.fillText(monthLabel, 64, 138);
+      context.fillStyle = "#A1A1AA";
+      context.font =
+        '500 23px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
+      context.fillText(
+        `${agenda.length} scheduled item${agenda.length === 1 ? "" : "s"}  ·  ${rows.length} collaboration${rows.length === 1 ? "" : "s"}`,
+        66,
+        181,
+      );
+
+      const orgLabel = org.replaceAll("-", " ").toUpperCase();
+      context.font =
+        '700 20px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
+      const orgWidth = context.measureText(orgLabel).width + 46;
+      roundedCanvasRect(context, width - orgWidth - 64, 54, orgWidth, 48, 24);
+      context.fillStyle = "rgba(255,255,255,0.08)";
+      context.fill();
+      context.fillStyle = "#E4E4E7";
+      context.textAlign = "center";
+      context.fillText(orgLabel, width - orgWidth / 2 - 64, 86);
+      context.textAlign = "left";
+
+      context.fillStyle = "#151517";
+      context.fillRect(0, headerHeight, width, weekdayHeight);
+      const cellWidth = width / 7;
+      const weekdayLabels = [
+        "SUNDAY",
+        "MONDAY",
+        "TUESDAY",
+        "WEDNESDAY",
+        "THURSDAY",
+        "FRIDAY",
+        "SATURDAY",
+      ];
+      context.fillStyle = "#A1A1AA";
+      context.font =
+        '700 19px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
+      context.textAlign = "center";
+      weekdayLabels.forEach((label, index) => {
+        context.fillText(
+          label,
+          index * cellWidth + cellWidth / 2,
+          headerHeight + 45,
+        );
+      });
+      context.textAlign = "left";
+
+      const gridTop = headerHeight + weekdayHeight;
+      const now = new Date();
+      cells.forEach((day, index) => {
+        const column = index % 7;
+        const row = Math.floor(index / 7);
+        const x = column * cellWidth;
+        const y = gridTop + row * rowHeight;
+        const inMonth = day >= 1 && day <= days;
+
+        context.fillStyle = inMonth
+          ? column === 0 || column === 6
+            ? "#111113"
+            : "#131315"
+          : "#0D0D0F";
+        context.fillRect(x, y, cellWidth, rowHeight);
+        context.strokeStyle = "#2A2A2F";
+        context.lineWidth = 1;
+        context.strokeRect(x, y, cellWidth, rowHeight);
+        if (!inMonth) return;
+
+        const isToday =
+          now.getFullYear() === year &&
+          now.getMonth() === monthIndex &&
+          now.getDate() === day;
+        if (isToday) {
+          roundedCanvasRect(context, x + 14, y + 13, 38, 34, 12);
+          context.fillStyle = "#2563EB";
+          context.fill();
+        }
+        context.fillStyle = isToday ? "#FFFFFF" : "#A1A1AA";
+        context.font =
+          '600 22px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
+        context.fillText(String(day), x + 24, y + 39);
+
+        const dayEvents = eventsByDay.get(day) ?? [];
+        const maxExportEvents = 5;
+        dayEvents.slice(0, maxExportEvents).forEach((event, eventIndex) => {
+          const eventX = x + 14;
+          const eventY = y + 58 + eventIndex * 30;
+          const eventWidth = cellWidth - 28;
+          const tone = CALENDAR_TONE_STYLES[event.tone];
+          roundedCanvasRect(context, eventX, eventY, eventWidth, 25, 7);
+          context.fillStyle = tone.fill;
+          context.fill();
+          context.fillStyle = tone.dot;
+          context.beginPath();
+          context.arc(eventX + 13, eventY + 12.5, 3.5, 0, Math.PI * 2);
+          context.fill();
+          context.fillStyle = tone.text;
+          context.font =
+            '600 15px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
+          context.fillText(
+            fitCanvasText(
+              context,
+              `${event.label} · ${event.row.projectName}`,
+              eventWidth - 34,
+            ),
+            eventX + 24,
+            eventY + 18,
+          );
+        });
+        if (dayEvents.length > maxExportEvents) {
+          context.fillStyle = "#71717A";
+          context.font =
+            '600 14px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
+          context.fillText(
+            `+${dayEvents.length - maxExportEvents} more`,
+            x + 18,
+            y + 58 + maxExportEvents * 30 + 18,
+          );
+        }
+      });
+
+      const footerTop = gridTop + weekRows * rowHeight;
+      context.fillStyle = "#101012";
+      context.fillRect(0, footerTop, width, footerHeight);
+      context.font =
+        '600 17px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
+      let legendX = 64;
+      (
+        [
+          ["Host", "blue"],
+          ["Wallets", "amber"],
+          ["Deadline", "red"],
+          ["Follow up / Reminder", "violet"],
+        ] as [string, CalendarTone][]
+      ).forEach(([label, tone]) => {
+        context.fillStyle = CALENDAR_TONE_STYLES[tone].dot;
+        context.beginPath();
+        context.arc(legendX, footerTop + 36, 6, 0, Math.PI * 2);
+        context.fill();
+        context.fillStyle = "#A1A1AA";
+        context.fillText(label, legendX + 16, footerTop + 42);
+        legendX += context.measureText(label).width + 70;
+      });
+      context.textAlign = "right";
+      context.fillStyle = "#71717A";
+      context.fillText(
+        `Exported ${new Date().toLocaleDateString(undefined, {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })}`,
+        width - 64,
+        footerTop + 42,
+      );
+      context.textAlign = "left";
+
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          setExporting(false);
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+        link.href = url;
+        link.download = `KOS-${org}-collab-calendar-${monthKey}.png`;
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+        setExporting(false);
+      }, "image/png");
+    } catch {
+      setExporting(false);
+    }
+  }
+
   return (
-    <div className="kos-card overflow-hidden">
-      <div className="flex items-center justify-between border-b border-white/[0.08] p-4">
-        <button
-          className="kos-btn h-9"
-          onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}
-        >
-          ←
-        </button>
-        <h3 className="font-semibold">
-          {month.toLocaleDateString(undefined, {
-            month: "long",
-            year: "numeric",
-          })}
-        </h3>
-        <button
-          className="kos-btn h-9"
-          onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}
-        >
-          →
-        </button>
+    <div
+      data-testid="collab-calendar"
+      className="kos-card overflow-hidden md:flex md:h-[calc(100dvh-10rem)] md:min-h-[560px] md:max-h-[900px] md:flex-col"
+    >
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] p-4 sm:px-5">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-300">
+            Collaboration schedule
+          </div>
+          <h3 className="mt-0.5 text-lg font-semibold">{monthLabel}</h3>
+          <p className="text-xs text-kos-muted">
+            {agenda.length} scheduled item{agenda.length === 1 ? "" : "s"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            className="kos-btn h-9 px-3 text-xs"
+            onClick={exportCalendarImage}
+            disabled={exporting}
+          >
+            {exporting ? "Preparing PNG…" : "Export PNG"}
+          </button>
+          <div className="inline-flex rounded-2xl border border-white/[0.08] bg-white/[0.025] p-1">
+            <button
+              className="kos-btn h-8 w-9 rounded-xl border-0 p-0"
+              onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}
+              aria-label="Previous month"
+            >
+              ←
+            </button>
+            <button
+              className="kos-btn h-8 w-9 rounded-xl border-0 p-0"
+              onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}
+              aria-label="Next month"
+            >
+              →
+            </button>
+          </div>
+        </div>
       </div>
       <div className="space-y-2 p-3 md:hidden">
         {agenda.map((event, index) => (
@@ -1779,41 +2108,54 @@ function CalendarView({
           </div>
         ) : null}
       </div>
-      <div className="hidden md:block">
-        <div className="grid grid-cols-7 border-b border-white/[0.08] bg-white/[0.02] text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-kos-muted">
+      <div className="hidden min-h-0 flex-1 md:flex md:flex-col">
+        <div className="grid shrink-0 grid-cols-7 border-b border-white/[0.08] bg-white/[0.02] text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-kos-muted">
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-            <div key={day} className="py-2">
+            <div key={day} className="py-2.5">
               {day}
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7">
-          {cells.map((day, index) => (
-            <div
-              key={index}
-              className={`min-h-24 border-b border-r border-white/[0.06] p-1.5 sm:min-h-32 sm:p-2 ${day < 1 || day > days ? "bg-black/10" : ""}`}
-            >
-              {day >= 1 && day <= days ? (
-                <>
-                  <div className="mb-1 text-xs text-kos-muted">{day}</div>
-                  <div className="space-y-1">
-                    {events(day)
-                      .slice(0, 4)
-                      .map((event, eventIndex) => (
-                        <Link
-                          key={`${event.row.id}-${event.label}-${eventIndex}`}
-                          href={`/${org}/collabs/${event.row.id}`}
-                          title={`${event.label}: ${event.row.projectName}`}
-                          className={`block truncate rounded-md px-1.5 py-1 text-[9px] sm:text-[10px] ${event.tone === "blue" ? "bg-blue-500/15 text-blue-200" : event.tone === "amber" ? "bg-amber-500/15 text-amber-200" : event.tone === "red" ? "bg-red-500/15 text-red-200" : "bg-violet-500/15 text-violet-200"}`}
-                        >
-                          {event.label} · {event.row.projectName}
-                        </Link>
-                      ))}
-                  </div>
-                </>
-              ) : null}
-            </div>
-          ))}
+        <div
+          className="grid min-h-0 flex-1 grid-cols-7"
+          style={{
+            gridTemplateRows: `repeat(${weekRows}, minmax(0, 1fr))`,
+          }}
+        >
+          {cells.map((day, index) => {
+            const dayEvents = eventsByDay.get(day) ?? [];
+            return (
+              <div
+                key={index}
+                className={`min-h-0 overflow-hidden border-b border-r border-white/[0.06] p-1.5 sm:p-2 ${day < 1 || day > days ? "bg-black/10" : ""}`}
+              >
+                {day >= 1 && day <= days ? (
+                  <>
+                    <div className="mb-1 text-xs text-kos-muted">{day}</div>
+                    <div className="space-y-1">
+                      {dayEvents
+                        .slice(0, visibleEventLimit)
+                        .map((event, eventIndex) => (
+                          <Link
+                            key={`${event.row.id}-${event.label}-${eventIndex}`}
+                            href={`/${org}/collabs/${event.row.id}`}
+                            title={`${event.label}: ${event.row.projectName}`}
+                            className={`block truncate rounded-md px-1.5 py-1 text-[9px] sm:text-[10px] ${event.tone === "blue" ? "bg-blue-500/15 text-blue-200" : event.tone === "amber" ? "bg-amber-500/15 text-amber-200" : event.tone === "red" ? "bg-red-500/15 text-red-200" : "bg-violet-500/15 text-violet-200"}`}
+                          >
+                            {event.label} · {event.row.projectName}
+                          </Link>
+                        ))}
+                      {dayEvents.length > visibleEventLimit ? (
+                        <div className="px-1 text-[9px] font-medium text-kos-muted">
+                          +{dayEvents.length - visibleEventLimit} more
+                        </div>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

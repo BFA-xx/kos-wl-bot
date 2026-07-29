@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { stat } from "node:fs/promises";
 
 const orgSlug = process.env.KOS_E2E_ORG_SLUG || "kos";
 const bannerUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
@@ -300,5 +301,44 @@ test.describe("authenticated member and collaboration workspaces", () => {
     await keepStickyShellFromCoveringWorkspace(page);
 
     await expect(workspace).toHaveScreenshot("collab-hub.png");
+
+    const calendarButton = page.getByRole("button", { name: "Calendar" });
+    await expect(calendarButton).toHaveCount(1);
+    await calendarButton.click();
+
+    await expect(
+      page.getByText("Collaboration calendar", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId("collab-controls")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    await expect(
+      page.getByRole("button", { name: "Filters & views" }),
+    ).toBeVisible();
+
+    const calendar = page.getByTestId("collab-calendar");
+    await expect(calendar).toBeVisible();
+    const viewport = page.viewportSize();
+    if (viewport && viewport.width >= 768) {
+      await expect
+        .poll(async () => {
+          const calendarBox = await calendar.boundingBox();
+          return calendarBox
+            ? Math.ceil(calendarBox.y + calendarBox.height)
+            : Number.POSITIVE_INFINITY;
+        })
+        .toBeLessThanOrEqual(viewport.height + 1);
+    }
+
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Export PNG" }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe(
+      `KOS-${orgSlug}-collab-calendar-2026-07.png`,
+    );
+    const downloadPath = await download.path();
+    expect(downloadPath).not.toBeNull();
+    expect((await stat(downloadPath!)).size).toBeGreaterThan(20_000);
   });
 });
