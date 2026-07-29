@@ -26,6 +26,10 @@ import { KOS } from "../theme.js";
 import { logger } from "../logger.js";
 import { verifyTaskForMember } from "../services/pointsService.js";
 import { refreshRaffleMessage } from "../services/raffleService.js";
+import {
+  handleVerificationButton,
+  isVerificationButtonAction,
+} from "./verificationButtonHandler.js";
 
 /** Shared per-user enter/leave rate limiter (anti-spam). */
 export const entryLimiter = new RateLimiter(
@@ -33,9 +37,14 @@ export const entryLimiter = new RateLimiter(
   60_000,
 );
 
-export async function handleButton(interaction: ButtonInteraction): Promise<unknown> {
+export async function handleButton(
+  interaction: ButtonInteraction,
+): Promise<unknown> {
   const parsed = parseId(interaction.customId);
   if (!parsed) return;
+  if (isVerificationButtonAction(parsed.action)) {
+    return handleVerificationButton(interaction, parsed.action, parsed.args);
+  }
 
   switch (parsed.action) {
     case Actions.EnterRaffle:
@@ -73,20 +82,31 @@ export async function handleButton(interaction: ButtonInteraction): Promise<unkn
 
 async function handleOpenWalletProfile(interaction: ButtonInteraction) {
   const modal = await buildWalletProfileModal(interaction.user.id);
-  await interaction.showModal(modal).catch((err) => logger.warn({ err }, "showModal (profile) failed"));
+  await interaction
+    .showModal(modal)
+    .catch((err) => logger.warn({ err }, "showModal (profile) failed"));
 }
 
 async function handleEnter(interaction: ButtonInteraction, raffleId: number) {
   if (!interaction.inCachedGuild()) {
-    return interaction.reply({ content: "Raffles can only be entered in a server.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "Raffles can only be entered in a server.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
   if (!entryLimiter.take(`${interaction.user.id}`)) {
-    return interaction.reply({ content: "You're clicking too fast — try again in a moment.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "You're clicking too fast — try again in a moment.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-  if (!member) return interaction.editReply("Could not verify your server membership.");
+  const member = await interaction.guild.members
+    .fetch(interaction.user.id)
+    .catch(() => null);
+  if (!member)
+    return interaction.editReply("Could not verify your server membership.");
 
   const result = await enterRaffle(raffleId, member);
   return editEnterOutcome(interaction, raffleId, result);
@@ -147,9 +167,13 @@ async function editEnterOutcome(
       });
     }
     case "closed":
-      return interaction.editReply(`${prefix}${raffleLabel} is not currently open for entries.`);
+      return interaction.editReply(
+        `${prefix}${raffleLabel} is not currently open for entries.`,
+      );
     default:
-      return interaction.editReply(`${prefix}Something went wrong. Please try again.`);
+      return interaction.editReply(
+        `${prefix}Something went wrong. Please try again.`,
+      );
   }
 }
 
@@ -202,7 +226,12 @@ function buildMissingTaskComponents(
         .setStyle(ButtonStyle.Primary)
         .setCustomId(
           task.kind === "legacy"
-            ? buildId(Actions.VerifyLegacyTask, task.raffleId, task.index, task.hash)
+            ? buildId(
+                Actions.VerifyLegacyTask,
+                task.raffleId,
+                task.index,
+                task.hash,
+              )
             : buildId(Actions.VerifyRaffleTask, task.taskId, raffleId),
         )
         .setLabel(`Verify ${task.label}`.slice(0, 80)),
@@ -218,12 +247,18 @@ async function handleVerifyRaffleTask(
   raffleId: number,
 ) {
   if (!interaction.inCachedGuild()) {
-    return interaction.reply({ content: "Use this in the raffle server.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "Use this in the raffle server.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-  if (!member) return interaction.editReply("Could not verify your server membership.");
+  const member = await interaction.guild.members
+    .fetch(interaction.user.id)
+    .catch(() => null);
+  if (!member)
+    return interaction.editReply("Could not verify your server membership.");
 
   const link = await prisma.raffleTask.findFirst({
     where: {
@@ -260,12 +295,18 @@ async function handleVerifyLegacyTask(
   hash: string,
 ) {
   if (!interaction.inCachedGuild()) {
-    return interaction.reply({ content: "Use this in the raffle server.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "Use this in the raffle server.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-  if (!member) return interaction.editReply("Could not verify your server membership.");
+  const member = await interaction.guild.members
+    .fetch(interaction.user.id)
+    .catch(() => null);
+  if (!member)
+    return interaction.editReply("Could not verify your server membership.");
 
   const verified = await verifyLegacyRaffleTaskForMember({
     raffleId,
@@ -273,7 +314,8 @@ async function handleVerifyLegacyTask(
     hash,
     member,
   });
-  if (!verified.ok) return interaction.editReply(`${KOS.emoji.cross} ${verified.error}`);
+  if (!verified.ok)
+    return interaction.editReply(`${KOS.emoji.cross} ${verified.error}`);
 
   const entered = await enterRaffle(raffleId, member);
   return editEnterOutcome(
@@ -287,11 +329,17 @@ async function handleVerifyLegacyTask(
 async function handleLeave(interaction: ButtonInteraction, raffleId: number) {
   if (!interaction.inCachedGuild()) return;
   if (!entryLimiter.take(`${interaction.user.id}`)) {
-    return interaction.reply({ content: "You're clicking too fast — try again in a moment.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "You're clicking too fast — try again in a moment.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-  if (!member) return interaction.editReply("Could not verify your server membership.");
+  const member = await interaction.guild.members
+    .fetch(interaction.user.id)
+    .catch(() => null);
+  if (!member)
+    return interaction.editReply("Could not verify your server membership.");
 
   const result = await leaveRaffle(raffleId, member);
   switch (result.status) {
@@ -315,13 +363,19 @@ async function handleLeave(interaction: ButtonInteraction, raffleId: number) {
   }
 }
 
-async function handleOpenWalletForm(interaction: ButtonInteraction, raffleId: number) {
+async function handleOpenWalletForm(
+  interaction: ButtonInteraction,
+  raffleId: number,
+) {
   const raffle = await prisma.raffle.findUnique({
     where: { id: raffleId },
     select: { walletChains: true, projectName: true },
   });
   if (!raffle) {
-    return interaction.reply({ content: "This raffle no longer exists.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "This raffle no longer exists.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   // Confirm the clicker is actually a current winner.
@@ -330,10 +384,15 @@ async function handleOpenWalletForm(interaction: ButtonInteraction, raffleId: nu
     select: { id: true },
   });
   if (!winner) {
-    return interaction.reply({ content: "You are not a current winner of this raffle.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "You are not a current winner of this raffle.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
-  const chains = raffle.walletChains.length ? raffle.walletChains : [WalletChain.ETHEREUM];
+  const chains = raffle.walletChains.length
+    ? raffle.walletChains
+    : [WalletChain.ETHEREUM];
   const modal = new ModalBuilder()
     .setCustomId(buildId(Actions.SubmitWallet, raffleId))
     .setTitle(`Wallet — ${raffle.projectName}`.slice(0, 45));
@@ -345,8 +404,12 @@ async function handleOpenWalletForm(interaction: ButtonInteraction, raffleId: nu
       .setStyle(TextInputStyle.Short)
       .setRequired(chains.length === 1)
       .setMaxLength(120);
-    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+    modal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(input),
+    );
   }
 
-  await interaction.showModal(modal).catch((err) => logger.warn({ err }, "showModal failed"));
+  await interaction
+    .showModal(modal)
+    .catch((err) => logger.warn({ err }, "showModal failed"));
 }

@@ -17,6 +17,12 @@
   authorization.
 - The bot is the authority for Discord messages, scheduled transitions, final
   draws, winner announcements, wallet DMs, and proof artifacts.
+- Discord onboarding verification is guild-scoped and bot-owned. Channel
+  lockdown changes only the configured Unverified role's `ViewChannel`
+  overwrite; never rewrite `@everyone` or unrelated overwrite permissions.
+- Web verification administration uses tenant-scoped settings APIs. Discord
+  enable/disable, access sync, and panel publication must cross PostgreSQL as
+  revisioned bot control requests; Vercel never applies Discord side effects.
 - Vercel-to-bot production work crosses PostgreSQL, not localhost HTTP.
 - One participant row represents an entry regardless of Discord or web origin.
 - Member-facing features should ship with Discord and web parity unless a

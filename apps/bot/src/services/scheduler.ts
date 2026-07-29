@@ -23,6 +23,7 @@ import { audit } from "./auditService.js";
 import { processCollaborationAutomations } from "./collaborationService.js";
 import { backfillProofArtifacts } from "./proofService.js";
 import { processRaidLifecycle } from "./raidService.js";
+import { processVerificationControlRequests } from "./verificationControlService.js";
 
 /**
  * Sweep-based scheduler. A single interval drives all raffle state machines,
@@ -113,6 +114,10 @@ export class Scheduler {
       await this.processRerollRequests();
       await this.processEditRequests();
       await this.processCampaignLifecycle(now);
+      await processVerificationControlRequests(
+        this.client,
+        config.SCHEDULER_BATCH_SIZE,
+      );
       await processRaidLifecycle(this.client, now, config.SCHEDULER_BATCH_SIZE);
 
       // Open upcoming raffles whose start time has arrived.

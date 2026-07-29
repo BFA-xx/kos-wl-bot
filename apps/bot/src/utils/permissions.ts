@@ -1,8 +1,17 @@
 import {
   PermissionFlagsBits,
   type ChatInputCommandInteraction,
+  type ButtonInteraction,
+  type AnySelectMenuInteraction,
+  type ModalSubmitInteraction,
 } from "discord.js";
 import { prisma } from "@kos/db";
+
+type ManagerInteraction =
+  | ChatInputCommandInteraction
+  | ButtonInteraction
+  | AnySelectMenuInteraction
+  | ModalSubmitInteraction;
 
 /**
  * Determine whether the invoking member is authorised to manage raffles.
@@ -17,6 +26,13 @@ import { prisma } from "@kos/db";
  */
 export async function isRaffleManager(
   interaction: ChatInputCommandInteraction,
+): Promise<boolean> {
+  return isKOSManager(interaction);
+}
+
+/** The same server-level KOS manager policy for commands and components. */
+export async function isKOSManager(
+  interaction: ManagerInteraction,
 ): Promise<boolean> {
   if (!interaction.inGuild()) return false;
 
@@ -42,12 +58,14 @@ export async function isRaffleManager(
   });
   if (!guild || guild.managerRoleIds.length === 0) return false;
 
-  return guild.managerRoleIds.some((roleId) => memberHasRole(interaction, roleId));
+  return guild.managerRoleIds.some((roleId) =>
+    memberHasRole(interaction, roleId),
+  );
 }
 
 /** Read the invoker's role ids whether the member is cached or raw (API form). */
 function memberHasRole(
-  interaction: ChatInputCommandInteraction,
+  interaction: ManagerInteraction,
   roleId: string,
 ): boolean {
   const member = interaction.member;

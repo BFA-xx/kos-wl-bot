@@ -13,25 +13,26 @@ dashboard.
 
 ## ✦ Features
 
-| Area | What it does |
-| --- | --- |
-| **Role-based entry** | Single / multiple eligible roles, with `ANY` or `ALL` match modes. |
-| **Raffle creation** | `/raffle create` with project, title, spots, roles, start/end, channels, banner, link, anti-alt rules. |
-| **Premium embeds** | Live status (Upcoming / Live / Ended), countdown, entry count, odds, Enter / Leave buttons. |
-| **Entry verification** | Eligibility + blacklist checks, duplicate prevention (DB-level), entry snapshots. |
-| **Live tracking** | Embeds auto-refresh entries, time remaining, and status. |
-| **Auto scheduling** | Opens at start, closes at end, locks entries, draws winners — no manual action. |
-| **Winner selection** | Crypto-secure, **verifiable** draw (HMAC over a committed random seed); no duplicates. |
-| **Announcements** | Auto-posts winners with real pings. |
-| **Raids** | Scheduled Discord proof threads with raffle-style start pings, X/image detection, duplicate handling, staff review, participant export, and automatic reward roles. |
-| **Proof system** | Auto-generates a PDF report, winner CSV, and a premium PNG winner card, delivered to a proof channel. |
-| **Wallet collection** | DMs winners a wallet form (ETH / SOL / BTC); addresses validated and **encrypted at rest**. |
-| **Anti-alt** | Min account age, min server age, required roles, required reaction; suspicious-account flagging. |
-| **Blacklist** | `/blacklist add\|remove\|list`; blocked users can't enter. |
-| **Reroll** | `/raffle reroll` — single, multiple, or entire pool; fully logged. |
-| **Admin commands** | create / edit / delete / end / reroll / list / stats / export, gated by manager roles. |
-| **Audit logging** | Every meaningful action is written to an immutable log table. |
-| **Dashboard** | Next.js + Tailwind: overview, raffles, raids, campaigns, participants, rewards, analytics, exports, and live polling. |
+| Area                    | What it does                                                                                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Role-based entry**    | Single / multiple eligible roles, with `ANY` or `ALL` match modes.                                                                                                                          |
+| **Raffle creation**     | `/raffle create` with project, title, spots, roles, start/end, channels, banner, link, anti-alt rules.                                                                                      |
+| **Premium embeds**      | Live status (Upcoming / Live / Ended), countdown, entry count, odds, Enter / Leave buttons.                                                                                                 |
+| **Entry verification**  | Eligibility + blacklist checks, duplicate prevention (DB-level), entry snapshots.                                                                                                           |
+| **Live tracking**       | Embeds auto-refresh entries, time remaining, and status.                                                                                                                                    |
+| **Auto scheduling**     | Opens at start, closes at end, locks entries, draws winners — no manual action.                                                                                                             |
+| **Winner selection**    | Crypto-secure, **verifiable** draw (HMAC over a committed random seed); no duplicates.                                                                                                      |
+| **Announcements**       | Auto-posts winners with real pings.                                                                                                                                                         |
+| **Raids**               | Scheduled Discord proof threads with raffle-style start pings, X/image detection, duplicate handling, staff review, participant export, and automatic reward roles.                         |
+| **Member verification** | Premium Discord-native onboarding with Unverified access lockdown, configurable modal/rules flow, expiring or limited-use codes, per-code roles, private logs, and full web administration. |
+| **Proof system**        | Auto-generates a PDF report, winner CSV, and a premium PNG winner card, delivered to a proof channel.                                                                                       |
+| **Wallet collection**   | DMs winners a wallet form (ETH / SOL / BTC); addresses validated and **encrypted at rest**.                                                                                                 |
+| **Anti-alt**            | Min account age, min server age, required roles, required reaction; suspicious-account flagging.                                                                                            |
+| **Blacklist**           | `/blacklist add\|remove\|list`; blocked users can't enter.                                                                                                                                  |
+| **Reroll**              | `/raffle reroll` — single, multiple, or entire pool; fully logged.                                                                                                                          |
+| **Admin commands**      | create / edit / delete / end / reroll / list / stats / export, gated by manager roles.                                                                                                      |
+| **Audit logging**       | Every meaningful action is written to an immutable log table.                                                                                                                               |
+| **Dashboard**           | Next.js + Tailwind: overview, raffles, raids, campaigns, participants, rewards, analytics, exports, and live polling.                                                                       |
 
 ---
 
@@ -108,10 +109,13 @@ cp .env apps/dashboard/.env.local   # or: ln -s ../../.env apps/dashboard/.env.l
 
 1. Invite the bot (see [docs/DISCORD-SETUP.md](docs/DISCORD-SETUP.md)) — enable
    the **Server Members Intent** and **Message Content Intent**.
-2. Grant a manager role (anyone with *Manage Server* / *Administrator* already
+2. Grant a manager role (anyone with _Manage Server_ / _Administrator_ already
    qualifies). Configure manager roles via the `guilds.managerRoleIds` column or
    the seed script.
-3. Create a raffle:
+3. Optional: open `/verification setup` or **Settings → KOS member
+   verification** on `raffle.koslabs.app`, choose channels and roles, create
+   access codes, then enable and publish the KOS verification panel.
+4. Create a raffle:
 
 ```
 /raffle create
@@ -154,14 +158,14 @@ Full command reference: [docs/COMMANDS.md](docs/COMMANDS.md).
 
 ## ✦ Scripts
 
-| Command | Description |
-| --- | --- |
-| `pnpm build` | Build all packages and apps |
-| `pnpm dev:bot` / `pnpm dev:dashboard` | Run in watch mode |
-| `pnpm deploy:commands` | Register slash commands with Discord |
-| `pnpm db:migrate` / `db:migrate:deploy` | Apply migrations (dev / prod) |
-| `pnpm db:studio` | Open Prisma Studio |
-| `pnpm typecheck` | Type-check every package |
+| Command                                 | Description                          |
+| --------------------------------------- | ------------------------------------ |
+| `pnpm build`                            | Build all packages and apps          |
+| `pnpm dev:bot` / `pnpm dev:dashboard`   | Run in watch mode                    |
+| `pnpm deploy:commands`                  | Register slash commands with Discord |
+| `pnpm db:migrate` / `db:migrate:deploy` | Apply migrations (dev / prod)        |
+| `pnpm db:studio`                        | Open Prisma Studio                   |
+| `pnpm typecheck`                        | Type-check every package             |
 
 ---
 

@@ -27,6 +27,7 @@ Build an OAuth2 URL (Developer Portal → **OAuth2 → URL Generator**):
   - Read Message History
   - Mention Everyone _(only if you want winner pings to bypass suppression)_
   - Add Reactions
+  - Manage Channels _(verification-only channel visibility)_
   - Manage Roles _(Raid reward roles)_
   - Create Public Threads
   - Send Messages in Threads
@@ -36,7 +37,7 @@ Build an OAuth2 URL (Developer Portal → **OAuth2 → URL Generator**):
 Example:
 
 ```
-https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=326686469184&scope=bot%20applications.commands
+https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=326686469200&scope=bot%20applications.commands
 ```
 
 Open the URL and add the bot to your server.
@@ -84,16 +85,26 @@ Set the defaults with `/config channels`, then run `/config diagnose` for a
 read-only readiness report covering channels, permissions, and the connected
 web organization.
 
+For member onboarding, run `/verification setup` or open **Settings → KOS
+member verification** on `raffle.koslabs.app`. KOS can create the
+**Unverified** role, but its bot role must remain above Unverified and every
+role granted after verification. Choose the verification/rules/log channels,
+select any extra Welcome channels that should remain visible, create codes,
+then enable and publish the panel. Both control surfaces report missing role
+hierarchy, channel, code, or permission requirements before launch.
+
 ## Troubleshooting
 
-| Symptom                           | Fix                                                                                 |
-| --------------------------------- | ----------------------------------------------------------------------------------- |
-| Commands don't appear             | Run `pnpm deploy:commands`; for global, wait up to 1h, or set `DISCORD_GUILD_ID`.   |
-| "Used disallowed intents" on boot | Enable **Server Members Intent** and **Message Content Intent** in the portal.      |
-| Buttons do nothing                | Bot lacks Send/Embed permission in that channel.                                    |
-| Winner DMs not received           | The winner has DMs disabled; export wallets later via dashboard / `/raffle export`. |
-| Raid role was not assigned        | Put the KOS bot role above the reward role and grant **Manage Roles**.              |
-| Raid thread was not created       | Grant Create/Send/Manage Threads in the configured raid channel.                    |
+| Symptom                            | Fix                                                                                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Commands don't appear              | Run `pnpm deploy:commands`; for global, wait up to 1h, or set `DISCORD_GUILD_ID`.                                                    |
+| "Used disallowed intents" on boot  | Enable **Server Members Intent** and **Message Content Intent** in the portal.                                                       |
+| Buttons do nothing                 | Bot lacks Send/Embed permission in that channel.                                                                                     |
+| Winner DMs not received            | The winner has DMs disabled; export wallets later via dashboard / `/raffle export`.                                                  |
+| Raid role was not assigned         | Put the KOS bot role above the reward role and grant **Manage Roles**.                                                               |
+| Raid thread was not created        | Grant Create/Send/Manage Threads in the configured raid channel.                                                                     |
+| New members can see other channels | Grant **Manage Channels**, confirm the Unverified role, then press **Sync Access** in Discord or **Sync channel access** on the web. |
+| Verification cannot grant a role   | Put the KOS bot role above Unverified, default roles, and every code-specific role.                                                  |
 
 For staged rollout limits, verification milestones, and the onboarding smoke
 test, see `docs/ROLLOUT.md`.

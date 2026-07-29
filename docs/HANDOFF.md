@@ -98,6 +98,158 @@ Phase 3 is implemented through S2.5:
   deploy script now fails unless tests, build, registration, PM2, and a real
   scheduler tick succeed.
 
+## Discord and web member verification — release candidate 2026-07-29
+
+### Delivered
+
+- Added the guild-scoped KOS verification domain through additive migration
+  `20260729120000_discord_verification`: settings, codes, durable attempts,
+  redemption snapshots, append-only verification logs, current member state,
+  rules-acceptance timestamps, and a `VERIFICATION` general audit category.
+- Added join-time assignment of a configurable Unverified role. Enabling or
+  synchronizing verification changes only that role's `ViewChannel` overwrite:
+  the Verification, Rules, and selected Welcome channels are visible; other
+  existing and newly created guild channels are hidden. Disabling clears only
+  the managed visibility bit and never changes `@everyone`.
+- Added a KOS-branded member flow using a public embed, Verify button,
+  configurable private code modal, ephemeral rules embed, View Rules link, and
+  explicit I Agree button. No member code is typed into a Discord channel.
+- Required codes validate active state, expiration, total use limit, and
+  optional one-use-per-member policy. A modal validation creates a 15-minute
+  attempt but does not consume a code. Final completion atomically claims the
+  use so simultaneous submissions cannot exceed `Max Uses`.
+- Successful completion grants all configured default roles plus the selected
+  code's roles, removes Unverified, records the current member state and rules
+  timestamp, sends the configured success message, and optionally posts a
+  branded private log embed. Role failures release the code claim and roll
+  back roles added by that attempt.
+- Added `/verification setup|status|publish` and the requested
+  `/verification code create|edit|delete|list` surface. Settings use ephemeral
+  buttons, channel/role selectors, modals, readiness checks, access sync, and
+  confirmation states. Code creation/edit covers code, description, roles,
+  max uses, expiration, active state, and member reuse without JSON editing.
+- Welcome title/description/colour, Verify button label/emoji, modal
+  title/label/placeholder, code/rules requirements, default roles, log channel,
+  success/failure copy, and onboarding-visible channels are all configurable
+  from Discord.
+- Added a complete organization Settings surface on `raffle.koslabs.app` with
+  connected-server selection, live enable/apply state, Discord channel and role
+  pickers, an embed/modal preview, every verification copy and flow switch,
+  access sync/panel actions, code create/edit/delete, per-code roles and limits,
+  aggregate metrics, and recent member verification activity.
+- Added tenant-scoped `settings:edit` web APIs for settings and code writes.
+  Reads, writes, code lookup, activity, and deletion are anchored to the
+  organization's connected guild IDs; privileged changes also write the
+  organization audit trail.
+- Added migration `20260729150000_verification_web_control` and a bounded bot
+  scheduler processor for enable/disable, Unverified channel-access sync, and
+  panel publication requested from Vercel. Each request carries a unique
+  revision; compare-and-clear acknowledgement cannot erase a newer web save.
+  Changing Unverified roles also carries the previous role into the request so
+  KOS clears only its old `ViewChannel` overwrite before syncing the new role.
+
+### Verification
+
+- Prisma schema validation and the shared DB build pass.
+- A disposable local PostgreSQL database applied the complete migration
+  history successfully, including both verification migrations.
+- A focused database integration check raced two members against a one-use
+  code and confirmed exactly one completion, one redemption, one member state,
+  and `uses = 1`.
+- Bot TypeScript and production build pass.
+- Bot tests pass with focused code normalization, max-use, expiration,
+  active/reuse, availability, success-message, command-surface, and web-control
+  error coverage.
+- Dashboard tests cover validation, organization isolation, settings/action
+  queuing, and role-granting code creation.
+- Full workspace typecheck passes.
+- Full workspace tests pass: 9 DB, 28 bot, and 72 dashboard tests (109 total).
+- DB, bot, and dashboard production builds pass. The dashboard build used the
+  documented placeholder `DATABASE_URL` and emitted its complete route set.
+- Focused Prettier formatting and `git diff --check` pass.
+
+### Modified files
+
+- `packages/db/prisma/schema.prisma`
+- `packages/db/prisma/migrations/20260729120000_discord_verification/migration.sql`
+- `packages/db/prisma/migrations/20260729150000_verification_web_control/migration.sql`
+- `apps/bot/src/commands/index.ts`
+- `apps/bot/src/commands/verification.ts`
+- `apps/bot/src/commands/verification.test.ts`
+- `apps/bot/src/commands/verification-ui.test.ts`
+- `apps/bot/src/embeds/verificationEmbed.ts`
+- `apps/bot/src/gateway/verificationEvents.ts`
+- `apps/bot/src/index.ts`
+- `apps/bot/src/interactions/buttons.ts`
+- `apps/bot/src/interactions/modals.ts`
+- `apps/bot/src/interactions/router.ts`
+- `apps/bot/src/interactions/verificationAdmin.ts`
+- `apps/bot/src/interactions/verificationButtonHandler.ts`
+- `apps/bot/src/interactions/verificationModalHandler.ts`
+- `apps/bot/src/interactions/verificationRulesHandler.ts`
+- `apps/bot/src/interactions/verificationSelectHandler.ts`
+- `apps/bot/src/services/verificationCodeService.ts`
+- `apps/bot/src/services/verificationCodeService.test.ts`
+- `apps/bot/src/services/verificationControlService.ts`
+- `apps/bot/src/services/verificationControlService.test.ts`
+- `apps/bot/src/services/verificationLogger.ts`
+- `apps/bot/src/services/verificationService.ts`
+- `apps/bot/src/services/verificationService.test.ts`
+- `apps/bot/src/services/verificationSettingsService.ts`
+- `apps/bot/src/services/scheduler.ts`
+- `apps/bot/src/utils/ids.ts`
+- `apps/bot/src/utils/permissions.ts`
+- `apps/dashboard/app/[org]/settings/page.tsx`
+- `apps/dashboard/app/api/[org]/verification/route.ts`
+- `apps/dashboard/app/api/[org]/verification/route.test.ts`
+- `apps/dashboard/app/api/[org]/verification/codes/route.ts`
+- `apps/dashboard/app/api/[org]/verification/codes/route.test.ts`
+- `apps/dashboard/app/api/[org]/verification/codes/[id]/route.ts`
+- `apps/dashboard/components/VerificationManager.tsx`
+- `apps/dashboard/lib/verification.ts`
+- `apps/dashboard/lib/verification.test.ts`
+- `README.md`
+- `docs/ARCHITECTURE.md`
+- `docs/COMMANDS.md`
+- `docs/DECISIONS.md`
+- `docs/DISCORD-SETUP.md`
+- `docs/HANDOFF.md`
+- `docs/PROJECT_RULES.md`
+
+### Assumptions and boundaries
+
+- Member onboarding remains Discord-native, while administration has equal
+  Discord and web surfaces. The dashboard persists configuration and requests;
+  only the connected bot applies Discord roles, channel overwrites, and panel
+  messages.
+- Verification applies automatically to members who join after it is enabled.
+  It does not bulk-assign Unverified to existing members.
+- The Verification channel hosts the welcome/verification embed; admins can
+  add separate Welcome channels through the extra visible-channel selector.
+- Default and code-specific roles are capped at ten each in the Discord role
+  selectors, matching Discord component limits.
+
+### Technical debt and rollout boundary
+
+- A very large server access sync performs bounded Discord API batches but
+  does not yet persist a resumable permission-sync job or progress cursor.
+- Distributed completion is protected at the database claim boundary, but
+  Discord role changes and final database state still use compensation rather
+  than a durable outbox.
+- A controlled live Discord member, role hierarchy, channel overwrite, and
+  log-channel smoke test still requires a dedicated scratch guild/member; the
+  release does not enable verification on an existing production guild by
+  default because doing so would alter member access.
+- The migration has not been applied to production; commands have not been
+  registered; and no commit, push, bot restart, or deployment was performed.
+
+### Recommended next task
+
+Apply the additive migration before runtime deployment, deploy the bot, register
+the ninth global slash command, then use a controlled scratch server/member to
+verify join lockdown, modal code entry, rules acceptance, one-use exhaustion,
+role hierarchy failure logging, success roles, and disable/overwrite cleanup.
+
 ## Campaigns first slice — production release 2026-07-19
 
 ### Delivered

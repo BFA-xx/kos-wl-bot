@@ -1,13 +1,28 @@
 import { MessageFlags, type ModalSubmitInteraction } from "discord.js";
 import { parseId, Actions } from "../utils/ids.js";
-import { recordWallet, upsertWalletProfile } from "../services/walletService.js";
-import { handleRaffleCreateModal, handleRaffleOptionsModal } from "./raffleWizard.js";
+import {
+  recordWallet,
+  upsertWalletProfile,
+} from "../services/walletService.js";
+import {
+  handleRaffleCreateModal,
+  handleRaffleOptionsModal,
+} from "./raffleWizard.js";
 import { chainLabel, ALL_CHAINS } from "../utils/wallets.js";
 import { KOS } from "../theme.js";
+import {
+  handleVerificationModal,
+  isVerificationModalAction,
+} from "./verificationModalHandler.js";
 
-export async function handleModal(interaction: ModalSubmitInteraction): Promise<unknown> {
+export async function handleModal(
+  interaction: ModalSubmitInteraction,
+): Promise<unknown> {
   const parsed = parseId(interaction.customId);
   if (!parsed) return;
+  if (isVerificationModalAction(parsed.action)) {
+    return handleVerificationModal(interaction, parsed.action, parsed.args);
+  }
 
   if (parsed.action === Actions.SubmitRaffleCreate) {
     return handleRaffleCreateModal(interaction);
@@ -52,11 +67,17 @@ async function handleWalletProfileSubmit(interaction: ModalSubmitInteraction) {
     return interaction.editReply("No addresses entered — nothing changed.");
   }
   return interaction.editReply(
-    [savedAny ? "**Wallets updated.**" : "**Submission had errors:**", ...results].join("\n"),
+    [
+      savedAny ? "**Wallets updated.**" : "**Submission had errors:**",
+      ...results,
+    ].join("\n"),
   );
 }
 
-async function handleWalletSubmit(interaction: ModalSubmitInteraction, raffleId: number) {
+async function handleWalletSubmit(
+  interaction: ModalSubmitInteraction,
+  raffleId: number,
+) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const results: string[] = [];
@@ -86,6 +107,11 @@ async function handleWalletSubmit(interaction: ModalSubmitInteraction, raffleId:
     return interaction.editReply("You didn't enter any wallet address.");
   }
   return interaction.editReply(
-    [anySaved ? "**Wallet submission received.**" : "**Submission had errors:**", ...results].join("\n"),
+    [
+      anySaved
+        ? "**Wallet submission received.**"
+        : "**Submission had errors:**",
+      ...results,
+    ].join("\n"),
   );
 }

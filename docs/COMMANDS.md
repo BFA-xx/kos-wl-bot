@@ -94,6 +94,33 @@ Server owner and anyone with **Administrator / Manage Server** can always manage
 raffles; `/config managers add` grants access to additional roles (mods, collab
 managers) without touching the database.
 
+## `/verification` (managers)
+
+KOS member onboarding is configured entirely through private Discord
+interactions. Members never type a verification code into a channel.
+
+| Sub           | Options           | Description                                                                           |
+| ------------- | ----------------- | ------------------------------------------------------------------------------------- |
+| `setup`       | —                 | Open the interactive settings panel for flow, channels, roles, copy, and access sync. |
+| `status`      | —                 | Show readiness checks without changing member access.                                 |
+| `publish`     | —                 | Publish the welcome embed, or update the existing configured panel.                   |
+| `code create` | —                 | Open a modal, then optionally attach code-specific roles with a role picker.          |
+| `code edit`   | `code` (required) | Edit code, description, limit, expiration, status, reuse, and role grants.            |
+| `code delete` | `code` (required) | Confirm deletion while preserving historical redemption and audit records.            |
+| `code list`   | —                 | List status, uses, expiration, reuse policy, and role grants.                         |
+
+The setup panel configures the Unverified role; verification, rules, log, and
+extra onboarding channels; default verified roles; embed colour/copy; button
+label/emoji; modal title/label/placeholder; code and rules requirements;
+member code-reuse policy; success/failure messages; panel publication; and
+channel access synchronization.
+
+Enabling verification requires **Manage Roles** and **Manage Channels**, a
+usable verification channel, a manageable Unverified role, and at least one
+usable code when code verification is required. KOS grants default roles plus
+the selected code's roles, removes Unverified, records rules acceptance, and
+posts to the private log channel when configured.
+
 ## `/wallet` (everyone)
 
 A reusable wallet registry — members register once and it's used for every raffle.
@@ -132,3 +159,5 @@ campaign points once.
 - **Leave** — removes the entry while the raffle is live.
 - **Register / Update Wallet** (wallet panel) — opens a modal to save wallets for all chains at once.
 - **Submit Wallet** (in winner DMs) — submit a wallet for that specific raffle.
+- **Verify** — opens the configured private verification modal or advances directly to rules.
+- **I Agree** — records rules acceptance and completes role assignment.

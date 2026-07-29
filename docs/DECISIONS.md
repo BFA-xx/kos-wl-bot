@@ -609,3 +609,25 @@ keeps Vercel stateless, makes delivery observable, and allows existing
 role-gated and weighted raffle eligibility to consume Raid rewards naturally.
 The user intent was a Raid start-notification control, not a second
 announcement product.
+
+## D053 — Discord onboarding verification is guild-scoped and bot-owned
+
+**Status:** Accepted; implemented across Discord and web 2026-07-29
+**Decision:** Store verification settings, codes, attempts, redemptions,
+member state, and logs under the Discord guild. Let the long-running bot own
+join events, role/channel permission changes, modals, rules acceptance, code
+claims, panel publication, and log-channel delivery. Configure it through
+Discord-native private components, the `/verification code
+create|edit|delete|list` surface, or the organization Settings dashboard.
+Dashboard settings and code CRUD are tenant-scoped; Discord side effects cross
+PostgreSQL as revisioned requests consumed by the bot scheduler. Consume a
+code only when the full flow completes, with an atomic use-count claim and
+compensating release on Discord role failure. Modify only the Unverified
+role's `ViewChannel` overwrite and never `@everyone`.
+**Why:** Verification controls Discord membership and channel visibility, so
+the connected gateway is the correct authority. Guild scope prevents roles or
+channels from leaking across servers; durable attempts keep rules and code
+state coherent; final-only atomic claims prevent abandoned forms and
+concurrent submissions from exhausting or oversubscribing codes. A
+compare-and-clear request id prevents a slow bot action from erasing a newer
+dashboard instruction.

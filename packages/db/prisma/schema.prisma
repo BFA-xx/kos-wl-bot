@@ -45,8 +45,22 @@ enum LogCategory {
   REROLL
   WALLET
   BLACKLIST
+  VERIFICATION
   ADMIN
   SYSTEM
+}
+
+enum VerificationAttemptStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum VerificationLogStatus {
+  SUCCESS
+  FAILURE
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +92,13 @@ model Guild {
   blacklists Blacklist[]
   logs       Log[]
   raids      Raid[]
+
+  verificationSettings    VerificationSettings?
+  verificationCodes       VerificationCode[]
+  verificationAttempts    VerificationAttempt[]
+  verificationRedemptions VerificationRedemption[]
+  verificationLogs        VerificationLog[]
+  memberVerifications     MemberVerification[]
 
   @@map("guilds")
 }
@@ -404,6 +425,180 @@ model Log {
   @@index([guildId, createdAt])
   @@index([raffleId])
   @@map("logs")
+}
+
+/// Per-server KOS onboarding configuration. Discord-side channel permissions,
+/// messages, role assignment, and member events remain owned by the bot.
+model VerificationSettings {
+  guildId String @id
+
+  enabled Boolean @default(false)
+
+  verificationChannelId String?
+  rulesChannelId        String?
+  logChannelId          String?
+  unverifiedRoleId      String?
+  allowedChannelIds     String[] @default([])
+  defaultRoleIds        String[] @default([])
+
+  welcomeTitle       String  @default("Welcome to KOS.")
+  welcomeDescription String  @default("Before accessing the server, please verify yourself.\n\nClick the button below to continue.")
+  welcomeColor       Int     @default(12632256)
+  verifyButtonLabel  String  @default("Verify")
+  verifyButtonEmoji  String?
+
+  modalTitle       String @default("Verify Access")
+  modalFieldLabel  String @default("Verification Code")
+  modalPlaceholder String @default("Enter your access code...")
+
+  requireCode            Boolean @default(true)
+  requireRulesAcceptance Boolean @default(false)
+  preventCodeReuse       Boolean @default(true)
+
+  successMessage String @default("Verification complete. Welcome to KOS.")
+  failureMessage String @default("That verification code is invalid, expired, or unavailable.")
+
+  panelMessageId   String?
+  panelPublishedAt DateTime?
+
+  /// Dashboard control plane. The dashboard writes a revisioned request and
+  /// the bot clears that exact revision after applying Discord side effects.
+  desiredEnabled        Boolean?
+  accessSyncRequested   Boolean   @default(false)
+  accessCleanupRoleIds  String[]  @default([])
+  panelPublishRequested Boolean   @default(false)
+  controlRequestId      String?
+  controlRequestedAt    DateTime?
+  controlRequestedById  String?
+  controlProcessedAt    DateTime?
+  controlError          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([controlRequestId])
+  @@map("verification_settings")
+}
+
+/// A guild-scoped access code. Each code can independently grant roles, expire,
+/// limit total uses, and opt into one-redemption-per-member protection.
+model VerificationCode {
+  id      String @id @default(cuid())
+  guildId String
+  code    String
+
+  description      String?
+  roleIds          String[]  @default([])
+  maxUses          Int?
+  uses             Int       @default(0)
+  expiresAt        DateTime?
+  active           Boolean   @default(true)
+  oneTimePerMember Boolean   @default(true)
+  createdById      String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  guild       Guild                    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  attempts    VerificationAttempt[]
+  redemptions VerificationRedemption[]
+  logs        VerificationLog[]
+  members     MemberVerification[]
+
+  @@unique([guildId, code])
+  @@index([guildId, active])
+  @@index([guildId, createdAt])
+  @@map("verification_codes")
+}
+
+/// Short-lived, durable verification flow state. A code is validated when the
+/// modal is submitted, but only claimed when the member completes the flow.
+model VerificationAttempt {
+  id      String  @id @default(cuid())
+  guildId String
+  userId  String
+  codeId  String?
+
+  status          VerificationAttemptStatus @default(PENDING)
+  rulesAcceptedAt DateTime?
+  failureReason   String?
+  expiresAt       DateTime
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  guild      Guild                   @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  code       VerificationCode?       @relation(fields: [codeId], references: [id], onDelete: SetNull)
+  redemption VerificationRedemption?
+
+  @@index([guildId, userId, createdAt])
+  @@index([status, expiresAt])
+  @@map("verification_attempts")
+}
+
+/// Append-only record of a successfully claimed code. The code text and role
+/// snapshot remain available to admins even if the source code is later deleted.
+model VerificationRedemption {
+  id         String   @id @default(cuid())
+  guildId    String
+  codeId     String?
+  attemptId  String   @unique
+  userId     String
+  code       String
+  roleIds    String[] @default([])
+  redeemedAt DateTime @default(now())
+
+  guild   Guild               @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  source  VerificationCode?   @relation(fields: [codeId], references: [id], onDelete: SetNull)
+  attempt VerificationAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, userId])
+  @@index([codeId, redeemedAt])
+  @@map("verification_redemptions")
+}
+
+/// Append-only verification audit stream, distinct from the general raffle log
+/// so onboarding success/failure reporting can be queried independently.
+model VerificationLog {
+  id      String  @id @default(cuid())
+  guildId String
+  userId  String
+  codeId  String?
+  code    String?
+
+  status          VerificationLogStatus
+  reason          String?
+  roleIds         String[]              @default([])
+  rulesAcceptedAt DateTime?
+  createdAt       DateTime              @default(now())
+
+  guild  Guild             @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  source VerificationCode? @relation(fields: [codeId], references: [id], onDelete: SetNull)
+
+  @@index([guildId, createdAt])
+  @@index([guildId, userId, createdAt])
+  @@map("verification_logs")
+}
+
+/// Current per-member verification state for fast status checks and a durable
+/// rules-acceptance timestamp. VerificationLog remains the immutable history.
+model MemberVerification {
+  id      String  @id @default(cuid())
+  guildId String
+  userId  String
+  codeId  String?
+
+  roleIds         String[]  @default([])
+  rulesAcceptedAt DateTime?
+  verifiedAt      DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  guild  Guild             @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  source VerificationCode? @relation(fields: [codeId], references: [id], onDelete: SetNull)
+
+  @@unique([guildId, userId])
+  @@index([guildId, verifiedAt])
+  @@map("member_verifications")
 }
 
 // ---------------------------------------------------------------------------

@@ -10,6 +10,10 @@ import { entryLimiter } from "./interactions/buttons.js";
 import { startInternalApi } from "./http/server.js";
 import type { Server } from "node:http";
 import { handleRaidSubmission } from "./services/raidService.js";
+import {
+  handleVerificationChannelCreate,
+  handleVerificationMemberJoin,
+} from "./gateway/verificationEvents.js";
 
 async function main() {
   const client = createClient();
@@ -63,6 +67,16 @@ async function main() {
 
   client.on(Events.GuildUpdate, (_previous, guild) => {
     void syncGuild(guild);
+  });
+
+  client.on(Events.GuildMemberAdd, (member) => {
+    void handleVerificationMemberJoin(member);
+  });
+
+  client.on(Events.ChannelCreate, (channel) => {
+    if (!channel.isDMBased()) {
+      void handleVerificationChannelCreate(channel);
+    }
   });
 
   client.on(Events.Error, (err) =>

@@ -18,6 +18,13 @@ Raids are deployed across the dashboard, shared database, and bot. Raid
 creation uses the same `@everyone` / `@here` / no-ping start control as raffle
 hosting. There is no standalone Ping product.
 
+Discord-native member verification is implemented across the bot, shared
+database, and organization Settings dashboard. Administrators can configure
+the full flow and codes from Discord or the web, while the bot remains the
+authority for join-time Unverified roles, onboarding-only channel visibility,
+panel delivery, modal/rules interactions, atomic access-code claims, role
+grants, and private verification logs.
+
 ## Runtime topology
 
 ```mermaid
@@ -45,8 +52,9 @@ flowchart LR
 
 The bot still exposes an authenticated localhost control API on port 4000, but
 production dashboard actions no longer depend on it. Vercel queues publish,
-edit, end, and reroll work in PostgreSQL; the bot scheduler consumes it.
-Raid lifecycle requests use the same database-mediated boundary.
+edit, end, reroll, and verification-control work in PostgreSQL; the bot
+scheduler consumes it. Raid lifecycle requests use the same database-mediated
+boundary.
 
 ## Repository layout
 
@@ -99,6 +107,13 @@ same-page return when no session exists.
 - `WalletProfile`: reusable per-user/per-chain wallet registry.
 - `Wallet`: optional raffle-specific winner wallet.
 - `Blacklist`, `Log`, `Proof`: guild-scoped enforcement, audit, and artifacts.
+- `VerificationSettings`: guild-scoped channels, roles, copy, flow switches,
+  and published panel identity.
+- `VerificationCode`: active/expiration/use-limit policy and code-specific
+  Discord role grants.
+- `VerificationAttempt`, `VerificationRedemption`, `VerificationLog`, and
+  `MemberVerification`: durable in-progress state, atomic code use, immutable
+  outcomes, current verified state, and rules-acceptance timestamps.
 
 ### Multi-tenant platform
 
@@ -475,6 +490,56 @@ migration `20260728143000_remove_standalone_pings_add_raid_start_ping` adds
 permission strings. Migration `20260728160000_default_raid_channel` adds the
 Raid-specific channel default and backfills it from each guild's existing
 raffle default to preserve the previous behavior.
+
+## Discord member verification
+
+`/verification setup` exposes an ephemeral Discord admin control panel rather
+than a JSON configuration surface. Managers choose the Unverified role,
+verification/rules/log channels, any extra onboarding-visible channels,
+default verified roles, welcome embed/button content, modal content,
+success/failure messages, and whether codes or rules acceptance are required.
+The requested `/verification code create|edit|delete|list` commands use modals,
+role selectors, autocomplete, and confirmation buttons.
+
+Organization Settings provides the same first-class administration on the
+web: live state, Discord channel/role pickers, welcome and modal previews,
+requirement switches, success/failure copy, complete code CRUD, per-code role
+grants, usage/expiration state, and recent verification activity. Web writes
+are tenant-scoped with `settings:edit`. Settings and code records persist
+directly, while enable/disable, channel access sync, and panel publication are
+revisioned control requests consumed by the bot scheduler.
+
+When verification is enabled, `GuildMemberAdd` assigns the configured
+Unverified role. KOS applies only the `ViewChannel` overwrite belonging to
+that role: configured onboarding channels are allowed and other guild
+channels are denied. It never changes `@everyone`, preserves unrelated
+overwrite bits, clears its managed visibility bit when disabled, and applies
+the deny-by-default policy to newly created channels.
+
+Member verification begins from the public KOS embed. A required code is
+entered only in a Discord modal. The bot validates active state, expiration,
+remaining uses, and optional one-redemption-per-member policy, then creates a
+15-minute durable attempt without consuming the code. If rules are required,
+the ephemeral rules embed links to the configured channel and records the
+acceptance timestamp only after **I Agree**.
+
+Final completion atomically claims a code use with an optimistic database
+guard, writes a redemption snapshot, grants default plus code-specific roles,
+and removes Unverified. Role failures compensate the code claim and any roles
+added by that attempt. Success updates `MemberVerification`, preserves an
+append-only `VerificationLog`, sends the configured member message, and
+mirrors a branded event to the private log channel when configured.
+
+Migration `20260729120000_discord_verification` adds the guild settings, code,
+attempt, redemption, log, and member-state tables plus the
+`VERIFICATION` general audit category.
+`20260729150000_verification_web_control` adds the compare-and-clear web
+control request fields. A `controlRequestId` acknowledgement can clear only
+the revision the bot processed, so a newer dashboard save remains queued for
+the next scheduler tick. Prior Unverified role IDs are retained until the bot
+clears KOS's old `ViewChannel` overwrite. Both migrations must be applied
+before the bot and dashboard are deployed, and the changed global
+slash-command definition must then be registered.
 
 ## Deployment
 

@@ -7,6 +7,7 @@ import { pointsCommand } from "./points.js";
 import { tasksCommand } from "./tasks.js";
 import { rewardsCommand } from "./rewards.js";
 import { campaignsCommand } from "./campaigns.js";
+import { verificationCommand } from "./verification.js";
 
 export const commands: Command[] = [
   raffleCommand,
@@ -17,6 +18,7 @@ export const commands: Command[] = [
   tasksCommand,
   rewardsCommand,
   campaignsCommand,
+  verificationCommand,
 ];
 
 /** Lookup map by command name for the interaction router. */

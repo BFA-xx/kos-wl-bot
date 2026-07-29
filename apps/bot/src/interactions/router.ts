@@ -9,6 +9,11 @@ import { handleButton } from "./buttons.js";
 import { handleModal } from "./modals.js";
 import { handleRaffleSelect } from "./raffleWizard.js";
 import { logger } from "../logger.js";
+import { parseId } from "../utils/ids.js";
+import {
+  handleVerificationSelect,
+  isVerificationSelectAction,
+} from "./verificationSelectHandler.js";
 
 /** Single entry point for every interaction the bot receives. */
 export async function handleInteraction(
@@ -32,6 +37,15 @@ export async function handleInteraction(
       interaction.isRoleSelectMenu() ||
       interaction.isStringSelectMenu()
     ) {
+      const parsed = parseId(interaction.customId);
+      if (
+        parsed &&
+        isVerificationSelectAction(parsed.action) &&
+        (interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu())
+      ) {
+        await handleVerificationSelect(interaction, parsed.action, parsed.args);
+        return;
+      }
       await handleRaffleSelect(interaction);
       return;
     }
@@ -86,7 +100,7 @@ async function runCommand(
     if (!allowed) {
       await interaction.reply({
         content:
-          "You don't have permission to manage raffles. Ask an admin to grant you a manager role.",
+          "You don't have permission to use this KOS management command. Ask an admin to grant you a manager role.",
         flags: MessageFlags.Ephemeral,
       });
       return;
