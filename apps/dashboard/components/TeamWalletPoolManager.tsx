@@ -87,13 +87,7 @@ interface PoolData {
   };
 }
 
-const CHAINS = [
-  "ETHEREUM",
-  "BASE",
-  "ROBINHOOD",
-  "SOLANA",
-  "BITCOIN",
-] as const;
+const CHAINS = ["ETHEREUM", "BASE", "ROBINHOOD", "SOLANA", "BITCOIN"] as const;
 const CHAIN_LABELS: Record<(typeof CHAINS)[number], string> = {
   ETHEREUM: "Ethereum",
   BASE: "Base",
@@ -284,12 +278,12 @@ export function TeamWalletPoolManager() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.42fr)]">
-        <div className="kos-card p-4 sm:p-5">
+        <div className="kos-card p-3 sm:p-5">
           <SectionTitle
             action={
               <button
                 type="button"
-                className="kos-btn-primary"
+                className="kos-btn-primary min-h-10 shrink-0"
                 onClick={() => setShowImport((value) => !value)}
               >
                 {showImport ? "Close" : "+ Add wallets"}
@@ -299,10 +293,10 @@ export function TeamWalletPoolManager() {
             Wallets
           </SectionTitle>
           {showImport ? (
-            <div className="mb-5 rounded-3xl border border-blue-400/15 bg-blue-500/[0.045] p-4">
+            <div className="mb-5 rounded-3xl border border-blue-400/15 bg-blue-500/[0.045] p-3 sm:p-4">
               <div className="grid gap-3">
                 {data.viewer.canManageAll ? (
-                  <label className="max-w-md">
+                  <label className="w-full sm:max-w-md">
                     <span className="kos-label">Wallet owner</span>
                     <select
                       className="kos-input"
@@ -325,7 +319,7 @@ export function TeamWalletPoolManager() {
                       return (
                         <label
                           key={chain}
-                          className={`flex cursor-pointer items-center gap-2 rounded-2xl border px-3 py-2.5 text-sm transition ${
+                          className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl border px-2.5 py-2.5 text-xs transition sm:px-3 sm:text-sm ${
                             checked
                               ? "border-blue-400/35 bg-blue-500/10 text-blue-100"
                               : "border-white/[0.08] bg-white/[0.025] text-kos-muted hover:border-white/[0.16] hover:text-white"
@@ -358,7 +352,7 @@ export function TeamWalletPoolManager() {
               <label className="mt-3 block">
                 <span className="kos-label">Paste addresses or CSV</span>
                 <textarea
-                  className="kos-input min-h-36 font-mono text-xs"
+                  className="kos-input min-h-40 font-mono text-xs"
                   value={content}
                   onChange={(event) => setContent(event.target.value)}
                   placeholder={
@@ -376,17 +370,17 @@ export function TeamWalletPoolManager() {
                   if (file) void readFile(file);
                 }}
               />
-              <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
                 <button
                   type="button"
-                  className="kos-btn"
+                  className="kos-btn min-h-11 w-full justify-center sm:w-auto"
                   onClick={() => fileRef.current?.click()}
                 >
                   Choose CSV/TXT
                 </button>
                 <button
                   type="button"
-                  className="kos-btn-primary"
+                  className="kos-btn-primary min-h-11 w-full justify-center sm:w-auto"
                   disabled={
                     !content.trim() ||
                     !selectedChains.length ||
@@ -427,54 +421,76 @@ export function TeamWalletPoolManager() {
                 : "No wallets yet. Add your first validated team wallet."}
             </Empty>
           ) : (
-            <TableShell>
-              <table className="kos-table">
-                <thead>
-                  <tr>
-                    <th>Wallet Address</th>
-                    <th>Owner</th>
-                    <th>Chain</th>
-                    <th>Status</th>
-                    <th className="text-right">Times Used</th>
-                    <th>Last Used</th>
-                    <th>Created</th>
-                    <th className="text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.wallets.map((wallet) => (
-                    <WalletRows
-                      key={wallet.id}
-                      wallet={wallet}
-                      orgSlug={slug}
-                      expanded={expanded === wallet.id}
-                      busy={busy === wallet.id}
-                      onToggleHistory={() =>
-                        setExpanded((value) =>
-                          value === wallet.id ? null : wallet.id,
-                        )
-                      }
-                      onChangeStatus={() => void changeStatus(wallet)}
-                      onDelete={() => void deleteWallet(wallet)}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </TableShell>
+            <>
+              <div className="space-y-3 lg:hidden">
+                {data.wallets.map((wallet) => (
+                  <WalletMobileCard
+                    key={wallet.id}
+                    wallet={wallet}
+                    orgSlug={slug}
+                    expanded={expanded === wallet.id}
+                    busy={busy === wallet.id}
+                    onToggleHistory={() =>
+                      setExpanded((value) =>
+                        value === wallet.id ? null : wallet.id,
+                      )
+                    }
+                    onChangeStatus={() => void changeStatus(wallet)}
+                    onDelete={() => void deleteWallet(wallet)}
+                  />
+                ))}
+              </div>
+              <div className="hidden lg:block">
+                <TableShell>
+                  <table className="kos-table">
+                    <thead>
+                      <tr>
+                        <th>Wallet Address</th>
+                        <th>Owner</th>
+                        <th>Chain</th>
+                        <th>Status</th>
+                        <th className="text-right">Times Used</th>
+                        <th>Last Used</th>
+                        <th>Created</th>
+                        <th className="text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.wallets.map((wallet) => (
+                        <WalletRows
+                          key={wallet.id}
+                          wallet={wallet}
+                          orgSlug={slug}
+                          expanded={expanded === wallet.id}
+                          busy={busy === wallet.id}
+                          onToggleHistory={() =>
+                            setExpanded((value) =>
+                              value === wallet.id ? null : wallet.id,
+                            )
+                          }
+                          onChangeStatus={() => void changeStatus(wallet)}
+                          onDelete={() => void deleteWallet(wallet)}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </TableShell>
+              </div>
+            </>
           )}
           {data.pagination.totalPages > 1 ? (
-            <div className="mt-4 flex items-center justify-between text-sm text-kos-muted">
+            <div className="mt-4 flex flex-col gap-3 text-sm text-kos-muted sm:flex-row sm:items-center sm:justify-between">
               <span>{data.pagination.total} wallets</span>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:flex">
                 <button
-                  className="kos-btn"
+                  className="kos-btn min-h-11 justify-center"
                   disabled={page <= 1}
                   onClick={() => setPage((value) => value - 1)}
                 >
                   Previous
                 </button>
                 <button
-                  className="kos-btn"
+                  className="kos-btn min-h-11 justify-center"
                   disabled={page >= data.pagination.totalPages}
                   onClick={() => setPage((value) => value + 1)}
                 >
@@ -574,7 +590,7 @@ export function TeamWalletPoolManager() {
                         <button
                           type="button"
                           aria-label={`Move ${member.name} up`}
-                          className="rounded-lg p-1.5 text-kos-muted hover:bg-white/[0.06] hover:text-white disabled:opacity-30"
+                          className="flex h-10 w-10 items-center justify-center rounded-xl text-kos-muted hover:bg-white/[0.06] hover:text-white disabled:opacity-30"
                           disabled={index === 0}
                           onClick={() => movePriority(index, -1)}
                         >
@@ -583,7 +599,7 @@ export function TeamWalletPoolManager() {
                         <button
                           type="button"
                           aria-label={`Move ${member.name} down`}
-                          className="rounded-lg p-1.5 text-kos-muted hover:bg-white/[0.06] hover:text-white disabled:opacity-30"
+                          className="flex h-10 w-10 items-center justify-center rounded-xl text-kos-muted hover:bg-white/[0.06] hover:text-white disabled:opacity-30"
                           disabled={index === priorityIds.length - 1}
                           onClick={() => movePriority(index, 1)}
                         >
@@ -626,6 +642,113 @@ export function TeamWalletPoolManager() {
   );
 }
 
+type WalletDisplayProps = {
+  wallet: TeamWallet;
+  orgSlug: string;
+  expanded: boolean;
+  busy: boolean;
+  onToggleHistory: () => void;
+  onChangeStatus: () => void;
+  onDelete: () => void;
+};
+
+function WalletMobileCard({
+  wallet,
+  orgSlug,
+  expanded,
+  busy,
+  onToggleHistory,
+  onChangeStatus,
+  onDelete,
+}: WalletDisplayProps) {
+  const actionsDisabled = busy || wallet.status === "RESERVED";
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <button
+            type="button"
+            className="block max-w-full truncate font-mono text-sm font-medium hover:text-blue-300"
+            title="Copy wallet address"
+            aria-label={`Copy wallet ${wallet.address}`}
+            onClick={() => void navigator.clipboard.writeText(wallet.address)}
+          >
+            {shortAddress(wallet.address)}
+          </button>
+          <div className="mt-1 truncate text-xs text-kos-muted">
+            {wallet.ownerName}
+          </div>
+        </div>
+        <div className="shrink-0">
+          <StatusBadge status={wallet.status} />
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {wallet.chains.map((chain) => (
+          <span
+            key={chain}
+            className="rounded-lg border border-white/[0.08] bg-white/[0.035] px-2 py-1 text-[11px] text-kos-muted"
+          >
+            {CHAIN_LABELS[chain as keyof typeof CHAIN_LABELS] ?? chain}
+          </span>
+        ))}
+      </div>
+
+      <dl className="mt-3 grid grid-cols-2 gap-2 border-y border-white/[0.07] py-3 text-xs">
+        <div>
+          <dt className="text-kos-muted">Times used</dt>
+          <dd className="mt-0.5 font-medium text-white">{wallet.timesUsed}</dd>
+        </div>
+        <div>
+          <dt className="text-kos-muted">Last used</dt>
+          <dd className="mt-0.5 truncate text-white">
+            {fmtDate(wallet.lastUsedAt)}
+          </dd>
+        </div>
+        <div className="col-span-2">
+          <dt className="text-kos-muted">Added</dt>
+          <dd className="mt-0.5 text-white">{fmtDate(wallet.createdAt)}</dd>
+        </div>
+      </dl>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <button
+          type="button"
+          className="kos-btn min-h-10 justify-center px-2 text-xs"
+          aria-expanded={expanded}
+          onClick={onToggleHistory}
+        >
+          {expanded ? "Hide" : "History"}
+        </button>
+        <button
+          type="button"
+          className="kos-btn min-h-10 justify-center px-2 text-xs"
+          disabled={actionsDisabled}
+          onClick={onChangeStatus}
+        >
+          {wallet.status === "DISABLED" ? "Enable" : "Disable"}
+        </button>
+        <button
+          type="button"
+          className="min-h-10 rounded-xl px-2 text-xs text-kos-muted hover:bg-red-500/10 hover:text-red-300 disabled:opacity-40"
+          disabled={actionsDisabled}
+          onClick={onDelete}
+        >
+          Delete
+        </button>
+      </div>
+
+      {expanded ? (
+        <div className="mt-3">
+          <WalletHistoryPanel wallet={wallet} orgSlug={orgSlug} />
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
 function WalletRows({
   wallet,
   orgSlug,
@@ -634,15 +757,7 @@ function WalletRows({
   onToggleHistory,
   onChangeStatus,
   onDelete,
-}: {
-  wallet: TeamWallet;
-  orgSlug: string;
-  expanded: boolean;
-  busy: boolean;
-  onToggleHistory: () => void;
-  onChangeStatus: () => void;
-  onDelete: () => void;
-}) {
+}: WalletDisplayProps) {
   return (
     <>
       <tr>
@@ -707,43 +822,51 @@ function WalletRows({
       {expanded ? (
         <tr>
           <td colSpan={8} className="!bg-black/10">
-            <div className="rounded-2xl border border-white/[0.08] bg-black/10 p-3">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-kos-muted">
-                Usage history
-              </div>
-              {wallet.history.length ? (
-                <div className="space-y-2">
-                  {wallet.history.map((usage) => (
-                    <div
-                      key={usage.id}
-                      className="flex flex-col gap-1 rounded-xl border border-white/[0.07] p-2.5 text-xs sm:flex-row sm:items-center"
-                    >
-                      <Link
-                        href={`/${orgSlug}/raffles/${usage.raffleId}`}
-                        className="font-medium hover:text-blue-300"
-                      >
-                        #{usage.raffleId} · {usage.project}
-                      </Link>
-                      <span className="text-kos-muted">
-                        {usage.raffleTitle}
-                      </span>
-                      <span className="sm:ml-auto">
-                        {fmtDate(usage.reservedAt)}
-                      </span>
-                      <StatusBadge status={usage.status} />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm text-kos-muted">
-                  This wallet has not been used in a raffle.
-                </div>
-              )}
-            </div>
+            <WalletHistoryPanel wallet={wallet} orgSlug={orgSlug} />
           </td>
         </tr>
       ) : null}
     </>
+  );
+}
+
+function WalletHistoryPanel({
+  wallet,
+  orgSlug,
+}: {
+  wallet: TeamWallet;
+  orgSlug: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/[0.08] bg-black/10 p-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-kos-muted">
+        Usage history
+      </div>
+      {wallet.history.length ? (
+        <div className="space-y-2">
+          {wallet.history.map((usage) => (
+            <div
+              key={usage.id}
+              className="flex flex-col gap-1 rounded-xl border border-white/[0.07] p-2.5 text-xs sm:flex-row sm:items-center"
+            >
+              <Link
+                href={`/${orgSlug}/raffles/${usage.raffleId}`}
+                className="font-medium hover:text-blue-300"
+              >
+                #{usage.raffleId} · {usage.project}
+              </Link>
+              <span className="text-kos-muted">{usage.raffleTitle}</span>
+              <span className="sm:ml-auto">{fmtDate(usage.reservedAt)}</span>
+              <StatusBadge status={usage.status} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm text-kos-muted">
+          This wallet has not been used in a raffle.
+        </div>
+      )}
+    </div>
   );
 }
 
