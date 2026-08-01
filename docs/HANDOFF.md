@@ -3,7 +3,7 @@
 Last updated: 2026-08-01
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited production application commit: `cfbe80c`
+Audited production application commit: `2b67642`
 
 ## Current state
 
@@ -106,6 +106,11 @@ Phase 3 is implemented through S2.5:
   dashboard projects. Mobile uses wallet cards and 25-row pages while desktop
   retains the 100-row table; the multi-chain importer is touch-sized and has
   no horizontal overflow at the authenticated production phone viewport.
+- Collab Hub Spreadsheet Edition is migrated and deployed. The CRM-style
+  board/calendar workspace has been replaced by one inline-editable tracker
+  with GTD/FCFS spots, host/status controls, document links/uploads, linked
+  raffle winners/proofs, wallet exports, sorting/filtering, and row/bulk
+  actions. Existing raffle and bot automation remains the source of truth.
 
 ## Team Wallet Pool — production release 2026-08-01
 
@@ -393,6 +398,64 @@ Mobile verification and production evidence:
   multi-chain EVM wallets, verify mixed Community/Team Pool CSV and Excel rows,
   cancel it, release the reservation, and confirm the pool returns to
   Available.
+
+## Collab Hub Spreadsheet Edition — production release 2026-08-01
+
+### Delivered
+
+- Replaced the CRM-style Collab Hub board, calendar, partner directory, and
+  analytics workspace with a single large-row spreadsheet designed around the
+  project, project X link, Discord invite, collaboration document, GTD/FCFS
+  spots, host, status, winner list, wallet export, notes, and created date.
+- Added instant local search, status/host/project/date/tag filters, sortable
+  sticky headers, inline editing, keyboard-friendly save/tab behavior, secure
+  document upload, row creation/duplication/archive/permanent delete, and bulk
+  host/status/export/archive/delete actions.
+- Reused the existing organization member permissions, linked KOS raffle,
+  encrypted proof artifact, and wallet export paths. Creating a raffle from a
+  row attaches it through `CollaborationRaffle`; the bot remains responsible
+  for raffle transitions, winners, proofs, wallet collection, and automatic
+  collaboration state updates.
+- Added additive migration `20260801180000_collab_spreadsheet_v1` with
+  `Collaboration.fcfsSpots` and `Collaboration.documentUrl`. Existing
+  `whitelistAllocation` remains the GTD allocation and historical source for
+  wallet automation.
+
+### Verification
+
+- Dashboard tests passed: 92 existing tests plus two new tenant-scoped bulk
+  action tests. Bot tests passed all 28 and DB tests passed all nine.
+- Dashboard, bot, and DB typechecks passed. Prisma generation, `git diff
+--check`, and the dashboard production build passed; browser QA covered the
+  spreadsheet layout, horizontal sticky behavior, search, add-row, and bulk
+  selection without weakening the authenticated route.
+
+### Production release evidence
+
+- Application commit `b372817` (`feat: redesign collab hub as spreadsheet`)
+  was merged with the latest remote dashboard work and pushed to `main` as
+  `2b67642`.
+- Production was healthy with all 33 previous migrations current before the
+  change. A restricted custom-format logical backup was created at
+  `/home/ubuntu/backups/kos-neon-pre-collab-spreadsheet-20260801T121311Z.dump`:
+  42,028,789 bytes, mode `600`, 501 readable archive entries, SHA-256
+  `9599d80c7f7bd6c5e7a563cc0e7bda02a3e5f0b623f248dacd161ed6cbdbb5d9`.
+- The additive migration was applied before either runtime changed. Prisma now
+  reports all 34 migrations current; both new columns exist and the migration
+  ledger contains exactly one completed row. All 75 existing collaborations
+  received the zero FCFS default and no customer document URL was created.
+- `./scripts/deploy-ec2.sh` passed all 28 bot tests, rebuilt the DB and bot,
+  registered nine global commands, and restarted PM2 process `kos-bot` as PID
+  `258485`. Rechecked health returned `ok:true`, `ready:true`, two guilds, and
+  a successful scheduler tick.
+- Both connected Vercel projects succeeded for merged commit `2b67642`:
+  `Vercel – kos-wl-bot-dashboard` and
+  `Vercel – kos-wl-bot-dashboard-3a8x`.
+- Production route canaries on `https://raffle.koslabs.app` return `307` for
+  signed-out `/kos/collabs` and `401`, not `404`, for
+  `/api/kos/collaborations`. The compatibility Vercel domain also returns the
+  expected `401` API boundary. No collaboration, raffle, wallet, document, or
+  proof record was created or modified for deployment QA.
 
 ## Discord and web member verification — production release 2026-07-29
 
