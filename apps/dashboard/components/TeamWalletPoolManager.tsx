@@ -372,7 +372,7 @@ export function TeamWalletPoolManager() {
               <label className="mt-3 block">
                 <span className="kos-label">Paste addresses or CSV</span>
                 <textarea
-                  className="kos-input min-h-40 font-mono text-xs"
+                  className="kos-input !min-h-40 font-mono text-xs"
                   value={content}
                   onChange={(event) => setContent(event.target.value)}
                   placeholder={
