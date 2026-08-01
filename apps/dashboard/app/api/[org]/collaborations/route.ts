@@ -72,6 +72,7 @@ export const GET = withAccess(async (req, { params }) => {
     "priority",
     "hostAt",
     "walletSubmissionDeadline",
+    "createdAt",
     "updatedAt",
     "whitelistAllocation",
   ]);
@@ -107,6 +108,7 @@ export const GET = withAccess(async (req, { params }) => {
             { primaryContactName: { contains: q, mode: "insensitive" } },
             { discordUsername: { contains: q, mode: "insensitive" } },
             { requirements: { contains: q, mode: "insensitive" } },
+            { documentUrl: { contains: q, mode: "insensitive" } },
             {
               partner: {
                 OR: [
@@ -143,6 +145,12 @@ export const GET = withAccess(async (req, { params }) => {
       include: {
         partner: true,
         tags: { include: { tag: true } },
+        attachments: {
+          where: { kind: "DOCUMENT" },
+          select: { id: true, name: true, mimeType: true, size: true },
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        },
         wallets: { select: { status: true } },
         raffles: {
           include: {
@@ -157,6 +165,13 @@ export const GET = withAccess(async (req, { params }) => {
                 entryCount: true,
                 endAt: true,
                 walletChains: true,
+                proof: {
+                  select: {
+                    messageLink: true,
+                    artifactsStoredAt: true,
+                  },
+                },
+                _count: { select: { winners: true } },
               },
             },
           },
@@ -392,6 +407,13 @@ export const POST = withAccess(async (req, { params }) => {
       { status: 400 },
     );
   }
+  const fcfsSpots = Number(body.fcfsSpots ?? 0);
+  if (!Number.isInteger(fcfsSpots) || fcfsSpots < 0 || fcfsSpots > 1_000_000) {
+    return NextResponse.json(
+      { error: "FCFS spots must be a non-negative whole number." },
+      { status: 400 },
+    );
+  }
   const status = isCollabStatus(body.status) ? body.status : "LEAD";
   const priority = isCollabPriority(body.priority) ? body.priority : "MEDIUM";
   const teamLeadId = text(body.ownerId, 40) || user.id;
@@ -505,6 +527,8 @@ export const POST = withAccess(async (req, { params }) => {
         status,
         priority,
         whitelistAllocation,
+        fcfsSpots,
+        documentUrl: sanitizeHttpUrl(body.documentUrl),
         requirements: text(body.requirements, 20_000) || null,
         primaryContactName: primaryContactName || null,
         discordUsername: text(body.discordUsername, 120) || null,

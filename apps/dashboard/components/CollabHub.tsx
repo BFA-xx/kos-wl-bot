@@ -1,40 +1,30 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { upload as uploadBlob } from "@vercel/blob/client";
+import { useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import useSWR from "swr";
-import { motion } from "framer-motion";
-import { Empty, PageTitle, SectionTitle, StatCard, TableShell } from "./ui";
-import { CollabCreatePanel } from "./CollabCreatePanel";
-import { PartnerMark, RaffleBanner } from "./CollabMedia";
+import { NewRaffleModal } from "./NewRaffleModal";
+import { PartnerMark } from "./CollabMedia";
 import {
-  IconChart,
+  IconArrowDown,
+  IconArrowUp,
   IconCheck,
-  IconGrid,
+  IconDoc,
   IconPlus,
   IconSearch,
-  IconUsers,
+  IconWallet,
 } from "./icons";
 import { useCan } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
-import {
-  collaborationBannerUrls,
-  collaborationChainText,
-  collaborationDescriptor,
-} from "@/lib/collab-presentation";
-import {
-  COLLAB_PRIORITIES,
-  COLLAB_PRIORITY_LABELS,
-  COLLAB_STATUSES,
-  COLLAB_STATUS_LABELS,
-  collabStatusTone,
-  displayCollabStatus,
-  type CollabPriority,
-  type CollabStatus,
-} from "@/lib/collab-shared";
+import type { CollabStatus } from "@/lib/collab-shared";
 
-const fetcher = (url: string) => fetch(url).then((response) => response.json());
+const fetcher = (url: string) =>
+  fetch(url).then(async (response) => {
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error ?? "Request failed.");
+    return body;
+  });
 
 interface Person {
   id: string;
@@ -43,46 +33,50 @@ interface Person {
   role: string;
 }
 
+interface Attachment {
+  id: string;
+  name: string;
+  mimeType: string | null;
+  size: number | null;
+}
+
 interface CollabRow {
   id: string;
   projectName: string;
   status: CollabStatus;
-  priority: CollabPriority;
-  submissionStatus: string;
   whitelistAllocation: number;
-  ownerId: string | null;
+  fcfsSpots: number;
+  documentUrl: string | null;
+  requirements: string | null;
   assignedToId: string | null;
-  reviewerId: string | null;
-  hostAt: string | null;
-  hostingDeadline: string | null;
-  walletSubmissionDeadline: string | null;
-  collaborationDeadline: string | null;
-  followUpAt: string | null;
+  exportedAt: string | null;
+  createdAt: string;
   updatedAt: string;
   partner: {
     id: string;
     name: string;
     logoUrl: string | null;
-    websiteUrl: string | null;
     discordUrl: string | null;
     xUrl: string | null;
-    chain: string | null;
-    category: string | null;
-    trustRating: number | null;
   };
   tags: { tag: { id: string; name: string; color: string } }[];
+  attachments: Attachment[];
   raffles: {
     raffle: {
       id: number;
       projectName: string;
-      status: string;
       title: string;
-      bannerUrl: string | null;
+      status: string;
+      spots: number;
+      entryCount: number;
       endAt: string;
-      walletChains: string[];
+      proof: {
+        messageLink: string | null;
+        artifactsStoredAt: string | null;
+      } | null;
+      _count: { winners: number };
     };
   }[];
-  reminders: { id: string; title: string; type: string; dueAt: string }[];
   walletProgress: {
     total: number;
     collected: number;
@@ -95,2565 +89,1782 @@ interface CollabRow {
 
 interface HubData {
   collaborations: CollabRow[];
-  summary: {
-    active: number;
-    hostingToday: number;
-    waitingForWallets: number;
-    readyForSubmission: number;
-    completedAllTime: number;
-    totalWlSpots: number;
-    linkedRafflesAllTime: number;
-    unlinkedRaffles: number;
-  };
   team: Person[];
   tags: { id: string; name: string; color: string }[];
-  savedFilters: {
-    id: string;
-    name: string;
-    view: string;
-    criteria: Record<string, string>;
-  }[];
-  recentActivity: {
-    id: string;
-    title: string;
-    body: string | null;
-    createdAt: string;
-    collaboration: { id: string; projectName: string };
-  }[];
-  recentNotes: {
-    id: string;
-    body: string;
-    pinned: boolean;
-    updatedAt: string;
-    collaboration: { id: string; projectName: string };
-  }[];
-  reminders: {
-    id: string;
-    title: string;
-    dueAt: string;
-    type: string;
-    collaboration: { id: string; projectName: string };
-  }[];
-  analytics: {
-    total: number;
-    successRate: number;
-    averageCompletionDays: number;
-    wlCollected: number;
-    wlHosted: number;
-    pendingSubmissions: number;
-    topPartners: { name: string; count: number }[];
-    topTeamMembers: { id: string; name: string; count: number }[];
-    activityHistory: { key: string; label: string; value: number }[];
-  };
 }
 
-interface ImportOptions {
-  includeEmpty: boolean;
-  includeCancelled: boolean;
-  includeTests: boolean;
-}
+type SheetStatus =
+  | "IDEAS"
+  | "NOT_STARTED"
+  | "READY"
+  | "HOSTING"
+  | "HOSTED"
+  | "WALLETS_SUBMITTED"
+  | "COMPLETED"
+  | "CANCELLED";
 
-interface ImportPreview {
-  totalUnlinked: number;
-  defaultEligible: number;
-  empty: number;
-  cancelled: number;
-  test: number;
-  selected: number;
-  groups: number;
-}
-
-const DEFAULT_IMPORT_OPTIONS: ImportOptions = {
-  includeEmpty: false,
-  includeCancelled: false,
-  includeTests: false,
-};
-
-interface Partner {
-  id: string;
-  name: string;
-  logoUrl: string | null;
-  websiteUrl: string | null;
-  discordUrl: string | null;
-  xUrl: string | null;
-  chain: string | null;
-  category: string | null;
-  trustRating: number | null;
-  responseRate: number | null;
-  privateNotes: string | null;
-  contacts: { id: string; name: string; role: string | null }[];
-  collaborations: {
-    id: string;
-    projectName: string;
-    status: string;
-    raffles: { raffle: { walletChains: string[] } }[];
-  }[];
-}
-
-type View = "BOARD" | "TABLE" | "CALENDAR";
-type HubMode = "WORKSPACE" | "PARTNERS";
-
-const BOARD_STATUSES: CollabStatus[] = [
-  "LEAD",
-  "REACHED_OUT",
+const SHEET_STATUSES: SheetStatus[] = [
+  "IDEAS",
+  "NOT_STARTED",
+  "READY",
+  "HOSTING",
+  "HOSTED",
+  "WALLETS_SUBMITTED",
   "COMPLETED",
-  ...COLLAB_STATUSES.filter(
-    (status) => !["LEAD", "REACHED_OUT", "COMPLETED"].includes(status),
-  ),
+  "CANCELLED",
 ];
 
-const TABLE_COLUMNS = [
-  "project",
-  "chain",
-  "social",
-  "spots",
-  "status",
-  "owner",
-  "host",
-  "wallets",
-  "submission",
-  "deadline",
-  "priority",
-  "updated",
-] as const;
-type TableColumn = (typeof TABLE_COLUMNS)[number];
+const STATUS_LABELS: Record<SheetStatus, string> = {
+  IDEAS: "Ideas",
+  NOT_STARTED: "Not Started",
+  READY: "Ready",
+  HOSTING: "Hosting",
+  HOSTED: "Hosted",
+  WALLETS_SUBMITTED: "Wallets Submitted",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+};
+
+const STATUS_CANONICAL: Record<SheetStatus, CollabStatus> = {
+  IDEAS: "LEAD",
+  NOT_STARTED: "REACHED_OUT",
+  READY: "CONFIRMED",
+  HOSTING: "HOSTING",
+  HOSTED: "COLLECTING_WALLETS",
+  WALLETS_SUBMITTED: "SUBMITTED",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
+};
+
+function sheetStatus(status: CollabStatus): SheetStatus {
+  if (status === "LEAD") return "IDEAS";
+  if (status === "REACHED_OUT" || status === "NEGOTIATING")
+    return "NOT_STARTED";
+  if (status === "CONFIRMED" || status === "SCHEDULED") return "READY";
+  if (status === "HOSTING") return "HOSTING";
+  if (status === "COLLECTING_WALLETS" || status === "READY_FOR_SUBMISSION")
+    return "HOSTED";
+  if (status === "SUBMITTED") return "WALLETS_SUBMITTED";
+  if (status === "COMPLETED") return "COMPLETED";
+  return "CANCELLED";
+}
+
+function statusTone(status: SheetStatus): string {
+  const tones: Record<SheetStatus, string> = {
+    IDEAS: "border-violet-400/25 bg-violet-400/10 text-violet-200",
+    NOT_STARTED: "border-zinc-400/20 bg-zinc-400/10 text-zinc-300",
+    READY: "border-cyan-400/25 bg-cyan-400/10 text-cyan-200",
+    HOSTING: "border-blue-400/25 bg-blue-400/10 text-blue-200",
+    HOSTED: "border-amber-400/25 bg-amber-400/10 text-amber-200",
+    WALLETS_SUBMITTED: "border-indigo-400/25 bg-indigo-400/10 text-indigo-200",
+    COMPLETED: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200",
+    CANCELLED: "border-red-400/25 bg-red-400/10 text-red-200",
+  };
+  return tones[status];
+}
+
+function hostname(value: string): string {
+  try {
+    return new URL(value).hostname.replace(/^www\./, "");
+  } catch {
+    return "Open link";
+  }
+}
+
+function dateLabel(value: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function escapeCsv(value: unknown): string {
+  const text = String(value ?? "");
+  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+type SortKey =
+  | "projectName"
+  | "gtd"
+  | "fcfs"
+  | "host"
+  | "status"
+  | "winners"
+  | "createdAt";
+
+interface DraftRow {
+  projectName: string;
+  xUrl: string;
+  discordUrl: string;
+  documentUrl: string;
+  gtd: number;
+  fcfs: number;
+  assignedToId: string;
+  status: SheetStatus;
+  notes: string;
+}
+
+const EMPTY_DRAFT: DraftRow = {
+  projectName: "",
+  xUrl: "",
+  discordUrl: "",
+  documentUrl: "",
+  gtd: 0,
+  fcfs: 0,
+  assignedToId: "",
+  status: "IDEAS",
+  notes: "",
+};
 
 export function CollabHub() {
   const { org } = useParams<{ org: string }>();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const canCreate = useCan(PERMISSIONS.COLLAB_CREATE);
   const canEdit = useCan(PERMISSIONS.COLLAB_EDIT);
+  const canAssign = useCan(PERMISSIONS.COLLAB_ASSIGN);
   const canArchive = useCan(PERMISSIONS.COLLAB_ARCHIVE);
-  const [mode, setMode] = useState<HubMode>("WORKSPACE");
-  const [view, setView] = useState<View>("BOARD");
-  const [q, setQ] = useState(searchParams.get("q") ?? "");
-  const [status, setStatus] = useState("");
-  const [priority, setPriority] = useState("");
-  const [owner, setOwner] = useState("");
-  const [tag, setTag] = useState("");
-  const [sort, setSort] = useState("updatedAt");
-  const [direction, setDirection] = useState<"asc" | "desc">("desc");
-  const [showCreate, setShowCreate] = useState(false);
-  const [showControls, setShowControls] = useState(true);
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [importingHistory, setImportingHistory] = useState(false);
-  const [showImport, setShowImport] = useState(false);
-  const [loadingImportPreview, setLoadingImportPreview] = useState(false);
-  const [importOptions, setImportOptions] = useState<ImportOptions>(
-    DEFAULT_IMPORT_OPTIONS,
+  const canExport = useCan(PERMISSIONS.COLLAB_EXPORT);
+  const canCreateRaffle = useCan(PERMISSIONS.RAFFLE_CREATE);
+  const { data, error, isLoading, mutate } = useSWR<HubData>(
+    `/api/${org}/collaborations?sort=createdAt&direction=desc`,
+    fetcher,
   );
-  const [importPreview, setImportPreview] = useState<ImportPreview | null>(
-    null,
-  );
-  const [showColumns, setShowColumns] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState<Set<TableColumn>>(
-    () => new Set(TABLE_COLUMNS),
-  );
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [hostFilter, setHostFilter] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("createdAt");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [saveName, setSaveName] = useState("");
-  const [showSave, setShowSave] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState<DraftRow>(EMPTY_DRAFT);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [month, setMonth] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  });
-  const searchRef = useRef<HTMLInputElement>(null);
-  const workspaceRef = useRef<HTMLDivElement>(null);
+  const [raffleRow, setRaffleRow] = useState<CollabRow | null>(null);
 
-  useEffect(() => {
-    const saved = window.localStorage.getItem(
-      `kos-collab-view:${org}`,
-    ) as View | null;
-    if (saved && ["BOARD", "TABLE", "CALENDAR"].includes(saved)) setView(saved);
-    const listener = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const typing =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.tagName === "SELECT";
-      if (event.key === "/" && !typing) {
-        event.preventDefault();
-        setShowControls(true);
-        window.requestAnimationFrame(() => searchRef.current?.focus());
-      }
-      if (!typing && event.key.toLowerCase() === "n" && canCreate)
-        setShowCreate(true);
-    };
-    window.addEventListener("keydown", listener);
-    return () => window.removeEventListener("keydown", listener);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canCreate, org]);
+  const teamById = useMemo(
+    () => new Map((data?.team ?? []).map((person) => [person.id, person])),
+    [data?.team],
+  );
 
-  useEffect(() => {
-    const incoming = searchParams.get("q") ?? "";
-    if (incoming !== q) setQ(incoming);
-    // Only react to URL navigation; local search typing should not rewrite it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  const projects = useMemo(
+    () =>
+      [
+        ...new Set((data?.collaborations ?? []).map((row) => row.projectName)),
+      ].sort((a, b) => a.localeCompare(b)),
+    [data?.collaborations],
+  );
 
-  function closeControls() {
-    setShowControls(false);
-    setShowMobileFilters(false);
-    setShowSave(false);
-    window.setTimeout(() => {
-      workspaceRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
+  const rows = useMemo(() => {
+    const normalized = search.trim().toLocaleLowerCase();
+    return [...(data?.collaborations ?? [])]
+      .filter((row) => {
+        const visibleStatus = sheetStatus(row.status);
+        const host = row.assignedToId
+          ? (teamById.get(row.assignedToId)?.name ?? "")
+          : "";
+        const searchable = [
+          row.projectName,
+          row.partner.xUrl,
+          row.partner.discordUrl,
+          row.documentUrl,
+          row.requirements,
+          host,
+          ...row.tags.map(({ tag }) => tag.name),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLocaleLowerCase();
+        return (
+          (!normalized || searchable.includes(normalized)) &&
+          (!statusFilter || visibleStatus === statusFilter) &&
+          (!hostFilter || row.assignedToId === hostFilter) &&
+          (!projectFilter || row.projectName === projectFilter) &&
+          (!tagFilter || row.tags.some(({ tag }) => tag.id === tagFilter)) &&
+          (!dateFilter || row.createdAt.slice(0, 10) === dateFilter)
+        );
+      })
+      .sort((a, b) => {
+        const hostName = (row: CollabRow) =>
+          row.assignedToId ? (teamById.get(row.assignedToId)?.name ?? "") : "";
+        const winners = (row: CollabRow) =>
+          row.raffles.reduce(
+            (total, link) => total + link.raffle._count.winners,
+            0,
+          );
+        const value = (row: CollabRow): string | number => {
+          if (sortKey === "projectName") return row.projectName.toLowerCase();
+          if (sortKey === "gtd") return row.whitelistAllocation;
+          if (sortKey === "fcfs") return row.fcfsSpots;
+          if (sortKey === "host") return hostName(row).toLowerCase();
+          if (sortKey === "status")
+            return SHEET_STATUSES.indexOf(sheetStatus(row.status));
+          if (sortKey === "winners") return winners(row);
+          return new Date(row.createdAt).getTime();
+        };
+        const av = value(a);
+        const bv = value(b);
+        const result = av < bv ? -1 : av > bv ? 1 : 0;
+        return sortDirection === "asc" ? result : -result;
       });
-    }, 300);
+  }, [
+    data?.collaborations,
+    dateFilter,
+    hostFilter,
+    projectFilter,
+    search,
+    sortDirection,
+    sortKey,
+    statusFilter,
+    tagFilter,
+    teamById,
+  ]);
+
+  const metrics = useMemo(() => {
+    const all = data?.collaborations ?? [];
+    return {
+      total: all.length,
+      hosting: all.filter((row) => sheetStatus(row.status) === "HOSTING")
+        .length,
+      hosted: all.filter((row) => sheetStatus(row.status) === "HOSTED").length,
+      completed: all.filter((row) => sheetStatus(row.status) === "COMPLETED")
+        .length,
+    };
+  }, [data?.collaborations]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
   }
 
-  function changeView(next: View) {
-    setView(next);
-    window.localStorage.setItem(`kos-collab-view:${org}`, next);
-    closeControls();
+  function toggleSelected(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
-  function changeMode(next: HubMode) {
-    setMode(next);
-    setShowControls(true);
+  function toggleAll() {
+    setSelected((current) =>
+      rows.length && rows.every((row) => current.has(row.id))
+        ? new Set()
+        : new Set(rows.map((row) => row.id)),
+    );
   }
 
-  const query = useMemo(() => {
-    const params = new URLSearchParams();
-    if (q.trim()) params.set("q", q.trim());
-    if (status) params.set("status", status);
-    if (priority) params.set("priority", priority);
-    if (owner) params.set("owner", owner);
-    if (tag) params.set("tag", tag);
-    params.set("sort", sort);
-    params.set("direction", direction);
-    return params.toString();
-  }, [direction, owner, priority, q, sort, status, tag]);
-  const { data, mutate, isLoading } = useSWR<HubData>(
-    `/api/${org}/collaborations?${query}`,
-    fetcher,
-    { refreshInterval: 30_000, keepPreviousData: true },
-  );
-  const { data: partnerData } = useSWR<{ partners: Partner[] }>(
-    mode === "PARTNERS"
-      ? `/api/${org}/partners?q=${encodeURIComponent(q)}`
-      : null,
-    fetcher,
-  );
-
-  const teamById = new Map(
-    (data?.team ?? []).map((person) => [person.id, person]),
-  );
-  const rows = data?.collaborations ?? [];
-
-  async function changeStatus(id: string, nextStatus: CollabStatus) {
+  async function updateRow(row: CollabRow, patch: Record<string, unknown>) {
     if (!canEdit) return;
+    setBusy(row.id);
     setMessage(null);
-    const res = await fetch(`/api/${org}/collaborations/${id}`, {
+    const response = await fetch(`/api/${org}/collaborations/${row.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ status: nextStatus }),
+      body: JSON.stringify(patch),
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setMessage(body.error ?? "Couldn't move that collaboration.");
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) setMessage(body.error ?? "Could not save that change.");
+    await mutate();
+    setBusy(null);
+  }
+
+  async function createRow() {
+    if (!draft.projectName.trim()) {
+      setMessage("Project name is required.");
       return;
     }
-    setMessage(`Moved to ${COLLAB_STATUS_LABELS[nextStatus]}.`);
-    await mutate();
-  }
-
-  async function bulk(action: "archive" | "status", nextStatus?: CollabStatus) {
-    if (!selected.size) return;
-    const res = await fetch(`/api/${org}/collaborations/bulk`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ids: [...selected], action, status: nextStatus }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) return setMessage(body.error ?? "Bulk action failed.");
-    setSelected(new Set());
-    setMessage(
-      `${body.count} collaboration${body.count === 1 ? "" : "s"} updated.`,
-    );
-    await mutate();
-  }
-
-  function exportCsv() {
-    const escape = (value: unknown) =>
-      `"${String(value ?? "").replaceAll('"', '""')}"`;
-    const csv = [
-      [
-        "Project",
-        "Chain",
-        "Status",
-        "WL spots",
-        "Wallet progress",
-        "Hosted by",
-        "Host date",
-        "Deadline",
-        "Priority",
-        "Updated",
-      ],
-      ...rows.map((row) => [
-        row.projectName,
-        collaborationChainText(row.raffles, row.partner.chain),
-        displayCollabStatus(row.status),
-        row.whitelistAllocation,
-        `${row.walletProgress.collected}/${row.walletProgress.total}`,
-        teamById.get(row.ownerId ?? "")?.name ?? "",
-        row.hostAt ?? row.hostingDeadline ?? "",
-        row.walletSubmissionDeadline ?? row.collaborationDeadline ?? "",
-        COLLAB_PRIORITY_LABELS[row.priority],
-        row.updatedAt,
-      ]),
-    ]
-      .map((line) => line.map(escape).join(","))
-      .join("\r\n");
-    const url = URL.createObjectURL(
-      new Blob(["\ufeff" + csv], { type: "text/csv" }),
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `KOS-${org}-collaborations.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function saveFilter() {
-    if (!saveName.trim()) return;
-    const res = await fetch(`/api/${org}/collaborations/filters`, {
+    setBusy("new");
+    setMessage(null);
+    const response = await fetch(`/api/${org}/collaborations`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        name: saveName,
-        view,
-        criteria: { q, status, priority, owner, tag, sort, direction },
+        projectName: draft.projectName,
+        xUrl: draft.xUrl,
+        discordUrl: draft.discordUrl,
+        documentUrl: draft.documentUrl,
+        whitelistAllocation: Number(draft.gtd),
+        fcfsSpots: Number(draft.fcfs),
+        assignedToId: draft.assignedToId || null,
+        status: STATUS_CANONICAL[draft.status],
+        requirements: draft.notes,
       }),
     });
-    if (res.ok) {
-      setShowSave(false);
-      setSaveName("");
-      setMessage("Filter saved for your team.");
-      mutate();
-    }
-  }
-
-  async function loadImportPreview(options: ImportOptions) {
-    setLoadingImportPreview(true);
-    const params = new URLSearchParams();
-    if (options.includeEmpty) params.set("includeEmpty", "1");
-    if (options.includeCancelled) params.set("includeCancelled", "1");
-    if (options.includeTests) params.set("includeTests", "1");
-    try {
-      const res = await fetch(
-        `/api/${org}/collaborations/import-history?${params}`,
-      );
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setMessage(body.error ?? "Couldn't preview raffle history.");
-        return;
-      }
-      setImportPreview(body as ImportPreview);
-    } catch {
-      setMessage("Couldn't preview raffle history. Check your connection.");
-    } finally {
-      setLoadingImportPreview(false);
-    }
-  }
-
-  function openImport() {
-    const options = { ...DEFAULT_IMPORT_OPTIONS };
-    setImportOptions(options);
-    setImportPreview(null);
-    setShowImport(true);
-    void loadImportPreview(options);
-  }
-
-  function updateImportOption(key: keyof ImportOptions, checked: boolean) {
-    const options = { ...importOptions, [key]: checked };
-    setImportOptions(options);
-    void loadImportPreview(options);
-  }
-
-  async function importHistory() {
-    if (importingHistory) return;
-    setImportingHistory(true);
-    setMessage(null);
-    try {
-      const res = await fetch(`/api/${org}/collaborations/import-history`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(importOptions),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setMessage(body.error ?? "Couldn't import raffle history.");
-        return;
-      }
-      setMessage(
-        body.raffles
-          ? `Imported ${body.raffles} raffles into ${body.collaborations} partner collaboration${body.collaborations === 1 ? "" : "s"}.`
-          : "Raffle history is already up to date.",
-      );
-      setShowImport(false);
-      await mutate();
-    } catch {
-      setMessage(
-        "Couldn't import raffle history. Check your connection and try again.",
-      );
-    } finally {
-      setImportingHistory(false);
-    }
-  }
-
-  function applyFilter(criteria: Record<string, string>, savedView?: string) {
-    setQ(criteria.q ?? "");
-    setStatus(criteria.status ?? "");
-    setPriority(criteria.priority ?? "");
-    setOwner(criteria.owner ?? "");
-    setTag(criteria.tag ?? "");
-    setSort(criteria.sort ?? "updatedAt");
-    setDirection(criteria.direction === "asc" ? "asc" : "desc");
-    if (savedView && ["BOARD", "TABLE", "CALENDAR"].includes(savedView)) {
-      changeView(savedView as View);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setMessage(body.error ?? "Could not add the collaboration.");
     } else {
-      closeControls();
+      setDraft(EMPTY_DRAFT);
+      setAdding(false);
+      setMessage("Collaboration added.");
+      await mutate();
+    }
+    setBusy(null);
+  }
+
+  async function duplicateRow(row: CollabRow) {
+    setBusy(row.id);
+    const response = await fetch(`/api/${org}/collaborations/${row.id}`, {
+      method: "POST",
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) setMessage(body.error ?? "Could not duplicate the row.");
+    else setMessage(`${row.projectName} duplicated.`);
+    await mutate();
+    setBusy(null);
+  }
+
+  async function archiveRow(row: CollabRow) {
+    setBusy(row.id);
+    const response = await fetch(`/api/${org}/collaborations/${row.id}`, {
+      method: "DELETE",
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) setMessage(body.error ?? "Could not archive the row.");
+    else setMessage(`${row.projectName} archived.`);
+    await mutate();
+    setBusy(null);
+  }
+
+  async function deleteRow(row: CollabRow) {
+    if (
+      !window.confirm(
+        `Permanently delete ${row.projectName}? Its raffles will stay in KOS, but this tracker row cannot be restored.`,
+      )
+    )
+      return;
+    setBusy(row.id);
+    const response = await fetch(
+      `/api/${org}/collaborations/${row.id}?permanent=1`,
+      { method: "DELETE" },
+    );
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) setMessage(body.error ?? "Could not delete the row.");
+    else setMessage(`${row.projectName} deleted.`);
+    await mutate();
+    setBusy(null);
+  }
+
+  async function bulkAction(
+    action: "archive" | "delete" | "assign" | "status",
+    value?: string,
+  ) {
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (
+      action === "delete" &&
+      !window.confirm(
+        `Permanently delete ${ids.length} selected collaboration${ids.length === 1 ? "" : "s"}? This cannot be undone.`,
+      )
+    )
+      return;
+    setBusy("bulk");
+    const response = await fetch(`/api/${org}/collaborations/bulk`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ids,
+        action,
+        ...(action === "assign" ? { assignedToId: value } : {}),
+        ...(action === "status" && value
+          ? { status: STATUS_CANONICAL[value as SheetStatus] }
+          : {}),
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) setMessage(body.error ?? "Bulk action failed.");
+    else {
+      setMessage(`${body.count} row${body.count === 1 ? "" : "s"} updated.`);
+      setSelected(new Set());
+      await mutate();
+    }
+    setBusy(null);
+  }
+
+  function exportSelected() {
+    const chosen = (data?.collaborations ?? []).filter((row) =>
+      selected.has(row.id),
+    );
+    if (!chosen.length) return;
+    const header = [
+      "Project",
+      "Project X Link",
+      "Discord Invite",
+      "Collab Document",
+      "GTD Spots",
+      "FCFS Spots",
+      "Host",
+      "Status",
+      "Winners",
+      "Wallet Export",
+      "Notes",
+      "Created At",
+    ];
+    const lines = chosen.map((row) => {
+      const winners = row.raffles.reduce(
+        (total, link) => total + link.raffle._count.winners,
+        0,
+      );
+      const walletState = row.exportedAt
+        ? "Exported"
+        : row.walletProgress.collected > 0
+          ? "Ready"
+          : "Pending";
+      return [
+        row.projectName,
+        row.partner.xUrl,
+        row.partner.discordUrl,
+        row.documentUrl,
+        row.whitelistAllocation,
+        row.fcfsSpots,
+        row.assignedToId ? teamById.get(row.assignedToId)?.name : "",
+        STATUS_LABELS[sheetStatus(row.status)],
+        winners,
+        walletState,
+        row.requirements,
+        row.createdAt,
+      ]
+        .map(escapeCsv)
+        .join(",");
+    });
+    const blob = new Blob(
+      [[header.map(escapeCsv).join(","), ...lines].join("\n")],
+      { type: "text/csv;charset=utf-8" },
+    );
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `KOS-collabs-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function uploadDocument(row: CollabRow, file?: File) {
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      setMessage("Files must be 15 MB or smaller.");
+      return;
+    }
+    setUploading(row.id);
+    setMessage(null);
+    const safeName =
+      file.name.replace(/[^a-z0-9._-]+/gi, "-").slice(-100) || "file";
+    try {
+      const blob = await uploadBlob(
+        `orgs/${org}/collaborations/${row.id}/${Date.now()}-${safeName}`,
+        file,
+        {
+          access: "private",
+          handleUploadUrl: `/api/${org}/collaborations/${row.id}/attachments`,
+          contentType: file.type,
+          multipart: file.size > 5 * 1024 * 1024,
+        },
+      );
+      const response = await fetch(
+        `/api/${org}/collaborations/${row.id}/attachments`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url: blob.url, name: file.name }),
+        },
+      );
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error ?? "Upload failed.");
+      setMessage(`${file.name} attached.`);
+      await mutate();
+    } catch (uploadError) {
+      setMessage(
+        uploadError instanceof Error ? uploadError.message : "Upload failed.",
+      );
+    } finally {
+      setUploading(null);
     }
   }
+
+  const allVisibleSelected =
+    rows.length > 0 && rows.every((row) => selected.has(row.id));
 
   return (
-    <div data-testid="collab-hub-workspace">
-      {showCreate ? (
-        <CollabCreatePanel
-          team={data?.team ?? []}
-          onClose={() => setShowCreate(false)}
-          onCreated={(id) => router.push(`/${org}/collabs/${id}`)}
-        />
-      ) : null}
-      {showImport ? (
-        <HistoryImportPanel
-          preview={importPreview}
-          options={importOptions}
-          loading={loadingImportPreview}
-          importing={importingHistory}
-          onOption={updateImportOption}
-          onImport={importHistory}
-          onClose={() => setShowImport(false)}
-        />
-      ) : null}
-      <PageTitle
-        title="Collab Hub"
-        subtitle="Your partnership pipeline, raffle handoffs, wallet collection, and long-term project relationships in one workspace."
-        action={
-          <>
-            <button
-              className={`kos-btn ${mode === "WORKSPACE" ? "border-blue-400/30 bg-blue-500/10" : ""}`}
-              onClick={() => changeMode("WORKSPACE")}
-            >
-              Workspace
-            </button>
-            <button
-              className={`kos-btn ${mode === "PARTNERS" ? "border-blue-400/30 bg-blue-500/10" : ""}`}
-              onClick={() => changeMode("PARTNERS")}
-            >
-              Partner directory
-            </button>
-            {canCreate ? (
-              <button
-                className="kos-btn-primary"
-                onClick={() => setShowCreate(true)}
-              >
-                <IconPlus /> New collaboration
-              </button>
-            ) : null}
-          </>
-        }
-      />
-
-      <div
-        data-testid="collab-controls"
-        aria-hidden={!showControls}
-        inert={showControls ? undefined : true}
-        className={`relative z-10 rounded-3xl bg-[#0D0D0D]/95 shadow-xl backdrop-blur-2xl transition-all duration-300 ease-out ${
-          showControls
-            ? "mb-6 max-h-[40rem] translate-y-0 border border-white/[0.08] p-3 opacity-100"
-            : "pointer-events-none mb-0 max-h-0 -translate-y-6 overflow-hidden border-0 p-0 opacity-0"
-        }`}
-      >
-        <div className="gap-3 xl:flex xl:items-center">
-          <div className="flex min-w-0 flex-1 gap-2">
-            <div className="relative min-w-0 flex-1">
-              <IconSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-kos-muted" />
-              <input
-                ref={searchRef}
-                className="kos-input h-11 pl-10 pr-12"
-                value={q}
-                onChange={(event) => setQ(event.target.value)}
-                placeholder={
-                  mode === "PARTNERS"
-                    ? "Search partners, contacts, chain…"
-                    : "Search projects, contacts, Discord, tags…"
-                }
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-kos-muted">
-                /
-              </span>
-            </div>
-            {mode === "WORKSPACE" ? (
-              <button
-                className="kos-btn h-11 shrink-0 px-3 text-xs xl:hidden"
-                onClick={() => setShowMobileFilters((value) => !value)}
-                aria-expanded={showMobileFilters}
-              >
-                Filters
-                {[status, priority, owner, tag].filter(Boolean).length ? (
-                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] text-white">
-                    {[status, priority, owner, tag].filter(Boolean).length}
-                  </span>
-                ) : null}
-              </button>
-            ) : null}
-          </div>
-          {mode === "WORKSPACE" ? (
-            <div
-              className={`${showMobileFilters ? "grid" : "hidden"} mt-3 grid-cols-2 gap-2 sm:grid-cols-4 xl:mt-0 xl:flex xl:shrink-0`}
-            >
-              <select
-                className="kos-input h-11 min-w-0 xl:w-44"
-                value={status}
-                onChange={(event) => setStatus(event.target.value)}
-              >
-                <option value="">All statuses</option>
-                <option value="ACTIVE">Active pipeline</option>
-                {COLLAB_STATUSES.map((item) => (
-                  <option key={item} value={item}>
-                    {COLLAB_STATUS_LABELS[item]}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="kos-input h-11 min-w-0 xl:w-36"
-                value={priority}
-                onChange={(event) => setPriority(event.target.value)}
-              >
-                <option value="">All priorities</option>
-                {COLLAB_PRIORITIES.map((item) => (
-                  <option key={item} value={item}>
-                    {COLLAB_PRIORITY_LABELS[item]}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="kos-input h-11 min-w-0 xl:w-44"
-                value={owner}
-                onChange={(event) => setOwner(event.target.value)}
-              >
-                <option value="">Everyone</option>
-                {(data?.team ?? []).map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {person.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="kos-input h-11 min-w-0 xl:w-40"
-                value={tag}
-                onChange={(event) => setTag(event.target.value)}
-              >
-                <option value="">All tags</option>
-                {(data?.tags ?? []).map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
+    <div className="min-w-0 space-y-4 pb-10">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="mb-2 h-1 w-10 rounded-full bg-gradient-to-r from-blue-500 to-violet-500" />
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            Collab Hub
+          </h1>
+          <p className="mt-1 text-sm text-kos-muted">
+            Every whitelist collaboration, one row at a time.
+          </p>
         </div>
-        {mode === "WORKSPACE" ? (
-          <div className="mt-3 border-t border-white/[0.07] pt-3 sm:flex sm:items-center sm:gap-2">
-            <div
-              className="grid w-full grid-cols-3 gap-1.5 sm:flex sm:w-auto sm:shrink-0 sm:gap-2"
-              role="group"
-              aria-label="Collaboration view"
-            >
-              <ViewButton
-                active={view === "BOARD"}
-                onClick={() => changeView("BOARD")}
-                icon={<IconGrid />}
-                label="Board"
-              />
-              <ViewButton
-                active={view === "TABLE"}
-                onClick={() => changeView("TABLE")}
-                icon={<IconChart />}
-                label="Spreadsheet"
-              />
-              <ViewButton
-                active={view === "CALENDAR"}
-                onClick={() => changeView("CALENDAR")}
-                icon={<IconUsers />}
-                label="Calendar"
-              />
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2 sm:mt-0 sm:min-w-0 sm:flex-1">
-              {(data?.savedFilters ?? []).map((filter) => (
-                <button
-                  key={filter.id}
-                  className="kos-btn h-9 px-3 text-xs"
-                  onClick={() => applyFilter(filter.criteria, filter.view)}
-                >
-                  {filter.name}
-                </button>
-              ))}
-              <div className="relative">
-                <button
-                  className="kos-btn h-9 px-3 text-xs"
-                  onClick={() => setShowSave((value) => !value)}
-                >
-                  Save filter
-                </button>
-                {showSave ? (
-                  <div className="absolute left-0 top-full z-30 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-2xl border border-white/[0.10] bg-[#151515] p-3 shadow-2xl">
-                    <label className="kos-label">Filter name</label>
-                    <input
-                      autoFocus
-                      className="kos-input"
-                      value={saveName}
-                      onChange={(event) => setSaveName(event.target.value)}
-                      placeholder="e.g. Urgent submissions"
-                    />
-                    <button
-                      className="kos-btn-primary mt-2 w-full"
-                      onClick={saveFilter}
-                    >
-                      Save for team
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-              {canCreate && (data?.summary.unlinkedRaffles ?? 0) > 0 ? (
-                <button
-                  className="kos-btn h-9 px-3 text-xs"
-                  onClick={openImport}
-                  disabled={importingHistory}
-                >
-                  {importingHistory
-                    ? "Importing…"
-                    : `Import ${data?.summary.unlinkedRaffles ?? 0} previous raffles`}
-                </button>
-              ) : null}
-              <button
-                className="kos-btn h-9 px-3 text-xs"
-                onClick={closeControls}
-              >
-                Done
-              </button>
-              <button
-                className="kos-btn ml-auto h-9 px-3 text-xs"
-                onClick={exportCsv}
-              >
-                Export CSV
-              </button>
-            </div>
-          </div>
+        {canCreate ? (
+          <button
+            className="kos-btn-primary h-10"
+            onClick={() => setAdding(true)}
+          >
+            <IconPlus className="h-4 w-4" /> Add collaboration
+          </button>
         ) : null}
+      </header>
+
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border border-white/[0.07] bg-white/[0.025] px-4 py-3 text-sm">
+        <Metric label="Total" value={metrics.total} />
+        <Metric label="Hosting" value={metrics.hosting} tone="text-blue-300" />
+        <Metric label="Hosted" value={metrics.hosted} tone="text-amber-300" />
+        <Metric
+          label="Completed"
+          value={metrics.completed}
+          tone="text-emerald-300"
+        />
+        <span className="ml-auto text-xs text-kos-muted">
+          {rows.length} visible
+        </span>
       </div>
 
+      <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(240px,1.5fr)_repeat(5,minmax(130px,1fr))]">
+          <label className="relative">
+            <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-kos-muted" />
+            <input
+              className="kos-input h-10 pl-9"
+              placeholder="Search collaborations…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+          <select
+            className="kos-input h-10"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            aria-label="Filter by status"
+          >
+            <option value="">All statuses</option>
+            {SHEET_STATUSES.map((item) => (
+              <option key={item} value={item}>
+                {STATUS_LABELS[item]}
+              </option>
+            ))}
+          </select>
+          <select
+            className="kos-input h-10"
+            value={hostFilter}
+            onChange={(event) => setHostFilter(event.target.value)}
+            aria-label="Filter by host"
+          >
+            <option value="">All hosts</option>
+            {(data?.team ?? []).map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.name}
+              </option>
+            ))}
+          </select>
+          <select
+            className="kos-input h-10"
+            value={projectFilter}
+            onChange={(event) => setProjectFilter(event.target.value)}
+            aria-label="Filter by project"
+          >
+            <option value="">All projects</option>
+            {projects.map((project) => (
+              <option key={project} value={project}>
+                {project}
+              </option>
+            ))}
+          </select>
+          <input
+            type="date"
+            className="kos-input h-10"
+            value={dateFilter}
+            onChange={(event) => setDateFilter(event.target.value)}
+            aria-label="Filter by created date"
+          />
+          <select
+            className="kos-input h-10"
+            value={tagFilter}
+            onChange={(event) => setTagFilter(event.target.value)}
+            aria-label="Filter by tag"
+          >
+            <option value="">All tags</option>
+            {(data?.tags ?? []).map((tag) => (
+              <option key={tag.id} value={tag.id}>
+                {tag.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </section>
+
       {message ? (
-        <div className="mb-5 flex items-center justify-between rounded-2xl border border-blue-400/20 bg-blue-400/10 px-4 py-3 text-sm text-blue-100">
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-blue-400/20 bg-blue-500/10 px-4 py-2.5 text-sm text-blue-100">
           <span>{message}</span>
           <button
-            className="text-blue-200/70 hover:text-white"
+            className="text-blue-200/70 hover:text-blue-100"
             onClick={() => setMessage(null)}
+            aria-label="Dismiss message"
           >
-            Dismiss
+            ×
           </button>
         </div>
       ) : null}
 
-      {mode === "PARTNERS" ? (
-        <PartnerDirectory
-          partners={partnerData?.partners ?? []}
-          org={org}
-          loading={!partnerData}
+      {selected.size ? (
+        <BulkBar
+          count={selected.size}
+          team={data?.team ?? []}
+          canEdit={canEdit}
+          canAssign={canAssign}
+          canArchive={canArchive}
+          busy={busy === "bulk"}
+          onStatus={(value) => bulkAction("status", value)}
+          onAssign={(value) => bulkAction("assign", value)}
+          onExport={exportSelected}
+          onArchive={() => bulkAction("archive")}
+          onDelete={() => bulkAction("delete")}
+          onClear={() => setSelected(new Set())}
         />
-      ) : (
-        <>
-          {view !== "CALENDAR" ? (
-            <>
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
-                <button
-                  type="button"
-                  className={`rounded-2xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${status === "ACTIVE" ? "ring-2 ring-blue-400" : ""}`}
-                  onClick={() => setStatus(status === "ACTIVE" ? "" : "ACTIVE")}
-                  aria-pressed={status === "ACTIVE"}
-                  aria-label="Filter the workspace to active collaborations"
-                >
-                  <StatCard
-                    accent
-                    label="Active"
-                    value={data?.summary.active ?? "—"}
-                    hint={
-                      status === "ACTIVE" ? "showing active" : "click to filter"
-                    }
+      ) : null}
+
+      <div className="overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0d0d0e]/75 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_24px_80px_-52px_rgba(0,0,0,0.9)]">
+        <div className="max-h-[calc(100dvh-290px)] min-h-[420px] overflow-auto overscroll-contain">
+          <table className="w-full min-w-[1960px] table-fixed text-left text-sm">
+            <colgroup>
+              <col className="w-11" />
+              <col className="w-[230px]" />
+              <col className="w-[170px]" />
+              <col className="w-[170px]" />
+              <col className="w-[220px]" />
+              <col className="w-[105px]" />
+              <col className="w-[105px]" />
+              <col className="w-[160px]" />
+              <col className="w-[175px]" />
+              <col className="w-[220px]" />
+              <col className="w-[170px]" />
+              <col className="w-[240px]" />
+              <col className="w-[135px]" />
+              <col className="w-[285px]" />
+            </colgroup>
+            <thead className="sticky top-0 z-30 bg-[#151516]/95 text-[10px] uppercase tracking-[0.15em] text-kos-muted backdrop-blur-xl">
+              <tr>
+                <th className="sticky left-0 z-40 border-b border-r border-white/[0.08] bg-[#151516] px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={toggleAll}
+                    aria-label="Select all visible rows"
                   />
-                </button>
-                <StatCard
-                  label="Raffles"
-                  value={data?.summary.linkedRafflesAllTime ?? "—"}
-                  hint="connected records"
+                </th>
+                <SortableHeader
+                  label="Project"
+                  sort="projectName"
+                  active={sortKey}
+                  direction={sortDirection}
+                  onSort={toggleSort}
+                  sticky
                 />
-                <StatCard
-                  label="Hosting today"
-                  value={data?.summary.hostingToday ?? "—"}
-                  hint="scheduled now"
+                <PlainHeader>Project X Link</PlainHeader>
+                <PlainHeader>Discord Invite</PlainHeader>
+                <PlainHeader>Collab Document</PlainHeader>
+                <SortableHeader
+                  label="GTD Spots"
+                  sort="gtd"
+                  active={sortKey}
+                  direction={sortDirection}
+                  onSort={toggleSort}
                 />
-                <StatCard
-                  label="Waiting wallets"
-                  value={data?.summary.waitingForWallets ?? "—"}
-                  hint="needs collection"
+                <SortableHeader
+                  label="FCFS Spots"
+                  sort="fcfs"
+                  active={sortKey}
+                  direction={sortDirection}
+                  onSort={toggleSort}
                 />
-                <StatCard
-                  label="Ready"
-                  value={data?.summary.readyForSubmission ?? "—"}
-                  hint="for submission"
+                <SortableHeader
+                  label="Host"
+                  sort="host"
+                  active={sortKey}
+                  direction={sortDirection}
+                  onSort={toggleSort}
                 />
-                <StatCard
-                  label="Completed"
-                  value={data?.summary.completedAllTime ?? "—"}
-                  hint="all time"
+                <SortableHeader
+                  label="Status"
+                  sort="status"
+                  active={sortKey}
+                  direction={sortDirection}
+                  onSort={toggleSort}
                 />
-                <StatCard
-                  label="WL spots"
-                  value={data?.summary.totalWlSpots ?? "—"}
-                  hint="total collected"
+                <SortableHeader
+                  label="Winner List"
+                  sort="winners"
+                  active={sortKey}
+                  direction={sortDirection}
+                  onSort={toggleSort}
                 />
-              </div>
+                <PlainHeader>Wallet Export</PlainHeader>
+                <PlainHeader>Notes</PlainHeader>
+                <SortableHeader
+                  label="Created At"
+                  sort="createdAt"
+                  active={sortKey}
+                  direction={sortDirection}
+                  onSort={toggleSort}
+                />
+                <th className="sticky right-0 z-40 border-b border-l border-white/[0.08] bg-[#151516] px-4 py-3">
+                  Quick actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {adding ? (
+                <NewRow
+                  draft={draft}
+                  team={data?.team ?? []}
+                  canAssign={canAssign}
+                  busy={busy === "new"}
+                  onChange={(patch) =>
+                    setDraft((current) => ({ ...current, ...patch }))
+                  }
+                  onSave={createRow}
+                  onCancel={() => {
+                    setDraft(EMPTY_DRAFT);
+                    setAdding(false);
+                  }}
+                />
+              ) : null}
+              {rows.map((row) => (
+                <CollabTableRow
+                  key={row.id}
+                  row={row}
+                  org={org}
+                  team={data?.team ?? []}
+                  selected={selected.has(row.id)}
+                  busy={busy === row.id}
+                  uploading={uploading === row.id}
+                  canEdit={canEdit}
+                  canCreate={canCreate}
+                  canAssign={canAssign}
+                  canArchive={canArchive}
+                  canExport={canExport}
+                  canCreateRaffle={canCreateRaffle}
+                  onSelect={() => toggleSelected(row.id)}
+                  onUpdate={(patch) => updateRow(row, patch)}
+                  onUpload={(file) => uploadDocument(row, file)}
+                  onCreateRaffle={() => setRaffleRow(row)}
+                  onDuplicate={() => duplicateRow(row)}
+                  onArchive={() => archiveRow(row)}
+                  onDelete={() => deleteRow(row)}
+                  onWalletExported={() =>
+                    window.setTimeout(() => void mutate(), 1200)
+                  }
+                  teamById={teamById}
+                />
+              ))}
+            </tbody>
+          </table>
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-3">
-                <ActivityPanel data={data} org={org} />
-                <DeadlinePanel data={data} org={org} />
-                <NotesPanel data={data} org={org} />
+          {isLoading ? (
+            <div className="flex min-h-64 items-center justify-center text-sm text-kos-muted">
+              Loading collaborations…
+            </div>
+          ) : error ? (
+            <div className="flex min-h-64 items-center justify-center px-5 text-center text-sm text-red-300">
+              {error.message || "Could not load collaborations."}
+            </div>
+          ) : !rows.length && !adding ? (
+            <div className="flex min-h-64 flex-col items-center justify-center px-5 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04]">
+                <IconDoc className="text-blue-300" />
               </div>
-            </>
-          ) : null}
-
-          <div
-            ref={workspaceRef}
-            className={`${view === "CALENDAR" ? "mt-2" : "mt-8"} flex scroll-mt-20 items-end justify-between gap-4`}
-          >
-            <div>
-              <SectionTitle>
-                {view === "CALENDAR"
-                  ? "Collaboration calendar"
-                  : "Pipeline workspace"}
-              </SectionTitle>
-              <p className="text-sm text-kos-muted">
-                {rows.length} grouped collaboration
-                {rows.length === 1 ? "" : "s"} in this view ·{" "}
-                {data?.summary.linkedRafflesAllTime ?? "—"} connected raffles
-                total
+              <p className="mt-4 font-medium">No collaborations found</p>
+              <p className="mt-1 max-w-sm text-sm text-kos-muted">
+                Add a row or clear the filters to bring your collaboration list
+                into one place.
               </p>
             </div>
+          ) : null}
+        </div>
+        <div className="flex items-center justify-between border-t border-white/[0.07] bg-white/[0.02] px-4 py-2 text-xs text-kos-muted">
+          <span>Click a cell to edit · Enter saves · Tab moves across</span>
+          <span>{data?.collaborations.length ?? 0} collaborations</span>
+        </div>
+      </div>
+
+      {raffleRow ? (
+        <NewRaffleModal
+          onClose={() => setRaffleRow(null)}
+          collaborationId={raffleRow.id}
+          prefill={{
+            projectName: raffleRow.projectName,
+            description: raffleRow.requirements ?? undefined,
+            externalUrl: raffleRow.partner.xUrl ?? undefined,
+            spots: Math.max(
+              1,
+              raffleRow.whitelistAllocation + raffleRow.fcfsSpots,
+            ),
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  tone = "text-kos-fg",
+}: {
+  label: string;
+  value: number;
+  tone?: string;
+}) {
+  return (
+    <span className="inline-flex items-baseline gap-2">
+      <span className={`font-semibold tabular-nums ${tone}`}>{value}</span>
+      <span className="text-xs text-kos-muted">{label}</span>
+    </span>
+  );
+}
+
+function PlainHeader({ children }: { children: React.ReactNode }) {
+  return <th className="border-b border-white/[0.08] px-4 py-3">{children}</th>;
+}
+
+function SortableHeader({
+  label,
+  sort,
+  active,
+  direction,
+  onSort,
+  sticky = false,
+}: {
+  label: string;
+  sort: SortKey;
+  active: SortKey;
+  direction: "asc" | "desc";
+  onSort: (key: SortKey) => void;
+  sticky?: boolean;
+}) {
+  return (
+    <th
+      className={`border-b border-white/[0.08] px-4 py-3 ${
+        sticky
+          ? "sticky left-11 z-40 border-r bg-[#151516] shadow-[8px_0_18px_-16px_rgba(0,0,0,0.9)]"
+          : ""
+      }`}
+    >
+      <button
+        className="inline-flex items-center gap-1.5 hover:text-kos-fg"
+        onClick={() => onSort(sort)}
+      >
+        {label}
+        {active === sort ? (
+          direction === "asc" ? (
+            <IconArrowUp className="h-3 w-3" />
+          ) : (
+            <IconArrowDown className="h-3 w-3" />
+          )
+        ) : null}
+      </button>
+    </th>
+  );
+}
+
+function CollabTableRow({
+  row,
+  org,
+  team,
+  selected,
+  busy,
+  uploading,
+  canEdit,
+  canCreate,
+  canAssign,
+  canArchive,
+  canExport,
+  canCreateRaffle,
+  onSelect,
+  onUpdate,
+  onUpload,
+  onCreateRaffle,
+  onDuplicate,
+  onArchive,
+  onDelete,
+  onWalletExported,
+  teamById,
+}: {
+  row: CollabRow;
+  org: string;
+  team: Person[];
+  selected: boolean;
+  busy: boolean;
+  uploading: boolean;
+  canEdit: boolean;
+  canCreate: boolean;
+  canAssign: boolean;
+  canArchive: boolean;
+  canExport: boolean;
+  canCreateRaffle: boolean;
+  onSelect: () => void;
+  onUpdate: (patch: Record<string, unknown>) => void;
+  onUpload: (file?: File) => void;
+  onCreateRaffle: () => void;
+  onDuplicate: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+  onWalletExported: () => void;
+  teamById: Map<string, Person>;
+}) {
+  const status = sheetStatus(row.status);
+  const winnerCount = row.raffles.reduce(
+    (total, link) => total + link.raffle._count.winners,
+    0,
+  );
+  const raffle = row.raffles[0]?.raffle;
+  const walletState = row.exportedAt
+    ? "Exported"
+    : row.walletProgress.collected > 0
+      ? "Ready"
+      : "Pending";
+  const host = row.assignedToId ? teamById.get(row.assignedToId) : null;
+  return (
+    <tr
+      className={`group border-b border-white/[0.065] transition-colors hover:bg-white/[0.035] ${
+        selected ? "bg-blue-500/[0.07]" : ""
+      } ${busy ? "opacity-65" : ""}`}
+    >
+      <td className="sticky left-0 z-20 border-r border-white/[0.07] bg-[#101011] px-3 py-4 group-hover:bg-[#151516]">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onSelect}
+          aria-label={`Select ${row.projectName}`}
+        />
+      </td>
+      <td className="sticky left-11 z-20 border-r border-white/[0.07] bg-[#101011] px-4 py-4 shadow-[8px_0_18px_-16px_rgba(0,0,0,0.9)] group-hover:bg-[#151516]">
+        <div className="flex min-w-0 items-center gap-3">
+          <a
+            href={row.partner.xUrl ?? undefined}
+            target={row.partner.xUrl ? "_blank" : undefined}
+            rel={row.partner.xUrl ? "noreferrer" : undefined}
+            className="shrink-0"
+            aria-label={`Open ${row.projectName} on X`}
+          >
+            <PartnerMark
+              name={row.projectName}
+              src={row.partner.logoUrl}
+              className="h-9 w-9 rounded-xl"
+            />
+          </a>
+          <div className="min-w-0 flex-1">
+            <ProjectNameCell
+              value={row.projectName}
+              xUrl={row.partner.xUrl}
+              disabled={!canEdit}
+              onSave={(value) => onUpdate({ projectName: value })}
+            />
+            {row.tags.length ? (
+              <div className="mt-1 truncate text-[10px] text-kos-muted">
+                {row.tags.map(({ tag }) => tag.name).join(" · ")}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-4">
+        <InlineUrl
+          value={row.partner.xUrl}
+          label="Add X link"
+          disabled={!canEdit}
+          onSave={(value) => onUpdate({ xUrl: value })}
+        />
+      </td>
+      <td className="px-4 py-4">
+        <InlineUrl
+          value={row.partner.discordUrl}
+          label="Add invite"
+          disabled={!canEdit}
+          onSave={(value) => onUpdate({ discordUrl: value })}
+        />
+      </td>
+      <td className="px-4 py-4">
+        <DocumentCell
+          row={row}
+          org={org}
+          disabled={!canEdit}
+          uploading={uploading}
+          onSave={(value) => onUpdate({ documentUrl: value })}
+          onUpload={onUpload}
+        />
+      </td>
+      <td className="px-4 py-4">
+        <NumberCell
+          value={row.whitelistAllocation}
+          suffix="GTD"
+          disabled={!canEdit}
+          onSave={(value) => onUpdate({ whitelistAllocation: value })}
+        />
+      </td>
+      <td className="px-4 py-4">
+        <NumberCell
+          value={row.fcfsSpots}
+          suffix="FCFS"
+          disabled={!canEdit}
+          onSave={(value) => onUpdate({ fcfsSpots: value })}
+        />
+      </td>
+      <td className="px-3 py-4">
+        <select
+          className="w-full rounded-xl border border-transparent bg-transparent px-2 py-2 text-sm outline-none hover:border-white/[0.09] hover:bg-white/[0.035] focus:border-blue-400/50 focus:bg-[#151516] disabled:opacity-80"
+          value={row.assignedToId ?? ""}
+          disabled={!canEdit || !canAssign}
+          onChange={(event) => onUpdate({ assignedToId: event.target.value })}
+          aria-label={`Host for ${row.projectName}`}
+        >
+          <option value="">Unassigned</option>
+          {team.map((person) => (
+            <option key={person.id} value={person.id}>
+              {person.name}
+            </option>
+          ))}
+        </select>
+        {host?.role ? (
+          <div className="px-2 text-[10px] text-kos-muted">{host.role}</div>
+        ) : null}
+      </td>
+      <td className="px-3 py-4">
+        <select
+          className={`w-full rounded-xl border px-2.5 py-2 text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500/20 ${statusTone(status)}`}
+          value={status}
+          disabled={!canEdit}
+          onChange={(event) =>
+            onUpdate({
+              status: STATUS_CANONICAL[event.target.value as SheetStatus],
+            })
+          }
+          aria-label={`Status for ${row.projectName}`}
+        >
+          {SHEET_STATUSES.map((item) => (
+            <option key={item} value={item}>
+              {STATUS_LABELS[item]}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="px-4 py-4">
+        {raffle ? (
+          <div>
             <div className="flex items-center gap-2">
-              {isLoading ? (
-                <span className="text-xs text-kos-muted">Refreshing…</span>
-              ) : null}
-              {!showControls ? (
-                <button
-                  className="kos-btn h-9 text-xs"
-                  onClick={() => setShowControls(true)}
+              <span className="font-medium tabular-nums">
+                {winnerCount} winner{winnerCount === 1 ? "" : "s"}
+              </span>
+              <span className="h-1 w-1 rounded-full bg-kos-muted/50" />
+              <span className="text-[10px] uppercase tracking-wider text-kos-muted">
+                {raffle.status}
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              <a
+                href={`/${org}/raffles/${raffle.id}`}
+                className="text-blue-300 hover:text-blue-200"
+              >
+                View winners
+              </a>
+              {raffle.proof?.artifactsStoredAt && canExport ? (
+                <a
+                  href={`/api/${org}/collaborations/${row.id}/artifacts/${raffle.id}/csv`}
+                  className="text-blue-300 hover:text-blue-200"
                 >
-                  Filters & views
-                  {[status, priority, owner, tag].filter(Boolean).length ? (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] text-white">
-                      {[status, priority, owner, tag].filter(Boolean).length}
-                    </span>
-                  ) : null}
-                </button>
+                  CSV
+                </a>
               ) : null}
-              {view !== "CALENDAR" ? (
-                <Link href={`/${org}/raffles`} className="kos-btn h-9 text-xs">
-                  View all {data?.summary.linkedRafflesAllTime ?? ""} raffles
-                </Link>
+              {raffle.proof?.messageLink ? (
+                <a
+                  href={raffle.proof.messageLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-300 hover:text-blue-200"
+                >
+                  Proof
+                </a>
+              ) : raffle.proof?.artifactsStoredAt ? (
+                <a
+                  href={`/api/${org}/collaborations/${row.id}/artifacts/${raffle.id}/pdf`}
+                  className="text-blue-300 hover:text-blue-200"
+                >
+                  Proof
+                </a>
               ) : null}
             </div>
           </div>
+        ) : (
+          <span className="text-xs text-kos-muted">No raffle linked</span>
+        )}
+      </td>
+      <td className="px-4 py-4">
+        <div className="flex items-center gap-2">
+          <span
+            className={`h-2 w-2 rounded-full ${
+              walletState === "Exported"
+                ? "bg-indigo-400"
+                : walletState === "Ready"
+                  ? "bg-emerald-400"
+                  : "bg-zinc-500"
+            }`}
+          />
+          <span className="font-medium">{walletState}</span>
+        </div>
+        <div className="mt-1 text-[10px] text-kos-muted">
+          {row.walletProgress.collected}/{row.walletProgress.total} collected
+        </div>
+        {row.walletProgress.collected > 0 && canExport ? (
+          <a
+            href={`/api/${org}/collaborations/${row.id}/wallets/export?format=csv`}
+            className="mt-1 inline-flex text-xs text-blue-300 hover:text-blue-200"
+            onClick={onWalletExported}
+          >
+            Download
+          </a>
+        ) : null}
+      </td>
+      <td className="px-3 py-4">
+        <InlineText
+          value={row.requirements ?? ""}
+          placeholder="Add a note"
+          disabled={!canEdit}
+          multiline
+          onSave={(value) => onUpdate({ requirements: value })}
+        />
+      </td>
+      <td className="px-4 py-4 text-xs text-kos-muted">
+        <time dateTime={row.createdAt}>{dateLabel(row.createdAt)}</time>
+      </td>
+      <td className="sticky right-0 z-20 border-l border-white/[0.07] bg-[#101011] px-3 py-4 group-hover:bg-[#151516]">
+        <div className="flex items-center gap-1.5">
+          {raffle ? (
+            <a
+              href={`/${org}/raffles/${raffle.id}`}
+              className="rounded-xl border border-white/[0.09] bg-white/[0.035] px-3 py-2 text-xs font-medium hover:bg-white/[0.07]"
+            >
+              Open raffle
+            </a>
+          ) : canCreateRaffle ? (
+            <button
+              className="rounded-xl border border-blue-400/25 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-200 hover:bg-blue-500/15"
+              onClick={onCreateRaffle}
+            >
+              Create raffle
+            </button>
+          ) : null}
+          {raffle && winnerCount > 0 ? (
+            <a
+              href={`/${org}/raffles/${raffle.id}`}
+              className="rounded-xl border border-white/[0.09] bg-white/[0.035] px-3 py-2 text-xs hover:bg-white/[0.07]"
+            >
+              Winners
+            </a>
+          ) : null}
+          <details className="relative">
+            <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-xl border border-white/[0.09] bg-white/[0.035] text-lg text-kos-muted hover:bg-white/[0.07] hover:text-kos-fg">
+              ···
+            </summary>
+            <div className="absolute bottom-full right-0 z-50 mb-2 w-48 overflow-hidden rounded-2xl border border-white/[0.10] bg-[#1a1a1c] p-1.5 shadow-2xl">
+              {row.partner.xUrl ? (
+                <button
+                  className="block w-full rounded-xl px-3 py-2 text-left text-xs hover:bg-white/[0.06]"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(row.partner.xUrl!);
+                  }}
+                >
+                  Copy project link
+                </button>
+              ) : null}
+              <button
+                className="block w-full rounded-xl px-3 py-2 text-left text-xs hover:bg-white/[0.06] disabled:opacity-40"
+                onClick={onDuplicate}
+                disabled={!canCreate}
+              >
+                Duplicate row
+              </button>
+              {row.walletProgress.collected > 0 && canExport ? (
+                <a
+                  className="block w-full rounded-xl px-3 py-2 text-left text-xs hover:bg-white/[0.06]"
+                  href={`/api/${org}/collaborations/${row.id}/wallets/export?format=csv`}
+                  onClick={onWalletExported}
+                >
+                  Download wallets
+                </a>
+              ) : null}
+              {canArchive ? (
+                <>
+                  <button
+                    className="block w-full rounded-xl px-3 py-2 text-left text-xs hover:bg-white/[0.06]"
+                    onClick={onArchive}
+                  >
+                    Archive
+                  </button>
+                  <button
+                    className="block w-full rounded-xl px-3 py-2 text-left text-xs text-red-300 hover:bg-red-500/10"
+                    onClick={onDelete}
+                  >
+                    Delete permanently
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </details>
+        </div>
+      </td>
+    </tr>
+  );
+}
 
-          <div className="mt-3">
-            {!data && isLoading ? (
-              <LoadingSkeleton />
-            ) : rows.length === 0 ? (
-              <Empty>
-                <div className="flex flex-col items-center gap-4">
-                  <p>
-                    {q || status || priority || owner || tag
-                      ? "No collaborations match these filters."
-                      : "Your collaboration pipeline is empty. Add the first partner or bring in your previous raffle partners."}
-                  </p>
-                  {!q &&
-                  !status &&
-                  !priority &&
-                  !owner &&
-                  !tag &&
-                  canCreate &&
-                  (data?.summary.unlinkedRaffles ?? 0) > 0 ? (
-                    <button
-                      className="kos-btn-primary"
-                      onClick={openImport}
-                      disabled={importingHistory}
-                    >
-                      {importingHistory
-                        ? "Importing raffle history…"
-                        : `Import ${data?.summary.unlinkedRaffles ?? 0} previous raffles`}
-                    </button>
-                  ) : null}
-                </div>
-              </Empty>
-            ) : view === "BOARD" ? (
-              <Board
-                rows={rows}
-                org={org}
-                teamById={teamById}
-                canEdit={canEdit}
-                onMove={changeStatus}
-              />
-            ) : view === "TABLE" ? (
-              <Spreadsheet
-                rows={rows}
-                org={org}
-                teamById={teamById}
-                selected={selected}
-                setSelected={setSelected}
-                visible={visibleColumns}
-                setVisible={setVisibleColumns}
-                showColumns={showColumns}
-                setShowColumns={setShowColumns}
-                sort={sort}
-                direction={direction}
-                onSort={(field) => {
-                  if (sort === field)
-                    setDirection((value) => (value === "asc" ? "desc" : "asc"));
-                  else {
-                    setSort(field);
-                    setDirection("asc");
-                  }
-                }}
-                canArchive={canArchive}
-                canEdit={canEdit}
-                onBulk={bulk}
-              />
-            ) : (
-              <CalendarView
-                rows={rows}
-                org={org}
-                month={month}
-                setMonth={setMonth}
-              />
-            )}
-          </div>
-
-          {view !== "CALENDAR" ? <AnalyticsPanel data={data} /> : null}
-        </>
-      )}
-
-      {canCreate ? (
-        <button
-          onClick={() => setShowCreate(true)}
-          className="fixed bottom-5 right-5 z-20 flex h-13 items-center gap-2 rounded-2xl border border-blue-300/30 bg-gradient-to-r from-blue-500 to-violet-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_20px_60px_-20px_rgba(59,130,246,0.9)] transition-transform hover:-translate-y-0.5 lg:hidden"
+function ProjectNameCell({
+  value,
+  xUrl,
+  disabled,
+  onSave,
+}: {
+  value: string;
+  xUrl: string | null;
+  disabled: boolean;
+  onSave: (value: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  if (editing && !disabled) {
+    return (
+      <input
+        autoFocus
+        className="w-full rounded-lg border border-blue-400/40 bg-black/30 px-2 py-1 font-medium outline-none"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          setEditing(false);
+          if (draft.trim() && draft.trim() !== value) onSave(draft.trim());
+          else setDraft(value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
+      />
+    );
+  }
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      {xUrl ? (
+        <a
+          href={xUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="truncate font-medium hover:text-blue-300"
         >
-          <IconPlus /> New
+          {value}
+        </a>
+      ) : (
+        <span className="truncate font-medium">{value}</span>
+      )}
+      {!disabled ? (
+        <button
+          className="shrink-0 text-[10px] text-kos-muted opacity-0 hover:text-kos-fg group-hover:opacity-100"
+          onClick={() => {
+            setDraft(value);
+            setEditing(true);
+          }}
+          aria-label={`Edit ${value}`}
+        >
+          Edit
         </button>
       ) : null}
     </div>
   );
 }
 
-function ViewButton({
-  active,
-  onClick,
-  icon,
-  label,
+function InlineText({
+  value,
+  placeholder,
+  disabled,
+  multiline = false,
+  onSave,
 }: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
+  value: string;
+  placeholder: string;
+  disabled: boolean;
+  multiline?: boolean;
+  onSave: (value: string) => void;
 }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`kos-btn h-9 min-w-0 justify-center px-2 text-xs sm:px-3 ${active ? "border-blue-400/30 bg-blue-500/12 text-blue-100" : ""}`}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function ActivityPanel({ data, org }: { data?: HubData; org: string }) {
-  return (
-    <div className="kos-card p-4 sm:p-5">
-      <SectionTitle>Recent activity</SectionTitle>
-      <div className="space-y-1">
-        {(data?.recentActivity ?? []).slice(0, 5).map((item) => (
-          <Link
-            key={item.id}
-            href={`/${org}/collabs/${item.collaboration.id}`}
-            className="flex gap-3 rounded-2xl p-2.5 transition-colors hover:bg-white/[0.04]"
-          >
-            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-blue-400" />
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-medium">
-                {item.title}
-              </span>
-              <span className="block truncate text-xs text-kos-muted">
-                {item.collaboration.projectName} · {relative(item.createdAt)}
-              </span>
-            </span>
-          </Link>
-        ))}
-        {data && data.recentActivity.length === 0 ? (
-          <p className="py-5 text-sm text-kos-muted">
-            Activity will appear here.
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function DeadlinePanel({ data, org }: { data?: HubData; org: string }) {
-  return (
-    <div className="kos-card p-4 sm:p-5">
-      <SectionTitle>Upcoming deadlines</SectionTitle>
-      <div className="space-y-2">
-        {(data?.reminders ?? []).slice(0, 5).map((item) => {
-          const overdue = new Date(item.dueAt).getTime() < Date.now();
-          return (
-            <Link
-              key={item.id}
-              href={`/${org}/collabs/${item.collaboration.id}`}
-              className="flex items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3 hover:bg-white/[0.045]"
-            >
-              <div
-                className={`flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl text-[10px] font-semibold uppercase ${overdue ? "bg-red-400/10 text-red-300" : "bg-amber-400/10 text-amber-300"}`}
-              >
-                <span>
-                  {new Date(item.dueAt).toLocaleDateString(undefined, {
-                    month: "short",
-                  })}
-                </span>
-                <span className="text-sm leading-none">
-                  {new Date(item.dueAt).getDate()}
-                </span>
-              </div>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium">{item.title}</div>
-                <div className="truncate text-xs text-kos-muted">
-                  {item.collaboration.projectName}
-                </div>
-              </div>
-            </Link>
-          );
-        })}
-        {data && data.reminders.length === 0 ? (
-          <p className="py-5 text-sm text-kos-muted">No upcoming deadlines.</p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function NotesPanel({ data, org }: { data?: HubData; org: string }) {
-  return (
-    <div className="kos-card p-4 sm:p-5">
-      <SectionTitle>Recent notes</SectionTitle>
-      <div className="space-y-2">
-        {(data?.recentNotes ?? []).slice(0, 4).map((note) => (
-          <Link
-            key={note.id}
-            href={`/${org}/collabs/${note.collaboration.id}?tab=notes`}
-            className="block rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3 hover:bg-white/[0.045]"
-          >
-            <div className="flex items-center gap-2 text-xs text-kos-muted">
-              {note.pinned ? (
-                <span className="text-amber-300">Pinned</span>
-              ) : null}
-              <span className="truncate">{note.collaboration.projectName}</span>
-            </div>
-            <p className="mt-1 line-clamp-2 text-sm leading-5">{note.body}</p>
-          </Link>
-        ))}
-        {data && data.recentNotes.length === 0 ? (
-          <p className="py-5 text-sm text-kos-muted">
-            Notes from your team will appear here.
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function Board({
-  rows,
-  org,
-  teamById,
-  canEdit,
-  onMove,
-}: {
-  rows: CollabRow[];
-  org: string;
-  teamById: Map<string, Person>;
-  canEdit: boolean;
-  onMove: (id: string, status: CollabStatus) => void;
-}) {
-  return (
-    <>
-      <div className="space-y-3 md:hidden">
-        {BOARD_STATUSES.map((status) => {
-          const items = rows.filter((row) => row.status === status);
-          if (!items.length) return null;
-          return (
-            <section
-              key={status}
-              className="overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.025]"
-            >
-              <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
-                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-kos-muted">
-                  {COLLAB_STATUS_LABELS[status]}
-                </span>
-                <span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] text-kos-muted">
-                  {items.length}
-                </span>
-              </div>
-              <div className="divide-y divide-white/[0.07]">
-                {items.map((row, index) => (
-                  <motion.div
-                    key={row.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: Math.min(index * 0.025, 0.2) }}
-                  >
-                    <BoardCard
-                      row={row}
-                      org={org}
-                      teamById={teamById}
-                      compact
-                    />
-                  </motion.div>
-                ))}
-              </div>
-            </section>
-          );
-        })}
-      </div>
-
-      <div className="-mx-4 hidden overflow-x-auto px-4 pb-5 sm:-mx-6 sm:px-6 md:block lg:-mx-8 lg:px-8">
-        <div className="flex min-w-max gap-3">
-          {BOARD_STATUSES.map((status) => {
-            const items = rows.filter((row) => row.status === status);
-            return (
-              <div
-                key={status}
-                className="w-[285px] shrink-0 rounded-3xl border border-white/[0.08] bg-white/[0.025] p-2"
-                onDragOver={(event) => canEdit && event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const id = event.dataTransfer.getData(
-                    "text/collaboration-id",
-                  );
-                  if (id) onMove(id, status);
-                }}
-              >
-                <div className="flex items-center justify-between px-2 py-2.5">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-kos-muted">
-                    {COLLAB_STATUS_LABELS[status]}
-                  </span>
-                  <span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] text-kos-muted">
-                    {items.length}
-                  </span>
-                </div>
-                <div className="min-h-24 space-y-2">
-                  {items.map((row, index) => (
-                    <motion.div
-                      key={row.id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(index * 0.025, 0.2) }}
-                    >
-                      <BoardCard
-                        row={row}
-                        org={org}
-                        teamById={teamById}
-                        draggable={canEdit}
-                      />
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </>
-  );
-}
-
-function BoardCard({
-  row,
-  org,
-  teamById,
-  compact = false,
-  draggable = false,
-}: {
-  row: CollabRow;
-  org: string;
-  teamById: Map<string, Person>;
-  compact?: boolean;
-  draggable?: boolean;
-}) {
-  return (
-    <Link
-      href={`/${org}/collabs/${row.id}`}
-      draggable={draggable}
-      onDragStart={
-        draggable
-          ? (event) =>
-              event.dataTransfer.setData("text/collaboration-id", row.id)
-          : undefined
-      }
-      className={
-        compact
-          ? "block overflow-hidden bg-[#151515] transition-colors hover:bg-white/[0.045]"
-          : "block cursor-grab overflow-hidden rounded-2xl border border-white/[0.09] bg-[#171717] shadow-[0_14px_40px_-30px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:border-white/[0.16] active:cursor-grabbing"
-      }
-    >
-      <ProjectBanner
-        row={row}
-        className={
-          compact
-            ? "aspect-[16/5] w-full border-b border-white/[0.07]"
-            : "aspect-[16/7] w-full border-b border-white/[0.07]"
-        }
-      />
-      <div className={compact ? "p-4" : "p-3.5"}>
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold">
-              {row.projectName}
-            </div>
-            <div className="mt-0.5 truncate text-xs text-kos-muted">
-              {collaborationDescriptor(row.raffles, row.partner) ||
-                `${row.raffles.length} raffle${row.raffles.length === 1 ? "" : "s"}`}
-            </div>
-          </div>
-          <PriorityDot priority={row.priority} />
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {row.tags.slice(0, 3).map(({ tag }) => (
-            <span
-              key={tag.id}
-              className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] text-kos-muted"
-            >
-              {tag.name}
-            </span>
-          ))}
-          {compact ? (
-            <span className="text-[11px] text-kos-muted">
-              {row.raffles.length} raffle
-              {row.raffles.length === 1 ? "" : "s"} · {row.whitelistAllocation}{" "}
-              spots
-            </span>
-          ) : null}
-        </div>
-        {compact ? (
-          <div className="mt-3 flex items-center justify-between text-[11px] text-kos-muted">
-            <span>{formatShortDate(row.hostAt ?? row.hostingDeadline)}</span>
-            <span>
-              {row.walletProgress.collected}/{row.walletProgress.total} wallets
-            </span>
-          </div>
-        ) : (
-          <>
-            <div className="mt-3">
-              <div className="flex justify-between text-[10px] text-kos-muted">
-                <span>Wallets</span>
-                <span>
-                  {row.walletProgress.collected}/{row.walletProgress.total}
-                </span>
-              </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500"
-                  style={{ width: `${row.walletProgress.percent}%` }}
-                />
-              </div>
-            </div>
-            <div className="mt-3 flex items-center justify-between border-t border-white/[0.07] pt-3 text-[11px] text-kos-muted">
-              <span>{formatShortDate(row.hostAt ?? row.hostingDeadline)}</span>
-              <span className="max-w-24 truncate">
-                {teamById.get(row.assignedToId ?? row.ownerId ?? "")?.name ??
-                  "Unassigned"}
-              </span>
-            </div>
-          </>
-        )}
-      </div>
-    </Link>
-  );
-}
-
-function Spreadsheet({
-  rows,
-  org,
-  teamById,
-  selected,
-  setSelected,
-  visible,
-  setVisible,
-  showColumns,
-  setShowColumns,
-  sort,
-  direction,
-  onSort,
-  canArchive,
-  canEdit,
-  onBulk,
-}: {
-  rows: CollabRow[];
-  org: string;
-  teamById: Map<string, Person>;
-  selected: Set<string>;
-  setSelected: (value: Set<string>) => void;
-  visible: Set<TableColumn>;
-  setVisible: (value: Set<TableColumn>) => void;
-  showColumns: boolean;
-  setShowColumns: (value: boolean) => void;
-  sort: string;
-  direction: string;
-  onSort: (field: string) => void;
-  canArchive: boolean;
-  canEdit: boolean;
-  onBulk: (action: "archive" | "status", status?: CollabStatus) => void;
-}) {
-  const allSelected =
-    rows.length > 0 && rows.every((row) => selected.has(row.id));
-  const toggle = (id: string) => {
-    const next = new Set(selected);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelected(next);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const finish = () => {
+    setEditing(false);
+    if (draft.trim() !== value) onSave(draft.trim());
   };
-  return (
-    <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {selected.size ? (
-          <>
-            <span className="text-sm font-medium">
-              {selected.size} selected
-            </span>
-            {canEdit ? (
-              <select
-                className="kos-input h-9 w-auto py-1 text-xs"
-                defaultValue=""
-                onChange={(event) =>
-                  event.target.value &&
-                  onBulk("status", event.target.value as CollabStatus)
-                }
-              >
-                <option value="">Move to…</option>
-                {COLLAB_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {COLLAB_STATUS_LABELS[status]}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            {canArchive ? (
-              <button
-                className="kos-btn h-9 px-3 text-xs text-red-300"
-                onClick={() => onBulk("archive")}
-              >
-                Archive
-              </button>
-            ) : null}
-          </>
-        ) : (
-          <span className="text-xs text-kos-muted">
-            Select rows for bulk actions
-          </span>
-        )}
-        <div className="relative ml-auto">
-          <button
-            className="kos-btn h-9 px-3 text-xs"
-            onClick={() => setShowColumns(!showColumns)}
-          >
-            Columns
-          </button>
-          {showColumns ? (
-            <div className="absolute right-0 top-full z-20 mt-2 grid w-64 grid-cols-2 gap-1 rounded-2xl border border-white/[0.10] bg-[#151515] p-3 shadow-2xl">
-              {TABLE_COLUMNS.map((column) => (
-                <label
-                  key={column}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs capitalize hover:bg-white/[0.04]"
-                >
-                  <input
-                    type="checkbox"
-                    checked={visible.has(column)}
-                    onChange={() => {
-                      const next = new Set(visible);
-                      if (next.has(column)) next.delete(column);
-                      else next.add(column);
-                      setVisible(next);
-                    }}
-                  />
-                  {column === "owner" ? "Hosted by" : column}
-                </label>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="space-y-2 md:hidden">
-        {rows.map((row) => (
-          <div key={row.id} className="kos-card p-4">
-            <div className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={selected.has(row.id)}
-                onChange={() => toggle(row.id)}
-                aria-label={`Select ${row.projectName}`}
-              />
-              <Link
-                href={`/${org}/collabs/${row.id}`}
-                className="min-w-0 flex-1"
-              >
-                <div className="flex items-center gap-3">
-                  <ProjectLogo row={row} />
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold">
-                      {row.projectName}
-                    </div>
-                    <div className="text-xs text-kos-muted">
-                      {collaborationChainText(row.raffles, row.partner.chain) ||
-                        "No chain"}{" "}
-                      · {row.whitelistAllocation} spots
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <CollabBadge status={row.status} />
-                  <span className="text-xs text-kos-muted">
-                    Wallets {row.walletProgress.collected}/
-                    {row.walletProgress.total}
-                  </span>
-                </div>
-              </Link>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="hidden md:block">
-        <TableShell>
-          <table className="kos-table">
-            <thead>
-              <tr>
-                <th>
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={() =>
-                      setSelected(
-                        allSelected
-                          ? new Set()
-                          : new Set(rows.map((row) => row.id)),
-                      )
-                    }
-                    aria-label="Select all"
-                  />
-                </th>
-                {visible.has("project") ? (
-                  <Sortable
-                    label="Project"
-                    field="projectName"
-                    {...{ sort, direction, onSort }}
-                  />
-                ) : null}
-                {visible.has("chain") ? <th>Chain</th> : null}
-                {visible.has("social") ? <th>Links</th> : null}
-                {visible.has("spots") ? (
-                  <Sortable
-                    label="WL spots"
-                    field="whitelistAllocation"
-                    {...{ sort, direction, onSort }}
-                  />
-                ) : null}
-                {visible.has("status") ? (
-                  <Sortable
-                    label="Status"
-                    field="status"
-                    {...{ sort, direction, onSort }}
-                  />
-                ) : null}
-                {visible.has("owner") ? <th>Hosted by</th> : null}
-                {visible.has("host") ? (
-                  <Sortable
-                    label="Host date"
-                    field="hostAt"
-                    {...{ sort, direction, onSort }}
-                  />
-                ) : null}
-                {visible.has("wallets") ? <th>Wallet progress</th> : null}
-                {visible.has("submission") ? <th>Submission</th> : null}
-                {visible.has("deadline") ? (
-                  <Sortable
-                    label="Deadline"
-                    field="walletSubmissionDeadline"
-                    {...{ sort, direction, onSort }}
-                  />
-                ) : null}
-                {visible.has("priority") ? (
-                  <Sortable
-                    label="Priority"
-                    field="priority"
-                    {...{ sort, direction, onSort }}
-                  />
-                ) : null}
-                {visible.has("updated") ? (
-                  <Sortable
-                    label="Updated"
-                    field="updatedAt"
-                    {...{ sort, direction, onSort }}
-                  />
-                ) : null}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={selected.has(row.id)}
-                      onChange={() => toggle(row.id)}
-                      aria-label={`Select ${row.projectName}`}
-                    />
-                  </td>
-                  {visible.has("project") ? (
-                    <td>
-                      <Link
-                        href={`/${org}/collabs/${row.id}`}
-                        className="flex items-center gap-3"
-                      >
-                        <ProjectLogo row={row} />
-                        <span className="min-w-0">
-                          <span className="block max-w-44 truncate font-medium">
-                            {row.projectName}
-                          </span>
-                          <span className="block max-w-44 truncate text-xs text-kos-muted">
-                            {collaborationDescriptor(
-                              row.raffles,
-                              row.partner,
-                            ) ||
-                              `${row.raffles.length} raffle${row.raffles.length === 1 ? "" : "s"}`}
-                          </span>
-                        </span>
-                      </Link>
-                    </td>
-                  ) : null}
-                  {visible.has("chain") ? (
-                    <td className="text-kos-muted">
-                      {collaborationChainText(row.raffles, row.partner.chain) ||
-                        "—"}
-                    </td>
-                  ) : null}
-                  {visible.has("social") ? (
-                    <td>
-                      <div className="flex gap-2 text-xs">
-                        {row.partner.discordUrl ? (
-                          <a
-                            href={row.partner.discordUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-300"
-                          >
-                            Discord
-                          </a>
-                        ) : null}
-                        {row.partner.xUrl ? (
-                          <a
-                            href={row.partner.xUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-300"
-                          >
-                            X
-                          </a>
-                        ) : null}
-                      </div>
-                    </td>
-                  ) : null}
-                  {visible.has("spots") ? (
-                    <td>{row.whitelistAllocation}</td>
-                  ) : null}
-                  {visible.has("status") ? (
-                    <td>
-                      <CollabBadge status={row.status} />
-                    </td>
-                  ) : null}
-                  {visible.has("owner") ? (
-                    <td className="max-w-36 truncate text-kos-muted">
-                      {teamById.get(row.ownerId ?? "")?.name ?? "—"}
-                    </td>
-                  ) : null}
-                  {visible.has("host") ? (
-                    <td className="whitespace-nowrap text-kos-muted">
-                      {formatShortDate(row.hostAt ?? row.hostingDeadline)}
-                    </td>
-                  ) : null}
-                  {visible.has("wallets") ? (
-                    <td>
-                      <div className="w-28">
-                        <div className="flex justify-between text-[10px] text-kos-muted">
-                          <span>
-                            {row.walletProgress.collected}/
-                            {row.walletProgress.total}
-                          </span>
-                          <span>{row.walletProgress.percent}%</span>
-                        </div>
-                        <div className="mt-1 h-1.5 rounded-full bg-white/[0.07]">
-                          <div
-                            className="h-full rounded-full bg-blue-500"
-                            style={{ width: `${row.walletProgress.percent}%` }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                  ) : null}
-                  {visible.has("submission") ? (
-                    <td className="text-xs text-kos-muted">
-                      {row.submissionStatus.replaceAll("_", " ")}
-                    </td>
-                  ) : null}
-                  {visible.has("deadline") ? (
-                    <td className="whitespace-nowrap text-kos-muted">
-                      {formatShortDate(
-                        row.walletSubmissionDeadline ??
-                          row.collaborationDeadline,
-                      )}
-                    </td>
-                  ) : null}
-                  {visible.has("priority") ? (
-                    <td>
-                      <span className="inline-flex items-center gap-2 text-xs">
-                        <PriorityDot priority={row.priority} />
-                        {COLLAB_PRIORITY_LABELS[row.priority]}
-                      </span>
-                    </td>
-                  ) : null}
-                  {visible.has("updated") ? (
-                    <td className="whitespace-nowrap text-kos-muted">
-                      {relative(row.updatedAt)}
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </TableShell>
-      </div>
-    </div>
-  );
-}
-
-function Sortable({
-  label,
-  field,
-  sort,
-  direction,
-  onSort,
-}: {
-  label: string;
-  field: string;
-  sort: string;
-  direction: string;
-  onSort: (field: string) => void;
-}) {
-  return (
-    <th>
+  if (!editing || disabled) {
+    return (
       <button
-        className="flex items-center gap-1 hover:text-white"
-        onClick={() => onSort(field)}
+        className={`block w-full rounded-xl px-2 py-2 text-left hover:bg-white/[0.035] ${
+          value ? "text-kos-fg" : "text-kos-muted"
+        }`}
+        disabled={disabled}
+        onClick={() => {
+          setDraft(value);
+          setEditing(true);
+        }}
       >
-        {label}
-        {sort === field ? <span>{direction === "asc" ? "↑" : "↓"}</span> : null}
+        <span className={multiline ? "line-clamp-2 leading-5" : "truncate"}>
+          {value || placeholder}
+        </span>
       </button>
-    </th>
-  );
-}
-
-type CalendarTone = "blue" | "amber" | "red" | "violet";
-
-interface CalendarEvent {
-  row: CollabRow;
-  label: string;
-  tone: CalendarTone;
-  date: Date;
-}
-
-const CALENDAR_TONE_STYLES: Record<
-  CalendarTone,
-  { fill: string; text: string; dot: string }
-> = {
-  blue: { fill: "#1D2B42", text: "#C7DCFF", dot: "#60A5FA" },
-  amber: { fill: "#382A16", text: "#FDE7B1", dot: "#FBBF24" },
-  red: { fill: "#3A1E22", text: "#FFD0D6", dot: "#FB7185" },
-  violet: { fill: "#2F2446", text: "#E5D8FF", dot: "#A78BFA" },
-};
-
-function buildCalendarEvents(
-  rows: CollabRow[],
-  year: number,
-  monthIndex: number,
-) {
-  const events = rows.flatMap<CalendarEvent>((row) => {
-    const rowEvents: CalendarEvent[] = [];
-    const addEvent = (
-      value: string | null,
-      label: string,
-      tone: CalendarTone,
-    ) => {
-      if (!value) return;
-      rowEvents.push({ row, label, tone, date: new Date(value) });
-    };
-
-    addEvent(row.hostAt, "Host", "blue");
-    addEvent(row.walletSubmissionDeadline, "Wallets", "amber");
-    addEvent(row.collaborationDeadline, "Deadline", "red");
-    addEvent(row.followUpAt, "Follow up", "violet");
-    row.reminders.forEach((reminder) =>
-      addEvent(reminder.dueAt, "Reminder", "violet"),
     );
-    return rowEvents;
-  });
-
-  return events
-    .filter(
-      (event) =>
-        event.date.getFullYear() === year &&
-        event.date.getMonth() === monthIndex,
-    )
-    .sort((left, right) => left.date.getTime() - right.date.getTime());
-}
-
-function roundedCanvasRect(
-  context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number,
-) {
-  const safeRadius = Math.min(radius, width / 2, height / 2);
-  context.beginPath();
-  context.moveTo(x + safeRadius, y);
-  context.arcTo(x + width, y, x + width, y + height, safeRadius);
-  context.arcTo(x + width, y + height, x, y + height, safeRadius);
-  context.arcTo(x, y + height, x, y, safeRadius);
-  context.arcTo(x, y, x + width, y, safeRadius);
-  context.closePath();
-}
-
-function fitCanvasText(
-  context: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-) {
-  if (context.measureText(text).width <= maxWidth) return text;
-  let fitted = text;
-  while (
-    fitted.length > 1 &&
-    context.measureText(`${fitted}…`).width > maxWidth
-  ) {
-    fitted = fitted.slice(0, -1);
   }
-  return `${fitted}…`;
+  return multiline ? (
+    <textarea
+      autoFocus
+      className="min-h-16 w-full resize-none rounded-xl border border-blue-400/40 bg-black/30 px-2.5 py-2 text-xs leading-5 outline-none"
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={finish}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          event.currentTarget.blur();
+        }
+        if (event.key === "Escape") {
+          setDraft(value);
+          setEditing(false);
+        }
+      }}
+    />
+  ) : (
+    <input
+      autoFocus
+      className="w-full rounded-xl border border-blue-400/40 bg-black/30 px-2.5 py-2 outline-none"
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={finish}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          setDraft(value);
+          setEditing(false);
+        }
+      }}
+    />
+  );
 }
 
-function CalendarView({
-  rows,
-  org,
-  month,
-  setMonth,
+function InlineUrl({
+  value,
+  label,
+  disabled,
+  onSave,
 }: {
-  rows: CollabRow[];
-  org: string;
-  month: Date;
-  setMonth: (date: Date) => void;
+  value: string | null;
+  label: string;
+  disabled: boolean;
+  onSave: (value: string) => void;
 }) {
-  const [exporting, setExporting] = useState(false);
-  const year = month.getFullYear();
-  const monthIndex = month.getMonth();
-  const firstWeekday = new Date(year, monthIndex, 1).getDay();
-  const days = new Date(year, monthIndex + 1, 0).getDate();
-  const cells = Array.from(
-    { length: Math.ceil((firstWeekday + days) / 7) * 7 },
-    (_, index) => index - firstWeekday + 1,
-  );
-  const weekRows = cells.length / 7;
-  const visibleEventLimit = weekRows === 6 ? 2 : 3;
-  const agenda = useMemo(
-    () => buildCalendarEvents(rows, year, monthIndex),
-    [monthIndex, rows, year],
-  );
-  const eventsByDay = useMemo(() => {
-    const grouped = new Map<number, CalendarEvent[]>();
-    agenda.forEach((event) => {
-      const day = event.date.getDate();
-      grouped.set(day, [...(grouped.get(day) ?? []), event]);
-    });
-    return grouped;
-  }, [agenda]);
-  const monthLabel = month.toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-
-  function exportCalendarImage() {
-    setExporting(true);
-    try {
-      const width = 1920;
-      const headerHeight = 220;
-      const weekdayHeight = 72;
-      const rowHeight = 220;
-      const footerHeight = 72;
-      const height =
-        headerHeight + weekdayHeight + weekRows * rowHeight + footerHeight;
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("Canvas is not supported.");
-
-      context.fillStyle = "#0A0A0B";
-      context.fillRect(0, 0, width, height);
-
-      const headerGradient = context.createLinearGradient(0, 0, width, 0);
-      headerGradient.addColorStop(0, "#111827");
-      headerGradient.addColorStop(0.52, "#101114");
-      headerGradient.addColorStop(1, "#211637");
-      context.fillStyle = headerGradient;
-      context.fillRect(0, 0, width, headerHeight);
-      context.fillStyle = "#3B82F6";
-      context.fillRect(0, 0, width, 8);
-
-      context.textBaseline = "alphabetic";
-      context.fillStyle = "#93C5FD";
-      context.font =
-        '700 24px "SF Pro Display", Inter, ui-sans-serif, system-ui, sans-serif';
-      context.fillText("KOS  ·  COLLAB CALENDAR", 64, 62);
-      context.fillStyle = "#FFFFFF";
-      context.font =
-        '700 64px "SF Pro Display", Inter, ui-sans-serif, system-ui, sans-serif';
-      context.fillText(monthLabel, 64, 138);
-      context.fillStyle = "#A1A1AA";
-      context.font =
-        '500 23px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
-      context.fillText(
-        `${agenda.length} scheduled item${agenda.length === 1 ? "" : "s"}  ·  ${rows.length} collaboration${rows.length === 1 ? "" : "s"}`,
-        66,
-        181,
-      );
-
-      const orgLabel = org.replaceAll("-", " ").toUpperCase();
-      context.font =
-        '700 20px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
-      const orgWidth = context.measureText(orgLabel).width + 46;
-      roundedCanvasRect(context, width - orgWidth - 64, 54, orgWidth, 48, 24);
-      context.fillStyle = "rgba(255,255,255,0.08)";
-      context.fill();
-      context.fillStyle = "#E4E4E7";
-      context.textAlign = "center";
-      context.fillText(orgLabel, width - orgWidth / 2 - 64, 86);
-      context.textAlign = "left";
-
-      context.fillStyle = "#151517";
-      context.fillRect(0, headerHeight, width, weekdayHeight);
-      const cellWidth = width / 7;
-      const weekdayLabels = [
-        "SUNDAY",
-        "MONDAY",
-        "TUESDAY",
-        "WEDNESDAY",
-        "THURSDAY",
-        "FRIDAY",
-        "SATURDAY",
-      ];
-      context.fillStyle = "#A1A1AA";
-      context.font =
-        '700 19px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
-      context.textAlign = "center";
-      weekdayLabels.forEach((label, index) => {
-        context.fillText(
-          label,
-          index * cellWidth + cellWidth / 2,
-          headerHeight + 45,
-        );
-      });
-      context.textAlign = "left";
-
-      const gridTop = headerHeight + weekdayHeight;
-      const now = new Date();
-      cells.forEach((day, index) => {
-        const column = index % 7;
-        const row = Math.floor(index / 7);
-        const x = column * cellWidth;
-        const y = gridTop + row * rowHeight;
-        const inMonth = day >= 1 && day <= days;
-
-        context.fillStyle = inMonth
-          ? column === 0 || column === 6
-            ? "#111113"
-            : "#131315"
-          : "#0D0D0F";
-        context.fillRect(x, y, cellWidth, rowHeight);
-        context.strokeStyle = "#2A2A2F";
-        context.lineWidth = 1;
-        context.strokeRect(x, y, cellWidth, rowHeight);
-        if (!inMonth) return;
-
-        const isToday =
-          now.getFullYear() === year &&
-          now.getMonth() === monthIndex &&
-          now.getDate() === day;
-        if (isToday) {
-          roundedCanvasRect(context, x + 14, y + 13, 38, 34, 12);
-          context.fillStyle = "#2563EB";
-          context.fill();
-        }
-        context.fillStyle = isToday ? "#FFFFFF" : "#A1A1AA";
-        context.font =
-          '600 22px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
-        context.fillText(String(day), x + 24, y + 39);
-
-        const dayEvents = eventsByDay.get(day) ?? [];
-        const maxExportEvents = 5;
-        dayEvents.slice(0, maxExportEvents).forEach((event, eventIndex) => {
-          const eventX = x + 14;
-          const eventY = y + 58 + eventIndex * 30;
-          const eventWidth = cellWidth - 28;
-          const tone = CALENDAR_TONE_STYLES[event.tone];
-          roundedCanvasRect(context, eventX, eventY, eventWidth, 25, 7);
-          context.fillStyle = tone.fill;
-          context.fill();
-          context.fillStyle = tone.dot;
-          context.beginPath();
-          context.arc(eventX + 13, eventY + 12.5, 3.5, 0, Math.PI * 2);
-          context.fill();
-          context.fillStyle = tone.text;
-          context.font =
-            '600 15px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
-          context.fillText(
-            fitCanvasText(
-              context,
-              `${event.label} · ${event.row.projectName}`,
-              eventWidth - 34,
-            ),
-            eventX + 24,
-            eventY + 18,
-          );
-        });
-        if (dayEvents.length > maxExportEvents) {
-          context.fillStyle = "#71717A";
-          context.font =
-            '600 14px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
-          context.fillText(
-            `+${dayEvents.length - maxExportEvents} more`,
-            x + 18,
-            y + 58 + maxExportEvents * 30 + 18,
-          );
-        }
-      });
-
-      const footerTop = gridTop + weekRows * rowHeight;
-      context.fillStyle = "#101012";
-      context.fillRect(0, footerTop, width, footerHeight);
-      context.font =
-        '600 17px "SF Pro Text", Inter, ui-sans-serif, system-ui, sans-serif';
-      let legendX = 64;
-      (
-        [
-          ["Host", "blue"],
-          ["Wallets", "amber"],
-          ["Deadline", "red"],
-          ["Follow up / Reminder", "violet"],
-        ] as [string, CalendarTone][]
-      ).forEach(([label, tone]) => {
-        context.fillStyle = CALENDAR_TONE_STYLES[tone].dot;
-        context.beginPath();
-        context.arc(legendX, footerTop + 36, 6, 0, Math.PI * 2);
-        context.fill();
-        context.fillStyle = "#A1A1AA";
-        context.fillText(label, legendX + 16, footerTop + 42);
-        legendX += context.measureText(label).width + 70;
-      });
-      context.textAlign = "right";
-      context.fillStyle = "#71717A";
-      context.fillText(
-        `Exported ${new Date().toLocaleDateString(undefined, {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        })}`,
-        width - 64,
-        footerTop + 42,
-      );
-      context.textAlign = "left";
-
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          setExporting(false);
-          return;
-        }
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
-        link.href = url;
-        link.download = `KOS-${org}-collab-calendar-${monthKey}.png`;
-        link.click();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
-        setExporting(false);
-      }, "image/png");
-    } catch {
-      setExporting(false);
-    }
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  if (editing && !disabled) {
+    return (
+      <input
+        autoFocus
+        type="url"
+        className="w-full rounded-xl border border-blue-400/40 bg-black/30 px-2.5 py-2 text-xs outline-none"
+        placeholder="https://"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          setEditing(false);
+          if (draft.trim() !== (value ?? "")) onSave(draft.trim());
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") {
+            setDraft(value ?? "");
+            setEditing(false);
+          }
+        }}
+      />
+    );
   }
-
   return (
-    <div
-      data-testid="collab-calendar"
-      className="kos-card overflow-hidden md:flex md:h-[calc(100dvh-10rem)] md:min-h-[560px] md:max-h-[900px] md:flex-col"
-    >
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] p-4 sm:px-5">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-300">
-            Collaboration schedule
-          </div>
-          <h3 className="mt-0.5 text-lg font-semibold">{monthLabel}</h3>
-          <p className="text-xs text-kos-muted">
-            {agenda.length} scheduled item{agenda.length === 1 ? "" : "s"}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="kos-btn h-9 px-3 text-xs"
-            onClick={exportCalendarImage}
-            disabled={exporting}
-          >
-            {exporting ? "Preparing PNG…" : "Export PNG"}
-          </button>
-          <div className="inline-flex rounded-2xl border border-white/[0.08] bg-white/[0.025] p-1">
-            <button
-              className="kos-btn h-8 w-9 rounded-xl border-0 p-0"
-              onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}
-              aria-label="Previous month"
-            >
-              ←
-            </button>
-            <button
-              className="kos-btn h-8 w-9 rounded-xl border-0 p-0"
-              onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}
-              aria-label="Next month"
-            >
-              →
-            </button>
-          </div>
-        </div>
-      </div>
-      <div className="space-y-2 p-3 md:hidden">
-        {agenda.map((event, index) => (
-          <Link
-            key={`${event.row.id}-${event.label}-${event.date.toISOString()}-${index}`}
-            href={`/${org}/collabs/${event.row.id}`}
-            className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3 transition-colors hover:bg-white/[0.05]"
-          >
-            <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-white/[0.05] text-[10px] uppercase text-kos-muted">
-              <span>
-                {event.date.toLocaleDateString(undefined, { month: "short" })}
-              </span>
-              <span className="text-sm font-semibold leading-none text-white">
-                {event.date.getDate()}
-              </span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold">
-                {event.row.projectName}
-              </div>
-              <div
-                className={`mt-0.5 text-xs ${event.tone === "blue" ? "text-blue-300" : event.tone === "amber" ? "text-amber-300" : event.tone === "red" ? "text-red-300" : "text-violet-300"}`}
-              >
-                {event.label}
-              </div>
-            </div>
-            <span className="text-kos-muted">→</span>
-          </Link>
-        ))}
-        {agenda.length === 0 ? (
-          <div className="py-10 text-center text-sm text-kos-muted">
-            No collaboration dates this month.
-          </div>
-        ) : null}
-      </div>
-      <div className="hidden min-h-0 flex-1 md:flex md:flex-col">
-        <div className="grid shrink-0 grid-cols-7 border-b border-white/[0.08] bg-white/[0.02] text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-kos-muted">
-          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-            <div key={day} className="py-2.5">
-              {day}
-            </div>
-          ))}
-        </div>
-        <div
-          className="grid min-h-0 flex-1 grid-cols-7"
-          style={{
-            gridTemplateRows: `repeat(${weekRows}, minmax(0, 1fr))`,
+    <div className="flex min-w-0 items-center gap-2">
+      {value ? (
+        <a
+          href={value}
+          target="_blank"
+          rel="noreferrer"
+          className="min-w-0 truncate text-xs text-blue-300 hover:text-blue-200"
+        >
+          {hostname(value)} ↗
+        </a>
+      ) : (
+        <span className="truncate text-xs text-kos-muted">{label}</span>
+      )}
+      {!disabled ? (
+        <button
+          className="ml-auto shrink-0 rounded-lg px-1.5 py-1 text-[10px] text-kos-muted hover:bg-white/[0.05] hover:text-kos-fg"
+          onClick={() => {
+            setDraft(value ?? "");
+            setEditing(true);
           }}
         >
-          {cells.map((day, index) => {
-            const dayEvents = eventsByDay.get(day) ?? [];
-            return (
-              <div
-                key={index}
-                className={`min-h-0 overflow-hidden border-b border-r border-white/[0.06] p-1.5 sm:p-2 ${day < 1 || day > days ? "bg-black/10" : ""}`}
-              >
-                {day >= 1 && day <= days ? (
-                  <>
-                    <div className="mb-1 text-xs text-kos-muted">{day}</div>
-                    <div className="space-y-1">
-                      {dayEvents
-                        .slice(0, visibleEventLimit)
-                        .map((event, eventIndex) => (
-                          <Link
-                            key={`${event.row.id}-${event.label}-${eventIndex}`}
-                            href={`/${org}/collabs/${event.row.id}`}
-                            title={`${event.label}: ${event.row.projectName}`}
-                            className={`block truncate rounded-md px-1.5 py-1 text-[9px] sm:text-[10px] ${event.tone === "blue" ? "bg-blue-500/15 text-blue-200" : event.tone === "amber" ? "bg-amber-500/15 text-amber-200" : event.tone === "red" ? "bg-red-500/15 text-red-200" : "bg-violet-500/15 text-violet-200"}`}
-                          >
-                            {event.label} · {event.row.projectName}
-                          </Link>
-                        ))}
-                      {dayEvents.length > visibleEventLimit ? (
-                        <div className="px-1 text-[9px] font-medium text-kos-muted">
-                          +{dayEvents.length - visibleEventLimit} more
-                        </div>
-                      ) : null}
-                    </div>
-                  </>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+          Edit
+        </button>
+      ) : null}
     </div>
   );
 }
 
-function AnalyticsPanel({ data }: { data?: HubData }) {
-  const analytics = data?.analytics;
-  const max = Math.max(
-    1,
-    ...(analytics?.topPartners.map((partner) => partner.count) ?? [1]),
-  );
-  return (
-    <div className="mt-10">
-      <SectionTitle>Collaboration analytics</SectionTitle>
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="kos-card grid grid-cols-2 gap-3 p-4 sm:p-5 lg:col-span-2 sm:grid-cols-3">
-          <MiniMetric
-            label="Success rate"
-            value={`${analytics?.successRate ?? 0}%`}
-          />
-          <MiniMetric
-            label="Avg completion"
-            value={`${analytics?.averageCompletionDays ?? 0}d`}
-          />
-          <MiniMetric
-            label="WL collected"
-            value={analytics?.wlCollected ?? 0}
-          />
-          <MiniMetric label="WL hosted" value={analytics?.wlHosted ?? 0} />
-          <MiniMetric
-            label="Pending submits"
-            value={analytics?.pendingSubmissions ?? 0}
-          />
-          <MiniMetric label="Total records" value={analytics?.total ?? 0} />
-        </div>
-        <div className="kos-card p-4 sm:p-5">
-          <SectionTitle>Top partners</SectionTitle>
-          <div className="space-y-3">
-            {(analytics?.topPartners ?? []).map((partner) => (
-              <div key={partner.name}>
-                <div className="mb-1 flex justify-between text-xs">
-                  <span className="truncate">{partner.name}</span>
-                  <span className="text-kos-muted">{partner.count}</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-white/[0.07]">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500"
-                    style={{ width: `${(partner.count / max) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-            {analytics && analytics.topPartners.length === 0 ? (
-              <p className="text-sm text-kos-muted">
-                Partner performance appears after records are added.
-              </p>
-            ) : null}
-          </div>
-        </div>
-      </div>
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div className="kos-card p-4 sm:p-5">
-          <SectionTitle>All-time activity</SectionTitle>
-          <div className="overflow-x-auto pb-1">
-            <div className="flex h-40 min-w-max items-end gap-3">
-              {(analytics?.activityHistory ?? []).map((month) => {
-                const monthlyMax = Math.max(
-                  1,
-                  ...(analytics?.activityHistory.map((item) => item.value) ?? [
-                    1,
-                  ]),
-                );
-                return (
-                  <div
-                    key={month.key}
-                    className="flex h-full w-14 shrink-0 flex-col justify-end text-center"
-                  >
-                    <div className="mb-1 text-[10px] text-kos-muted">
-                      {month.value}
-                    </div>
-                    <div
-                      className="min-h-1 rounded-t-xl bg-gradient-to-t from-blue-600 to-violet-400 transition-all"
-                      style={{
-                        height: `${Math.max(4, (month.value / monthlyMax) * 100)}%`,
-                      }}
-                    />
-                    <div className="mt-2 text-[10px] uppercase text-kos-muted">
-                      {month.label}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-        <div className="kos-card p-4 sm:p-5">
-          <SectionTitle>Top performing teammates</SectionTitle>
-          <div className="space-y-2">
-            {(analytics?.topTeamMembers ?? []).map((member, index) => (
-              <div
-                key={member.id}
-                className="flex items-center gap-3 rounded-2xl border border-white/[0.07] p-3"
-              >
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.05] text-xs text-kos-muted">
-                  {index + 1}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                  {member.name}
-                </span>
-                <span className="text-sm text-kos-muted">
-                  {member.count} completed
-                </span>
-              </div>
-            ))}
-            {analytics && analytics.topTeamMembers.length === 0 ? (
-              <p className="text-sm text-kos-muted">
-                Completed collaborations will reveal team performance.
-              </p>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PartnerDirectory({
-  partners,
-  org,
-  loading,
+function NumberCell({
+  value,
+  suffix,
+  disabled,
+  onSave,
 }: {
-  partners: Partner[];
-  org: string;
-  loading: boolean;
+  value: number;
+  suffix: string;
+  disabled: boolean;
+  onSave: (value: number) => void;
 }) {
-  if (loading) return <LoadingSkeleton />;
-  if (!partners.length)
-    return <Empty>No partners match this search yet.</Empty>;
+  const [draft, setDraft] = useState(String(value));
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {partners.map((partner) => (
-        <div key={partner.id} className="kos-card kos-card-hover p-5">
-          <div className="flex items-start gap-3">
-            <PartnerMark
-              name={partner.name}
-              src={partner.logoUrl}
-              className="h-12 w-12 rounded-2xl text-sm"
-            />
-            <div className="min-w-0 flex-1">
-              <h3 className="truncate font-semibold">{partner.name}</h3>
-              <p className="text-xs text-kos-muted">
-                {collaborationDescriptor(
-                  partner.collaborations.flatMap(
-                    (collaboration) => collaboration.raffles,
-                  ),
-                  partner,
-                ) || "No hosted chain yet"}
-              </p>
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-semibold">
-                {partner.trustRating ? `${partner.trustRating}/5` : "—"}
-              </div>
-              <div className="text-[10px] uppercase tracking-wide text-kos-muted">
-                trust
-              </div>
-            </div>
-          </div>
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <MiniMetric
-              label="Collabs"
-              value={partner.collaborations.length}
-              compact
-            />
-            <MiniMetric
-              label="Success"
-              value={
-                partner.responseRate === null ? "—" : `${partner.responseRate}%`
-              }
-              compact
-            />
-            <MiniMetric
-              label="Contacts"
-              value={partner.contacts.length}
-              compact
-            />
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {partner.websiteUrl ? (
-              <a
-                className="kos-btn h-8 px-3 text-xs"
-                href={partner.websiteUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Website
-              </a>
-            ) : null}
-            {partner.discordUrl ? (
-              <a
-                className="kos-btn h-8 px-3 text-xs"
-                href={partner.discordUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Discord
-              </a>
-            ) : null}
-            {partner.xUrl ? (
-              <a
-                className="kos-btn h-8 px-3 text-xs"
-                href={partner.xUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                X
-              </a>
-            ) : null}
-          </div>
-          {partner.collaborations[0] ? (
-            <Link
-              href={`/${org}/collabs/${partner.collaborations[0].id}`}
-              className="mt-4 flex items-center justify-between border-t border-white/[0.07] pt-3 text-xs text-kos-muted hover:text-white"
-            >
-              <span>Latest collaboration</span>
-              <span>
-                {displayCollabStatus(partner.collaborations[0].status)} →
-              </span>
-            </Link>
-          ) : null}
-        </div>
-      ))}
-    </div>
+    <label className="flex items-center gap-1.5 rounded-xl border border-transparent px-2 py-2 hover:border-white/[0.08] hover:bg-white/[0.03] focus-within:border-blue-400/40 focus-within:bg-black/20">
+      <input
+        type="number"
+        min={0}
+        max={1_000_000}
+        className="w-11 bg-transparent font-medium tabular-nums outline-none"
+        value={draft}
+        disabled={disabled}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          const next = Math.max(0, Number.parseInt(draft || "0", 10));
+          setDraft(String(next));
+          if (next !== value) onSave(next);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") {
+            setDraft(String(value));
+            event.currentTarget.blur();
+          }
+        }}
+        aria-label={`${suffix} spots`}
+      />
+      <span className="text-[10px] text-kos-muted">{suffix}</span>
+    </label>
   );
 }
 
-function ProjectBanner({
+function DocumentCell({
   row,
-  className,
+  org,
+  disabled,
+  uploading,
+  onSave,
+  onUpload,
 }: {
   row: CollabRow;
-  className: string;
+  org: string;
+  disabled: boolean;
+  uploading: boolean;
+  onSave: (value: string) => void;
+  onUpload: (file?: File) => void;
 }) {
-  const sources = collaborationBannerUrls(row.raffles);
+  const file = row.attachments[0];
   return (
-    <RaffleBanner
-      name={row.projectName}
-      src={sources[0]}
-      fallbackSources={sources.slice(1)}
-      className={className}
-    />
+    <div className="space-y-1.5">
+      <InlineUrl
+        value={row.documentUrl}
+        label="Paste a document URL"
+        disabled={disabled}
+        onSave={onSave}
+      />
+      <div className="flex min-w-0 items-center gap-2 text-[10px]">
+        {file ? (
+          <a
+            href={`/api/${org}/collaborations/${row.id}/attachments?attachmentId=${file.id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="min-w-0 truncate text-blue-300 hover:text-blue-200"
+          >
+            <IconDoc className="mr-1 inline h-3 w-3" />
+            {file.name}
+          </a>
+        ) : (
+          <span className="text-kos-muted">No uploaded file</span>
+        )}
+        {!disabled ? (
+          <label className="ml-auto shrink-0 cursor-pointer text-kos-muted hover:text-kos-fg">
+            {uploading ? "Uploading…" : "Upload"}
+            <input
+              type="file"
+              className="hidden"
+              accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,image/*"
+              disabled={uploading}
+              onChange={(event) => onUpload(event.target.files?.[0])}
+            />
+          </label>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
-function HistoryImportPanel({
-  preview,
-  options,
-  loading,
-  importing,
-  onOption,
-  onImport,
-  onClose,
+function BulkBar({
+  count,
+  team,
+  canEdit,
+  canAssign,
+  canArchive,
+  busy,
+  onStatus,
+  onAssign,
+  onExport,
+  onArchive,
+  onDelete,
+  onClear,
 }: {
-  preview: ImportPreview | null;
-  options: ImportOptions;
-  loading: boolean;
-  importing: boolean;
-  onOption: (key: keyof ImportOptions, checked: boolean) => void;
-  onImport: () => void;
-  onClose: () => void;
+  count: number;
+  team: Person[];
+  canEdit: boolean;
+  canAssign: boolean;
+  canArchive: boolean;
+  busy: boolean;
+  onStatus: (value: string) => void;
+  onAssign: (value: string) => void;
+  onExport: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+  onClear: () => void;
 }) {
-  const choices: {
-    key: keyof ImportOptions;
-    label: string;
-    description: string;
-    count: number;
-  }[] = [
-    {
-      key: "includeEmpty",
-      label: "Ended with no entries",
-      description: "Attach for history without increasing WL allocation.",
-      count: preview?.empty ?? 0,
-    },
-    {
-      key: "includeCancelled",
-      label: "Cancelled attempts",
-      description:
-        "Keep failed or replaced posting attempts in the audit trail.",
-      count: preview?.cancelled ?? 0,
-    },
-    {
-      key: "includeTests",
-      label: "Test-named raffles",
-      description:
-        "Include records whose project or title contains test labels.",
-      count: preview?.test ?? 0,
-    },
-  ];
-
   return (
-    <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:p-5"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="history-import-title"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div className="max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl border border-white/[0.10] bg-[#121212] p-5 shadow-2xl sm:max-w-2xl sm:rounded-3xl sm:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2
-              id="history-import-title"
-              className="text-xl font-semibold tracking-tight"
-            >
-              Import raffle history
-            </h2>
-            <p className="mt-1 text-sm leading-6 text-kos-muted">
-              Preview what will become collaboration records. Existing entries,
-              winners, proofs, and wallets remain linked to their original
-              raffles.
-            </p>
-          </div>
-          <button className="kos-btn h-9 px-3 text-xs" onClick={onClose}>
-            Close
-          </button>
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <ImportMetric label="Unlinked" value={preview?.totalUnlinked} />
-          <ImportMetric label="Standard" value={preview?.defaultEligible} />
-          <ImportMetric label="Selected" value={preview?.selected} accent />
-          <ImportMetric label="Groups" value={preview?.groups} />
-        </div>
-
-        <div className="mt-5 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-kos-muted">
-            Optional history
-          </div>
-          <div className="mt-3 space-y-2">
-            {choices.map((choice) => (
-              <label
-                key={choice.key}
-                className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/[0.07] bg-black/20 p-3 transition-colors hover:border-white/[0.14]"
-              >
-                <input
-                  type="checkbox"
-                  className="mt-1 h-4 w-4 accent-blue-500"
-                  checked={options[choice.key]}
-                  onChange={(event) =>
-                    onOption(choice.key, event.target.checked)
-                  }
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center justify-between gap-3 text-sm font-medium">
-                    <span>{choice.label}</span>
-                    <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-kos-muted">
-                      {choice.count}
-                    </span>
-                  </span>
-                  <span className="mt-1 block text-xs leading-5 text-kos-muted">
-                    {choice.description}
-                  </span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button className="kos-btn" onClick={onClose} disabled={importing}>
-            Cancel
+    <div className="sticky top-3 z-40 flex flex-wrap items-center gap-2 rounded-2xl border border-blue-400/25 bg-[#17191e]/95 p-2.5 shadow-2xl backdrop-blur-xl">
+      <span className="px-2 text-sm font-medium text-blue-100">
+        {count} selected
+      </span>
+      {canEdit ? (
+        <select
+          className="kos-input h-9 w-auto min-w-40 py-1.5 text-xs"
+          defaultValue=""
+          disabled={busy}
+          onChange={(event) => {
+            if (event.target.value) onStatus(event.target.value);
+            event.target.value = "";
+          }}
+        >
+          <option value="">Change status…</option>
+          {SHEET_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {STATUS_LABELS[status]}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      {canAssign ? (
+        <select
+          className="kos-input h-9 w-auto min-w-40 py-1.5 text-xs"
+          defaultValue=""
+          disabled={busy}
+          onChange={(event) => {
+            if (event.target.value) onAssign(event.target.value);
+            event.target.value = "";
+          }}
+        >
+          <option value="">Assign host…</option>
+          {team.map((person) => (
+            <option key={person.id} value={person.id}>
+              {person.name}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      <button className="kos-btn h-9 px-3 text-xs" onClick={onExport}>
+        Export rows
+      </button>
+      {canArchive ? (
+        <>
+          <button
+            className="kos-btn h-9 px-3 text-xs"
+            disabled={busy}
+            onClick={onArchive}
+          >
+            Archive
           </button>
           <button
-            className="kos-btn-primary"
-            onClick={onImport}
-            disabled={
-              importing || loading || !preview || preview.selected === 0
-            }
+            className="h-9 rounded-xl px-3 text-xs text-red-300 hover:bg-red-500/10"
+            disabled={busy}
+            onClick={onDelete}
           >
-            {importing
-              ? "Importing…"
-              : loading
-                ? "Updating preview…"
-                : `Import ${preview?.selected ?? 0} raffle${preview?.selected === 1 ? "" : "s"}`}
+            Delete
+          </button>
+        </>
+      ) : null}
+      <button
+        className="ml-auto px-2 text-xs text-kos-muted hover:text-kos-fg"
+        onClick={onClear}
+      >
+        Clear
+      </button>
+    </div>
+  );
+}
+
+function NewRow({
+  draft,
+  team,
+  canAssign,
+  busy,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  draft: DraftRow;
+  team: Person[];
+  canAssign: boolean;
+  busy: boolean;
+  onChange: (patch: Partial<DraftRow>) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const input =
+    "w-full rounded-xl border border-white/[0.09] bg-black/20 px-2.5 py-2 text-xs outline-none focus:border-blue-400/50";
+  return (
+    <tr className="border-b border-blue-400/20 bg-blue-500/[0.045]">
+      <td className="sticky left-0 z-20 border-r border-white/[0.07] bg-[#11151b] px-3 py-4">
+        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-500/20 text-blue-200">
+          <IconPlus className="h-3 w-3" />
+        </span>
+      </td>
+      <td className="sticky left-11 z-20 border-r border-white/[0.07] bg-[#11151b] px-3 py-4">
+        <input
+          autoFocus
+          className={input}
+          placeholder="Project name"
+          value={draft.projectName}
+          onChange={(event) => onChange({ projectName: event.target.value })}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") onSave();
+            if (event.key === "Escape") onCancel();
+          }}
+        />
+      </td>
+      <td className="px-3 py-4">
+        <input
+          type="url"
+          className={input}
+          placeholder="https://x.com/…"
+          value={draft.xUrl}
+          onChange={(event) => onChange({ xUrl: event.target.value })}
+        />
+      </td>
+      <td className="px-3 py-4">
+        <input
+          type="url"
+          className={input}
+          placeholder="Discord invite"
+          value={draft.discordUrl}
+          onChange={(event) => onChange({ discordUrl: event.target.value })}
+        />
+      </td>
+      <td className="px-3 py-4">
+        <input
+          type="url"
+          className={input}
+          placeholder="Google Doc, Notion, PDF…"
+          value={draft.documentUrl}
+          onChange={(event) => onChange({ documentUrl: event.target.value })}
+        />
+      </td>
+      <td className="px-3 py-4">
+        <input
+          type="number"
+          min={0}
+          className={input}
+          value={draft.gtd}
+          onChange={(event) => onChange({ gtd: Number(event.target.value) })}
+        />
+      </td>
+      <td className="px-3 py-4">
+        <input
+          type="number"
+          min={0}
+          className={input}
+          value={draft.fcfs}
+          onChange={(event) => onChange({ fcfs: Number(event.target.value) })}
+        />
+      </td>
+      <td className="px-3 py-4">
+        <select
+          className={input}
+          value={draft.assignedToId}
+          disabled={!canAssign}
+          onChange={(event) => onChange({ assignedToId: event.target.value })}
+        >
+          <option value="">Unassigned</option>
+          {team.map((person) => (
+            <option key={person.id} value={person.id}>
+              {person.name}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="px-3 py-4">
+        <select
+          className={input}
+          value={draft.status}
+          onChange={(event) =>
+            onChange({ status: event.target.value as SheetStatus })
+          }
+        >
+          {SHEET_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {STATUS_LABELS[status]}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="px-4 py-4 text-xs text-kos-muted">After raffle</td>
+      <td className="px-4 py-4 text-xs text-kos-muted">Pending</td>
+      <td className="px-3 py-4">
+        <input
+          className={input}
+          placeholder="Add a note"
+          value={draft.notes}
+          onChange={(event) => onChange({ notes: event.target.value })}
+        />
+      </td>
+      <td className="px-4 py-4 text-xs text-kos-muted">Now</td>
+      <td className="sticky right-0 z-20 border-l border-white/[0.07] bg-[#11151b] px-3 py-4">
+        <div className="flex gap-2">
+          <button
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-blue-500 px-3 text-xs font-semibold text-white hover:bg-blue-400 disabled:opacity-50"
+            disabled={busy}
+            onClick={onSave}
+          >
+            <IconCheck className="h-3.5 w-3.5" /> Save row
+          </button>
+          <button
+            className="h-9 rounded-xl px-3 text-xs text-kos-muted hover:bg-white/[0.05] hover:text-kos-fg"
+            disabled={busy}
+            onClick={onCancel}
+          >
+            Cancel
           </button>
         </div>
-      </div>
-    </div>
+      </td>
+    </tr>
   );
-}
-
-function ImportMetric({
-  label,
-  value,
-  accent = false,
-}: {
-  label: string;
-  value: number | undefined;
-  accent?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-2xl border p-3 ${accent ? "border-blue-400/25 bg-blue-500/10" : "border-white/[0.08] bg-white/[0.025]"}`}
-    >
-      <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-kos-muted">
-        {label}
-      </div>
-      <div className="mt-1 text-2xl font-semibold">{value ?? "—"}</div>
-    </div>
-  );
-}
-
-function ProjectLogo({ row }: { row: CollabRow }) {
-  const sources = collaborationBannerUrls(row.raffles);
-  return (
-    <RaffleBanner
-      name={row.projectName}
-      src={sources[0]}
-      fallbackSources={sources.slice(1)}
-      compact
-      className="h-10 w-16 shrink-0 rounded-xl border border-white/[0.09]"
-    />
-  );
-}
-
-function PriorityDot({ priority }: { priority: CollabPriority }) {
-  return (
-    <span
-      className={`h-2.5 w-2.5 shrink-0 rounded-full ${priority === "URGENT" ? "bg-red-400 shadow-[0_0_12px_rgba(248,113,113,0.7)]" : priority === "HIGH" ? "bg-amber-400" : priority === "MEDIUM" ? "bg-blue-400" : "bg-zinc-500"}`}
-      title={`${COLLAB_PRIORITY_LABELS[priority]} priority`}
-    />
-  );
-}
-
-function CollabBadge({ status }: { status: string }) {
-  return (
-    <span className={`kos-badge whitespace-nowrap ${collabStatusTone(status)}`}>
-      {displayCollabStatus(status)}
-    </span>
-  );
-}
-
-function MiniMetric({
-  label,
-  value,
-  compact = false,
-}: {
-  label: string;
-  value: React.ReactNode;
-  compact?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-2xl border border-white/[0.07] bg-white/[0.025] ${compact ? "p-2.5 text-center" : "p-3 sm:p-4"}`}
-    >
-      <div
-        className={`${compact ? "text-base" : "text-xl sm:text-2xl"} font-semibold`}
-      >
-        {value}
-      </div>
-      <div className="mt-0.5 text-[9px] uppercase tracking-[0.12em] text-kos-muted sm:text-[10px]">
-        {label}
-      </div>
-    </div>
-  );
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: 6 }, (_, index) => (
-        <div
-          key={index}
-          className="h-40 animate-pulse rounded-3xl border border-white/[0.06] bg-white/[0.035]"
-        />
-      ))}
-    </div>
-  );
-}
-
-function formatShortDate(value: string | null) {
-  if (!value) return "No date";
-  return new Date(value).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-  });
-}
-
-function relative(value: string) {
-  const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1000);
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-  if (Math.abs(seconds) < 60) return formatter.format(seconds, "second");
-  const minutes = Math.round(seconds / 60);
-  if (Math.abs(minutes) < 60) return formatter.format(minutes, "minute");
-  const hours = Math.round(minutes / 60);
-  if (Math.abs(hours) < 24) return formatter.format(hours, "hour");
-  return formatter.format(Math.round(hours / 24), "day");
 }

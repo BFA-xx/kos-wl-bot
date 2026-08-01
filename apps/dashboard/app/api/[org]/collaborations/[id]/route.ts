@@ -11,6 +11,7 @@ import {
 import { syncCollaborationState } from "@/lib/collab";
 import { sanitizeHttpUrl } from "@/lib/raffle-input";
 import { sanitizeRichText } from "@/lib/rich-text";
+import { del } from "@vercel/blob";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -174,6 +175,69 @@ export const GET = withAccess(async (_req, { params }) => {
   });
 });
 
+export const POST = withAccess(async (_req, { params }) => {
+  const { org, user } = await requireOrgAccess(
+    params.org,
+    PERMISSIONS.COLLAB_CREATE,
+  );
+  const source = await prisma.collaboration.findFirst({
+    where: { id: params.id, organizationId: org.id },
+    include: { tags: { select: { tagId: true } } },
+  });
+  if (!source) {
+    return NextResponse.json(
+      { error: "Collaboration not found." },
+      { status: 404 },
+    );
+  }
+  const duplicate = await prisma.collaboration.create({
+    data: {
+      organizationId: source.organizationId,
+      partnerId: source.partnerId,
+      projectName: source.projectName,
+      status: source.status,
+      priority: source.priority,
+      submissionStatus: "NOT_STARTED",
+      whitelistAllocation: source.whitelistAllocation,
+      fcfsSpots: source.fcfsSpots,
+      documentUrl: source.documentUrl,
+      requirements: source.requirements,
+      primaryContactName: source.primaryContactName,
+      discordUsername: source.discordUsername,
+      telegram: source.telegram,
+      email: source.email,
+      ownerId: source.ownerId,
+      assignedToId: source.assignedToId,
+      reviewerId: source.reviewerId,
+      hostAt: source.hostAt,
+      hostingDeadline: source.hostingDeadline,
+      walletSubmissionDeadline: source.walletSubmissionDeadline,
+      collaborationDeadline: source.collaborationDeadline,
+      followUpAt: source.followUpAt,
+      noResponseDays: source.noResponseDays,
+      createdById: user.id,
+      tags: source.tags.length
+        ? { create: source.tags.map(({ tagId }) => ({ tagId })) }
+        : undefined,
+      activities: {
+        create: {
+          actorId: user.id,
+          action: "COLLABORATION_DUPLICATED",
+          title: "Collaboration duplicated",
+          body: `Copied from ${source.projectName}.`,
+          metadata: { sourceId: source.id },
+        },
+      },
+    },
+  });
+  await logAudit(org.id, user.id, "COLLABORATION_DUPLICATE", {
+    targetType: "collaboration",
+    targetId: duplicate.id,
+    metadata: { sourceId: source.id },
+  });
+  return NextResponse.json({ id: duplicate.id }, { status: 201 });
+});
+
 export const PATCH = withAccess(async (req, { params }) => {
   const access = await requireOrgAccess(params.org, PERMISSIONS.COLLAB_EDIT);
   const existing = await prisma.collaboration.findFirst({
@@ -244,6 +308,19 @@ export const PATCH = withAccess(async (req, { params }) => {
       );
     }
     data.whitelistAllocation = allocation;
+  }
+  if ("fcfsSpots" in body) {
+    const spots = Number(body.fcfsSpots);
+    if (!Number.isInteger(spots) || spots < 0 || spots > 1_000_000) {
+      return NextResponse.json(
+        { error: "FCFS spots must be a non-negative whole number." },
+        { status: 400 },
+      );
+    }
+    data.fcfsSpots = spots;
+  }
+  if ("documentUrl" in body) {
+    data.documentUrl = sanitizeHttpUrl(body.documentUrl);
   }
   const scalarFields = [
     ["requirements", 20_000],
@@ -453,11 +530,35 @@ export const PATCH = withAccess(async (req, { params }) => {
   return NextResponse.json({ ok: true });
 });
 
-export const DELETE = withAccess(async (_req, { params }) => {
+export const DELETE = withAccess(async (req, { params }) => {
   const { org, user } = await requireOrgAccess(
     params.org,
     PERMISSIONS.COLLAB_ARCHIVE,
   );
+  const permanent = new URL(req.url).searchParams.get("permanent") === "1";
+  if (permanent) {
+    const collaboration = await prisma.collaboration.findFirst({
+      where: { id: params.id, organizationId: org.id },
+      select: { attachments: { select: { url: true } } },
+    });
+    if (!collaboration) {
+      return NextResponse.json(
+        { error: "Collaboration not found." },
+        { status: 404 },
+      );
+    }
+    await prisma.collaboration.delete({ where: { id: params.id } });
+    await Promise.all(
+      collaboration.attachments.map((attachment) =>
+        del(attachment.url).catch(() => undefined),
+      ),
+    );
+    await logAudit(org.id, user.id, "COLLABORATION_DELETE", {
+      targetType: "collaboration",
+      targetId: params.id,
+    });
+    return NextResponse.json({ ok: true });
+  }
   const result = await prisma.collaboration.updateMany({
     where: { id: params.id, organizationId: org.id, archivedAt: null },
     data: { archivedAt: new Date(), lastActivityAt: new Date() },

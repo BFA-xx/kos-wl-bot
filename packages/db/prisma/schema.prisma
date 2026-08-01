@@ -1017,6 +1017,8 @@ model Collaboration {
   priority                 CollaborationPriority         @default(MEDIUM)
   submissionStatus         CollaborationSubmissionStatus @default(NOT_STARTED)
   whitelistAllocation      Int                           @default(0)
+  fcfsSpots                Int                           @default(0)
+  documentUrl              String?
   requirements             String?
   primaryContactName       String?
   discordUsername          String?
