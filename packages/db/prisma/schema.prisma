@@ -38,6 +38,23 @@ enum WalletChain {
   BITCOIN
 }
 
+enum TeamWalletStatus {
+  AVAILABLE
+  RESERVED
+  DISABLED
+}
+
+enum TeamWalletUsageStatus {
+  RESERVED
+  RELEASED
+}
+
+enum TeamWalletSelectionMode {
+  ROUND_ROBIN
+  RANDOM
+  PRIORITY
+}
+
 enum LogCategory {
   RAFFLE
   ENTRY
@@ -143,6 +160,10 @@ model User {
   campaignEnrollments  CampaignEnrollment[]
   raidParticipants     RaidParticipant[]
   raidSubmissions      RaidSubmission[]
+  teamWallets          TeamWallet[]           @relation("TeamWalletOwner")
+  teamWalletPoolSeats  TeamWalletPoolMember[] @relation("TeamWalletPoolMemberUser")
+  teamWalletFills      RaffleTeamWalletFill[] @relation("TeamWalletFillCreator")
+  releasedTeamWallets  TeamWalletUsage[]      @relation("TeamWalletUsageReleaser")
 
   /// Last time the user opened their notification feed (announcement unread
   /// counts are computed against this instead of materializing rows).
@@ -239,7 +260,7 @@ model Raffle {
   endedAt         DateTime?
   drawnAt         DateTime?
 
-  guild             Guild                @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  guild             Guild                  @relation(fields: [guildId], references: [id], onDelete: Cascade)
   eligibleRoles     RaffleRole[]
   participants      Participant[]
   winners           Winner[]
@@ -249,6 +270,8 @@ model Raffle {
   RaffleTask        RaffleTask[]
   campaignRaffles   CampaignRaffle[]
   collaborationLink CollaborationRaffle?
+  teamWalletFills   RaffleTeamWalletFill[]
+  teamWalletUsages  TeamWalletUsage[]
 
   @@index([guildId, status])
   @@index([status, endAt])
@@ -717,6 +740,7 @@ model Organization {
   collaborationPartners     CollaborationPartner[]
   collaborationTags         CollaborationTag[]
   collaborationSavedFilters CollaborationSavedFilter[]
+  teamWalletPools           TeamWalletPool[]
 
   @@index([ownerId])
   @@map("organizations")
@@ -741,6 +765,122 @@ model OrganizationMember {
   @@index([userId])
   @@index([organizationId])
   @@map("organization_members")
+}
+
+/// An organization-owned wallet pool. The default pool powers the current
+/// dashboard; keeping wallets behind a pool makes future team-specific pools
+/// additive instead of requiring a data migration.
+model TeamWalletPool {
+  id                  String                  @id @default(cuid())
+  organizationId      String
+  name                String                  @default("Team Wallet Pool")
+  isDefault           Boolean                 @default(true)
+  selectionMode       TeamWalletSelectionMode @default(ROUND_ROBIN)
+  lastSelectedOwnerId String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      TeamWalletPoolMember[]
+  wallets      TeamWallet[]
+  fills        RaffleTeamWalletFill[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isDefault])
+  @@map("team_wallet_pools")
+}
+
+/// Priority and future membership metadata for a person inside a pool.
+model TeamWalletPoolMember {
+  id        String   @id @default(cuid())
+  poolId    String
+  userId    String
+  priority  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pool TeamWalletPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  user User           @relation("TeamWalletPoolMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([poolId, userId])
+  @@index([poolId, priority])
+  @@index([userId])
+  @@map("team_wallet_pool_members")
+}
+
+/// A validated team wallet. Address bytes use the shared wallet encryption
+/// scheme; addressHash is deterministic and globally unique for deduplication.
+model TeamWallet {
+  id          String           @id @default(cuid())
+  poolId      String
+  ownerId     String
+  chain       WalletChain
+  address     String
+  addressHash String           @unique
+  status      TeamWalletStatus @default(AVAILABLE)
+  tags        String[]         @default([])
+  timesUsed   Int              @default(0)
+  lastUsedAt  DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  pool   TeamWalletPool    @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  owner  User              @relation("TeamWalletOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  usages TeamWalletUsage[]
+
+  @@index([poolId, status])
+  @@index([poolId, ownerId, status])
+  @@index([ownerId])
+  @@map("team_wallets")
+}
+
+/// One immutable reservation/release history row for a wallet used by a
+/// raffle. Project is snapshotted so history remains legible after renames.
+model TeamWalletUsage {
+  id           String                @id @default(cuid())
+  walletId     String
+  raffleId     Int
+  fillId       String
+  projectName  String
+  status       TeamWalletUsageStatus @default(RESERVED)
+  reservedAt   DateTime              @default(now())
+  releasedAt   DateTime?
+  releasedById String?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  wallet     TeamWallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  raffle     Raffle               @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  fill       RaffleTeamWalletFill @relation(fields: [fillId], references: [id], onDelete: Cascade)
+  releasedBy User?                @relation("TeamWalletUsageReleaser", fields: [releasedById], references: [id], onDelete: SetNull)
+
+  @@unique([walletId, raffleId])
+  @@index([raffleId, status])
+  @@index([walletId, reservedAt])
+  @@map("team_wallet_usages")
+}
+
+/// Audit batch for each Fill Team Wallets confirmation.
+model RaffleTeamWalletFill {
+  id               String                  @id @default(cuid())
+  poolId           String
+  raffleId         Int
+  selectionMode    TeamWalletSelectionMode
+  requiredWallets  Int
+  communityWallets Int
+  selectedWallets  Int
+  createdById      String
+  createdAt        DateTime                @default(now())
+
+  pool      TeamWalletPool    @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  raffle    Raffle            @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  createdBy User              @relation("TeamWalletFillCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  usages    TeamWalletUsage[]
+
+  @@index([raffleId, createdAt])
+  @@index([poolId, createdAt])
+  @@map("raffle_team_wallet_fills")
 }
 
 /// A role within an organization, carrying a set of permission strings.

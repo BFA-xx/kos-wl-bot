@@ -340,7 +340,25 @@ export async function deleteRaffle(
     message: `Deleted raffle #${raffleId} "${raffle.title}"`,
     actorId,
   });
-  await prisma.raffle.delete({ where: { id: raffleId } });
+  await prisma.$transaction(async (tx) => {
+    // A deleted/cancelled raffle must never strand Team Wallet Pool rows in
+    // RESERVED after the usage history is removed by the raffle cascade.
+    const teamWalletUsages = await tx.teamWalletUsage.findMany({
+      where: { raffleId, status: "RESERVED" },
+      select: { walletId: true },
+    });
+    if (teamWalletUsages.length) {
+      await tx.teamWallet.updateMany({
+        where: {
+          id: { in: teamWalletUsages.map((usage) => usage.walletId) },
+          status: "RESERVED",
+          deletedAt: null,
+        },
+        data: { status: "AVAILABLE" },
+      });
+    }
+    await tx.raffle.delete({ where: { id: raffleId } });
+  });
   if (collaborationLink) {
     await cleanupCollaborationAfterRaffleDelete(
       collaborationLink.collaborationId,

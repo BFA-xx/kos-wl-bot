@@ -67,7 +67,12 @@ export default async function RaffleDetailPage({
         take: 1,
         select: { message: true, createdAt: true },
       },
-      _count: { select: { participants: true } },
+      _count: {
+        select: {
+          participants: true,
+          teamWalletUsages: { where: { status: "RESERVED" } },
+        },
+      },
     },
   });
   if (!raffle) notFound();
@@ -381,7 +386,14 @@ export default async function RaffleDetailPage({
       ) : null}
 
       <div className="mt-4">
-        <RaffleActions raffleId={raffle.id} status={raffle.status} />
+        <RaffleActions
+          raffleId={raffle.id}
+          status={raffle.status}
+          canReleaseTeamWallets={
+            (access.isOwner || access.member?.role.name === "Admin") &&
+            raffle._count.teamWalletUsages > 0
+          }
+        />
       </div>
     </>
   );

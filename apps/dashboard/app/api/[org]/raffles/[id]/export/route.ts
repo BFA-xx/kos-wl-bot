@@ -1,10 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { toCsv } from "@/lib/csv";
-import { decryptSecret } from "@/lib/crypto";
 import { AccessError, requireOrgAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
-import { selectConfiguredWallet } from "@/lib/winner-wallet";
+import { raffleWalletExportRows } from "@/lib/raffle-wallet-export";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -48,17 +47,7 @@ export async function GET(
       );
       filename = `participants-${id}.csv`;
     } else {
-      const rows = await prisma.winner.findMany({
-        where: { raffleId: id, replaced: false },
-        orderBy: { position: "asc" },
-        include: { wallet: true },
-      });
-      const userIds = rows.map((winner) => winner.userId);
-      const profiles = userIds.length
-        ? await prisma.walletProfile.findMany({
-            where: { userId: { in: userIds } },
-          })
-        : [];
+      const rows = await raffleWalletExportRows(id, raffle.walletChains);
       csv = toCsv(
         [
           "position",
@@ -67,25 +56,17 @@ export async function GET(
           "chain",
           "wallet_address",
           "submitted_at",
+          "Source",
         ],
-        rows.map((r) => {
-          const source = selectConfiguredWallet(
-            r.wallet,
-            profiles.filter((profile) => profile.userId === r.userId),
-            raffle.walletChains,
-          );
-          const submitted = source !== null && source === r.wallet;
-          return [
-            r.position,
-            r.userId,
-            r.username,
-            source?.chain ?? "",
-            source ? decryptSecret(source.address) : "",
-            submitted && r.wallet?.submittedAt
-              ? r.wallet.submittedAt.toISOString()
-              : "",
-          ];
-        }),
+        rows.map((r) => [
+          r.position ?? "",
+          r.userId,
+          r.username,
+          r.chain,
+          r.address,
+          r.recordedAt?.toISOString() ?? "",
+          r.source,
+        ]),
       );
       filename = `winners-${id}.csv`;
     }

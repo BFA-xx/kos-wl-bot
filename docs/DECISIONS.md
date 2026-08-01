@@ -631,3 +631,22 @@ state coherent; final-only atomic claims prevent abandoned forms and
 concurrent submissions from exhausting or oversubscribing codes. A
 compare-and-clear request id prevents a slow bot action from erasing a newer
 dashboard instruction.
+
+## D054 — Team Wallet Pool reservations are organization-owned and export-linked
+
+**Status:** Accepted; implemented locally 2026-08-01
+**Decision:** Store team wallets under an organization-owned pool and an
+explicit team-member owner. Encrypt addresses with the existing wallet key and
+enforce one normalized address across all pools through a deterministic unique
+fingerprint. Count only unique, chain-valid community wallet rows that the
+winner export can actually emit. Fill the complete remaining `Raffle.spots`
+allocation in a serializable transaction using Round Robin by default, with
+Random and Admin-ordered Priority alternatives. Persist every fill and
+reservation/release event, append active reservations to the established
+winner exports with a Source column, and release reservations before a
+cancelled raffle is permanently deleted.
+**Why:** The pool is internal operational inventory, not a second participant
+wallet profile. Organization ownership preserves tenant isolation; explicit
+member ownership enables fair rotation and permissions; immutable raffle links
+make usage auditable; and extending the existing export keeps one source of
+truth for the final submission sheet.

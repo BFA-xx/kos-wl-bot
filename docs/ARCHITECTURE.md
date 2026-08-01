@@ -124,6 +124,12 @@ same-page return when no session exists.
 - `AuditLog`: organization audit trail.
 - `Announcement`, `FeatureFlag`: super-admin platform controls.
 - `SystemStatus`: service liveness key/value store; currently bot heartbeat.
+- `TeamWalletPool`, `TeamWalletPoolMember`, and `TeamWallet`: an
+  organization-owned, owner-scoped internal wallet registry with encrypted
+  addresses, global duplicate fingerprints, availability state, future tags,
+  and member priority.
+- `RaffleTeamWalletFill` and `TeamWalletUsage`: immutable fill-batch and
+  reservation/release history linking pool wallets to completed raffles.
 
 ### Phase 3 account and task domain
 
@@ -313,6 +319,24 @@ proofs, team wallet views, CSV/XLSX exports, and Collab Hub reconciliation.
 OAuth tokens and wallet addresses use AES-256-GCM with
 `WALLET_ENCRYPTION_KEY`. If the key is absent, current helpers permit plaintext
 storage for development. Bot and dashboard must share the same key.
+
+Team Wallet Pool uses the same encryption envelope, plus a deterministic
+SHA-256 fingerprint over the validated normalized address. The unique
+fingerprint is database-wide across team pools, while each wallet still belongs
+to one organization-owned pool and one team member. Organization members may
+manage only their own records; the organization owner and built-in Admin may
+manage all records. `team-wallet:fill` is granted to Owner, Admin, and Collab
+Manager.
+
+After a raffle ends, the dashboard counts unique exportable community winner
+wallets, subtracts existing team reservations from `Raffle.spots`, and selects
+the complete remainder from Available, chain-compatible pool records. Round
+Robin is the default and rotates one wallet per member; Random and Admin-ordered
+Priority are alternatives. The selection and reservation write run in a
+serializable transaction. Active reservations are appended to winner CSV/XLSX
+exports with `Source = Team Pool`; community rows use `Source = Community`.
+Cancelled raffle reservations can be released, and bot-mediated permanent
+deletion releases them before cascading usage records.
 
 ## Phase 4 Collab Hub
 

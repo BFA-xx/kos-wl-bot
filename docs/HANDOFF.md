@@ -1,6 +1,6 @@
 # Engineering Handoff
 
-Last updated: 2026-07-29
+Last updated: 2026-08-01
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
 Audited production application commit: `7560c66`
@@ -97,6 +97,125 @@ Phase 3 is implemented through S2.5:
   outcomes are atomically claimed, onboarding has `/config diagnose`, and the
   deploy script now fails unless tests, build, registration, PM2, and a real
   scheduler tick succeed.
+- Team Wallet Pool is implemented locally across Prisma, dashboard APIs/UI,
+  completed-raffle filling, exports, and bot-side deletion cleanup. It has not
+  been migrated or deployed to production.
+
+## Team Wallet Pool — implemented locally, not deployed
+
+### Delivered
+
+- Added one default organization-owned pool with future-ready pool membership,
+  priority, tags, fill-batch, and usage-history records. Wallets use the shared
+  AES-256-GCM envelope and a globally unique normalized SHA-256 address
+  fingerprint, so the same address cannot be added to another Team Wallet
+  Pool even when ciphertext differs.
+- Added **Team Wallet Pool** to organization navigation. Every active team
+  member can import, search, view, enable/disable, and delete their own
+  validated Ethereum, Base, Robinhood, Solana, or Bitcoin wallets. Owners and
+  built-in Admins can manage wallets for every active team member.
+- CSV/TXT and pasted imports support a default chain or `chain,address` data,
+  enforce a 1 MB request limit and 5,000-wallet batch limit, normalize every
+  address server-side, report row-level failures, and keep addresses out of
+  audit metadata.
+- Added pool metrics for total/available/reserved/disabled wallets, active team
+  members, most-used wallets, and the most-active team member. Each wallet has
+  raffle-linked project/date/status history.
+- Added `team-wallet:fill`. Existing built-in Owner, Admin, and Collab Manager
+  roles receive it through the additive migration; custom roles remain
+  unchanged. Only this permission can open or confirm the completed-raffle
+  fill flow.
+- Added Round Robin (default), Random, and Priority selection. Round Robin
+  rotates one wallet per eligible member and resumes after the previous fill's
+  last owner; per-member wallet order prefers least-used/oldest-used records.
+  Priority consumes wallets in the Admin-arranged team order. Selection is
+  serializable/retried and atomically reserves the complete requested set; it
+  never partially fills an under-capacity raffle.
+- Completed raffle details now provide the two-click **Fill Team Wallets**
+  flow: open confirmation, review Required/Community/Reserved/Need/Available
+  counts and mode, then confirm. Only Available, raffle-chain-compatible
+  wallets not already present in the unique community export are eligible.
+- Cancelled raffles with reservations expose an Admin-only release action.
+  Usage history becomes Released and wallets return to Available. Bot-mediated
+  permanent raffle deletion also releases reservations before the raffle's
+  cascading records are removed, preventing stranded Reserved wallets.
+- Winner CSV and Excel exports now append active Team Pool reservations after
+  community wallets and include a `Source` column with `Community` or
+  `Team Pool`. The existing collaboration workbook shape is unchanged.
+
+### Verification
+
+- Placeholder-database Prisma validation — passed.
+- A disposable local PostgreSQL database applied all 32 migrations from empty,
+  including `20260801120000_team_wallet_pool`; migration status was current and
+  schema diff reported no drift, and the temporary database was removed
+  afterward.
+- DB, bot, and dashboard TypeScript checks — passed.
+- Full workspace tests — passed: 9 DB, 28 bot, and 84 dashboard tests (121
+  total), including round-robin/priority/deduplication, confirmation counts,
+  permission boundaries, and workbook Source coverage.
+- Full workspace typecheck and build — passed. The dashboard production build
+  emitted the Team Wallet Pool page and all five new API route surfaces.
+- Production migration, authenticated browser QA, and deployment were not run;
+  deployment requires explicit approval and migration-before-runtime ordering.
+
+### Modified files
+
+- `apps/bot/src/services/raffleService.ts`
+- `apps/dashboard/app/[org]/raffles/[id]/page.tsx`
+- `apps/dashboard/app/[org]/team-wallet-pool/page.tsx`
+- `apps/dashboard/app/api/[org]/raffles/[id]/export-xlsx/route.ts`
+- `apps/dashboard/app/api/[org]/raffles/[id]/export/route.ts`
+- `apps/dashboard/app/api/[org]/raffles/[id]/team-wallets/release/route.ts`
+- `apps/dashboard/app/api/[org]/raffles/[id]/team-wallets/route.test.ts`
+- `apps/dashboard/app/api/[org]/raffles/[id]/team-wallets/route.ts`
+- `apps/dashboard/app/api/[org]/team-wallets/[walletId]/route.ts`
+- `apps/dashboard/app/api/[org]/team-wallets/priorities/route.ts`
+- `apps/dashboard/app/api/[org]/team-wallets/route.ts`
+- `apps/dashboard/components/OrgSidebar.tsx`
+- `apps/dashboard/components/RaffleActions.tsx`
+- `apps/dashboard/components/TeamWalletPoolManager.tsx`
+- `apps/dashboard/lib/format.ts`
+- `apps/dashboard/lib/permissions.ts`
+- `apps/dashboard/lib/raffle-wallet-export.ts`
+- `apps/dashboard/lib/team-wallet-pool.test.ts`
+- `apps/dashboard/lib/team-wallet-pool.ts`
+- `apps/dashboard/lib/team-wallet-server.test.ts`
+- `apps/dashboard/lib/team-wallet-server.ts`
+- `apps/dashboard/lib/xlsx.test.ts`
+- `apps/dashboard/lib/xlsx.ts`
+- `packages/db/prisma/migrations/20260801120000_team_wallet_pool/migration.sql`
+- `packages/db/prisma/schema.prisma`
+- `docs/ARCHITECTURE.md`
+- `docs/DECISIONS.md`
+- `docs/HANDOFF.md`
+
+### Assumptions
+
+- “CM” maps to the built-in **Collab Manager** role. The organization owner is
+  also authorized; Moderator and Viewer are not.
+- Required wallets means `Raffle.spots`. Community wallets means unique,
+  decryptable, format-valid winner/submitted-profile addresses that match the
+  raffle's configured chains—the same rows the final export can actually use,
+  not the raw participant count.
+- Team wallets remain chain-strict even for EVM-compatible address formats, in
+  line with the existing raffle payout boundary.
+
+### Technical debt
+
+- Partial address search decrypts the authorized pool server-side before
+  pagination because ciphertext is intentionally not searchable. Very large
+  pools will need a privacy-reviewed search index or cursor strategy.
+- Soft-deleted used wallets retain their global fingerprint so usage history
+  and global duplicate prevention remain intact. There is no restore UI yet.
+- Authenticated browser coverage does not yet exercise CSV import, priority
+  reordering, fill confirmation, or cancellation release.
+
+### Recommended next task
+
+- Review the additive migration and run an authenticated staging acceptance
+  raffle with mixed community/team rows, then apply the migration before the
+  dashboard and bot runtime release.
 
 ## Discord and web member verification — production release 2026-07-29
 

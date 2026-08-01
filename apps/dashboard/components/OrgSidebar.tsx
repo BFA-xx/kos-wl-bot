@@ -39,6 +39,7 @@ const NAV: {
   { seg: "points", label: "Points", Icon: IconChart },
   { seg: "rewards", label: "Rewards", Icon: IconCard },
   { seg: "wallets", label: "Wallets", Icon: IconWallet },
+  { seg: "team-wallet-pool", label: "Team Wallet Pool", Icon: IconWallet },
   { seg: "analytics", label: "Analytics", Icon: IconChart },
   { seg: "reports", label: "Reports", Icon: IconDoc },
   { seg: "settings", label: "Settings", Icon: IconGear },
