@@ -653,7 +653,7 @@ truth for the final submission sheet.
 
 ## D055 — One Team Wallet record may cover several compatible chains
 
-**Status:** Accepted; implemented locally 2026-08-01
+**Status:** Accepted; deployed 2026-08-01
 **Decision:** Store a chain set on each globally unique Team Wallet while
 retaining its original chain as a backward-compatible primary value. A pasted
 wallet without row-level chain data is validated against every chain selected

@@ -3,7 +3,7 @@
 Last updated: 2026-08-01
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited production application commit: `f733761`
+Audited production application commit: `75faa5c`
 
 ## Current state
 
@@ -100,9 +100,8 @@ Phase 3 is implemented through S2.5:
 - Team Wallet Pool is committed, migrated, and deployed across both Vercel
   dashboard projects and the EC2 bot. Production uses the source-aware
   community/team export and reservation lifecycle added in `f733761`.
-- The Team Wallet multi-chain import follow-up is implemented and verified
-  locally. Its additive `chains` migration and dashboard release have not been
-  applied to production.
+- The Team Wallet multi-chain import follow-up is committed, migrated, and
+  deployed across both Vercel dashboard projects and the aligned EC2 runtime.
 
 ## Team Wallet Pool — production release 2026-08-01
 
@@ -202,7 +201,7 @@ Phase 3 is implemented through S2.5:
   canary, and authenticated manager visual QA was not run. This avoided adding
   or reserving team wallet data solely for deployment testing.
 
-### Multi-chain wallet import follow-up — implemented locally, not deployed
+### Multi-chain wallet import follow-up — production release 2026-08-01
 
 - Replaced the single Default chain selector with a compact multi-select for
   Ethereum, Base, Robinhood, Solana, and Bitcoin. Plain pasted/uploaded wallet
@@ -240,8 +239,37 @@ Follow-up verification:
   reported current migration status, and produced no Prisma schema diff. The
   new migration row and enum-array column were present, and the database was
   removed afterward.
-- Production migration, commit, push, and deployment were not run for this
-  follow-up.
+
+Follow-up production release evidence:
+
+- Application commit `75faa5c` (`feat: support multi-chain team wallets`) was
+  pushed to `origin/main`.
+- Before the migration, production Prisma reported all 32 existing migrations
+  current, the EC2 bot was scheduler-ready, and Team Wallet counts were zero.
+  The release source was synced without restarting the runtime, where Prisma
+  reported exactly `20260801150000_team_wallet_multi_chain` pending.
+- A restricted custom-format logical backup was created before the migration at
+  `/home/ubuntu/backups/kos-neon-pre-team-wallet-multichain-20260801T085954Z.dump`.
+  It is 42,005,049 bytes, mode `600`, has SHA-256
+  `bc74e5d7d5910b2e686a8d0a2f2da2b57b90edc35b54dc7df40fcc305bab42de`,
+  and `pg_restore --list` reads 503 archive entries.
+- Additive migration `20260801150000_team_wallet_multi_chain` was applied from
+  the EC2 production connection before the runtime restart. Prisma then
+  reported all 33 migrations current; the migration row exists and no Team
+  Wallet record is missing its chain set.
+- `./scripts/deploy-ec2.sh` passed all 28 bot tests, rebuilt the DB and bot,
+  registered nine global commands, and restarted PM2 process `kos-bot` as PID
+  `254809`. Rechecked health returned `{"ok":true,"ready":true,"guilds":2}`
+  with a successful scheduler tick.
+- Both connected Vercel statuses succeeded for `75faa5c`:
+  `Vercel – kos-wl-bot-dashboard` and
+  `Vercel – kos-wl-bot-dashboard-3a8x`.
+- Production route canaries on `https://raffle.koslabs.app` return `307` to the
+  signed-out login flow for `/kos/team-wallet-pool` and `401`, not `404`, for
+  `/api/kos/team-wallets`.
+- No live wallet import or raffle fill was created as a production canary, and
+  authenticated manager visual QA was not run. This avoided adding internal
+  wallet inventory solely for deployment testing.
 
 Follow-up modified files:
 
@@ -319,11 +347,10 @@ Follow-up modified files:
 
 ### Recommended next task
 
-- Review and apply `20260801150000_team_wallet_multi_chain` before deploying
-  the dashboard follow-up. Then run one staff-controlled authenticated
-  acceptance raffle with non-sensitive multi-chain EVM wallets, verify mixed
-  Community/Team Pool CSV and Excel rows, cancel it, release the reservation,
-  and confirm the pool returns to Available.
+- Run one staff-controlled authenticated acceptance raffle with non-sensitive
+  multi-chain EVM wallets, verify mixed Community/Team Pool CSV and Excel rows,
+  cancel it, release the reservation, and confirm the pool returns to
+  Available.
 
 ## Discord and web member verification — production release 2026-07-29
 
