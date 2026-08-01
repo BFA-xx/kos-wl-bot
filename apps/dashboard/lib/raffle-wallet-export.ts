@@ -3,7 +3,10 @@ import { prisma } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
 import { selectConfiguredWallet } from "@/lib/winner-wallet";
 import { validateWalletAddress } from "@/lib/wallet-validation";
-import { teamWalletAddressHash } from "@/lib/team-wallet-pool";
+import {
+  teamWalletAddressHash,
+  teamWalletChains,
+} from "@/lib/team-wallet-pool";
 
 export interface RaffleWalletExportRow {
   position: number | null;
@@ -101,14 +104,18 @@ export async function raffleWalletExportRows(
   const team: RaffleWalletExportRow[] = [];
   for (const usage of usages) {
     const plain = decryptSecret(usage.wallet.address);
-    const validation = validateWalletAddress(usage.wallet.chain, plain);
+    const chain = configuredChains.find((configuredChain) =>
+      teamWalletChains(usage.wallet).includes(configuredChain),
+    );
+    if (!chain) continue;
+    const validation = validateWalletAddress(chain, plain);
     if (!validation.ok || seen.has(usage.wallet.addressHash)) continue;
     seen.add(usage.wallet.addressHash);
     team.push({
       position: null,
       userId: usage.wallet.owner.id,
       username: usage.wallet.owner.globalName ?? usage.wallet.owner.username,
-      chain: usage.wallet.chain,
+      chain,
       address: validation.normalized,
       source: "Team Pool",
       recordedAt: usage.reservedAt,

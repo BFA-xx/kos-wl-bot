@@ -61,7 +61,13 @@ export const GET = withAccess(async (_request, { params }) => {
       poolId: pool.id,
       status: "AVAILABLE",
       deletedAt: null,
-      chain: { in: raffle.walletChains },
+      OR: [
+        { chains: { hasSome: raffle.walletChains } },
+        {
+          chains: { isEmpty: true },
+          chain: { in: raffle.walletChains },
+        },
+      ],
       ...(community.length
         ? { addressHash: { notIn: community.map((row) => row.addressHash) } }
         : {}),
@@ -182,7 +188,13 @@ export const POST = withAccess(async (request, { params }) => {
                 poolId: currentPool.id,
                 status: "AVAILABLE",
                 deletedAt: null,
-                chain: { in: raffle.walletChains },
+                OR: [
+                  { chains: { hasSome: raffle.walletChains } },
+                  {
+                    chains: { isEmpty: true },
+                    chain: { in: raffle.walletChains },
+                  },
+                ],
                 ...(community.length
                   ? {
                       addressHash: {

@@ -90,7 +90,13 @@ describe("Team Wallet Pool raffle preview", () => {
       where: expect.objectContaining({
         poolId: "pool-a",
         status: "AVAILABLE",
-        chain: { in: ["ETHEREUM"] },
+        OR: [
+          { chains: { hasSome: ["ETHEREUM"] } },
+          {
+            chains: { isEmpty: true },
+            chain: { in: ["ETHEREUM"] },
+          },
+        ],
         addressHash: {
           notIn: expect.arrayContaining(["community-0", "community-27"]),
         },

@@ -100,6 +100,9 @@ Phase 3 is implemented through S2.5:
 - Team Wallet Pool is committed, migrated, and deployed across both Vercel
   dashboard projects and the EC2 bot. Production uses the source-aware
   community/team export and reservation lifecycle added in `f733761`.
+- The Team Wallet multi-chain import follow-up is implemented and verified
+  locally. Its additive `chains` migration and dashboard release have not been
+  applied to production.
 
 ## Team Wallet Pool — production release 2026-08-01
 
@@ -199,6 +202,63 @@ Phase 3 is implemented through S2.5:
   canary, and authenticated manager visual QA was not run. This avoided adding
   or reserving team wallet data solely for deployment testing.
 
+### Multi-chain wallet import follow-up — implemented locally, not deployed
+
+- Replaced the single Default chain selector with a compact multi-select for
+  Ethereum, Base, Robinhood, Solana, and Bitcoin. Plain pasted/uploaded wallet
+  rows are assigned to every selected chain in one action.
+- Every address must validate on every selected chain before it is saved. This
+  supports the common Ethereum/Base/Robinhood EVM combination without silently
+  claiming that an EVM address is valid on Solana or Bitcoin.
+- Existing `chain,wallet_address` and header-based CSV imports remain
+  compatible. An explicit row chain overrides the UI selection, and repeated
+  explicit rows for one compatible address merge into one chain set.
+- Each globally unique address remains one Team Wallet record with one owner,
+  reservation state, usage count, and history. Re-importing an active wallet
+  for the same pool owner expands its chain set; an address owned elsewhere is
+  still rejected by the database-wide duplicate boundary.
+- Added additive migration `20260801150000_team_wallet_multi_chain`. It keeps
+  the original `chain` as a backward-compatible primary value, adds a
+  `WalletChain[]` set, and backfills existing records from their primary chain.
+- Available-wallet counts and fill selection now match when any wallet chain
+  intersects the raffle configuration. CSV/XLSX export chooses the raffle's
+  first configured compatible chain. Empty chain sets created by an older
+  runtime during rollout fall back to the primary chain.
+- The wallet table renders all enabled chains as compact labels, and import
+  success feedback distinguishes newly added wallets from existing wallets
+  whose chain coverage was expanded.
+
+Follow-up verification:
+
+- Focused multi-chain parser, import API, raffle preview, and workbook tests —
+  18 passed.
+- Full workspace tests — 9 DB, 28 bot, and 92 dashboard tests (129 total).
+- Full workspace typecheck and production build — passed; the Team Wallet Pool
+  page and APIs were emitted successfully.
+- Placeholder-database Prisma validation and `git diff --check` — passed.
+- A disposable local PostgreSQL database applied all 33 migrations from empty,
+  reported current migration status, and produced no Prisma schema diff. The
+  new migration row and enum-array column were present, and the database was
+  removed afterward.
+- Production migration, commit, push, and deployment were not run for this
+  follow-up.
+
+Follow-up modified files:
+
+- `apps/dashboard/app/api/[org]/raffles/[id]/team-wallets/route.test.ts`
+- `apps/dashboard/app/api/[org]/raffles/[id]/team-wallets/route.ts`
+- `apps/dashboard/app/api/[org]/team-wallets/route.test.ts`
+- `apps/dashboard/app/api/[org]/team-wallets/route.ts`
+- `apps/dashboard/components/TeamWalletPoolManager.tsx`
+- `apps/dashboard/lib/raffle-wallet-export.ts`
+- `apps/dashboard/lib/team-wallet-pool.test.ts`
+- `apps/dashboard/lib/team-wallet-pool.ts`
+- `packages/db/prisma/migrations/20260801150000_team_wallet_multi_chain/migration.sql`
+- `packages/db/prisma/schema.prisma`
+- `docs/ARCHITECTURE.md`
+- `docs/DECISIONS.md`
+- `docs/HANDOFF.md`
+
 ### Modified files
 
 - `apps/bot/src/services/raffleService.ts`
@@ -238,8 +298,9 @@ Phase 3 is implemented through S2.5:
   decryptable, format-valid winner/submitted-profile addresses that match the
   raffle's configured chains—the same rows the final export can actually use,
   not the raw participant count.
-- Team wallets remain chain-strict even for EVM-compatible address formats, in
-  line with the existing raffle payout boundary.
+- Team wallets remain validation-strict for every chain assigned to the
+  record. The same validated EVM address may explicitly cover Ethereum, Base,
+  and Robinhood without creating duplicate inventory.
 
 ### Technical debt
 
@@ -250,15 +311,19 @@ Phase 3 is implemented through S2.5:
   and global duplicate prevention remain intact. There is no restore UI yet.
 - Authenticated browser coverage does not yet exercise CSV import, priority
   reordering, fill confirmation, or cancellation release.
+- Chain sets can be expanded by re-importing an owned wallet, but there is no
+  direct edit/remove-chain action on an existing wallet yet.
 - The old naked `kos-wl-bot-dashboard-3a8x.vercel.app` alias is stale even
   though its connected Vercel project and exact deployment completed
   successfully. The primary production origin is unaffected.
 
 ### Recommended next task
 
-- Run one staff-controlled authenticated acceptance raffle with non-sensitive
-  test wallets: verify mixed Community/Team Pool CSV and Excel rows, cancel it,
-  release the reservation, and confirm the pool returns to Available.
+- Review and apply `20260801150000_team_wallet_multi_chain` before deploying
+  the dashboard follow-up. Then run one staff-controlled authenticated
+  acceptance raffle with non-sensitive multi-chain EVM wallets, verify mixed
+  Community/Team Pool CSV and Excel rows, cancel it, release the reservation,
+  and confirm the pool returns to Available.
 
 ## Discord and web member verification — production release 2026-07-29
 

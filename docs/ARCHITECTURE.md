@@ -323,20 +323,25 @@ storage for development. Bot and dashboard must share the same key.
 Team Wallet Pool uses the same encryption envelope, plus a deterministic
 SHA-256 fingerprint over the validated normalized address. The unique
 fingerprint is database-wide across team pools, while each wallet still belongs
-to one organization-owned pool and one team member. Organization members may
-manage only their own records; the organization owner and built-in Admin may
-manage all records. `team-wallet:fill` is granted to Owner, Admin, and Collab
-Manager.
+to one organization-owned pool and one team member. A wallet has one legacy
+primary chain plus a `chains` set containing every compatible raffle network it
+may serve. This keeps ownership, usage count, reservation state, and global
+deduplication on one address record when an EVM wallet is enabled for Ethereum,
+Base, and Robinhood together. Organization members may manage only their own
+records; the organization owner and built-in Admin may manage all records.
+`team-wallet:fill` is granted to Owner, Admin, and Collab Manager.
 
 After a raffle ends, the dashboard counts unique exportable community winner
 wallets, subtracts existing team reservations from `Raffle.spots`, and selects
-the complete remainder from Available, chain-compatible pool records. Round
-Robin is the default and rotates one wallet per member; Random and Admin-ordered
-Priority are alternatives. The selection and reservation write run in a
-serializable transaction. Active reservations are appended to winner CSV/XLSX
-exports with `Source = Team Pool`; community rows use `Source = Community`.
-Cancelled raffle reservations can be released, and bot-mediated permanent
-deletion releases them before cascading usage records.
+the complete remainder from Available pool records whose chain set intersects
+the raffle's configured chains. Round Robin is the default and rotates one
+wallet per member; Random and Admin-ordered Priority are alternatives. The
+selection and reservation write run in a serializable transaction. Active
+reservations are appended to winner CSV/XLSX exports with
+`Source = Team Pool`; the export uses the raffle's first configured compatible
+chain, while community rows use `Source = Community`. Cancelled raffle
+reservations can be released, and bot-mediated permanent deletion releases them
+before cascading usage records.
 
 ## Phase 4 Collab Hub
 

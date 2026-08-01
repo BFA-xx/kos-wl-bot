@@ -814,7 +814,10 @@ model TeamWallet {
   id          String           @id @default(cuid())
   poolId      String
   ownerId     String
+  /// Backward-compatible primary chain for older runtimes and records.
   chain       WalletChain
+  /// Every raffle chain this address may serve. New runtimes prefer this set.
+  chains      WalletChain[]    @default([])
   address     String
   addressHash String           @unique
   status      TeamWalletStatus @default(AVAILABLE)

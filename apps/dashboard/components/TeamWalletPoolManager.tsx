@@ -47,6 +47,7 @@ interface TeamWallet {
   ownerId: string;
   ownerName: string;
   chain: string;
+  chains: string[];
   address: string;
   status: "AVAILABLE" | "RESERVED" | "DISABLED";
   timesUsed: number;
@@ -86,7 +87,20 @@ interface PoolData {
   };
 }
 
-const CHAINS = ["ETHEREUM", "BASE", "ROBINHOOD", "SOLANA", "BITCOIN"];
+const CHAINS = [
+  "ETHEREUM",
+  "BASE",
+  "ROBINHOOD",
+  "SOLANA",
+  "BITCOIN",
+] as const;
+const CHAIN_LABELS: Record<(typeof CHAINS)[number], string> = {
+  ETHEREUM: "Ethereum",
+  BASE: "Base",
+  ROBINHOOD: "Robinhood",
+  SOLANA: "Solana",
+  BITCOIN: "Bitcoin",
+};
 const MODES: { value: SelectionMode; label: string; hint: string }[] = [
   {
     value: "ROUND_ROBIN",
@@ -117,7 +131,9 @@ export function TeamWalletPoolManager() {
   );
   const [showImport, setShowImport] = useState(false);
   const [content, setContent] = useState("");
-  const [defaultChain, setDefaultChain] = useState("ETHEREUM");
+  const [selectedChains, setSelectedChains] = useState<
+    (typeof CHAINS)[number][]
+  >(["ETHEREUM"]);
   const [ownerId, setOwnerId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -144,14 +160,14 @@ export function TeamWalletPoolManager() {
   }, [notice]);
 
   async function importWallets() {
-    if (!content.trim()) return;
+    if (!content.trim() || !selectedChains.length) return;
     setBusy("import");
     setNotice(null);
     setImportErrors([]);
     const response = await fetch(`/api/${slug}/team-wallets`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content, defaultChain, ownerId }),
+      body: JSON.stringify({ content, chains: selectedChains, ownerId }),
     });
     const body = await response.json().catch(() => ({}));
     setBusy(null);
@@ -160,9 +176,16 @@ export function TeamWalletPoolManager() {
       setNotice(body.error ?? "Wallets could not be added.");
       return;
     }
-    setNotice(
-      `${body.imported} wallet${body.imported === 1 ? "" : "s"} added${body.errors?.length ? ` · ${body.errors.length} skipped` : ""}.`,
-    );
+    const changes = [
+      body.imported
+        ? `${body.imported} wallet${body.imported === 1 ? "" : "s"} added`
+        : null,
+      body.updated
+        ? `${body.updated} existing wallet${body.updated === 1 ? "" : "s"} expanded`
+        : null,
+      body.errors?.length ? `${body.errors.length} skipped` : null,
+    ].filter(Boolean);
+    setNotice(`${changes.join(" · ")}.`);
     setContent("");
     setShowImport(false);
     await mutate();
@@ -174,6 +197,14 @@ export function TeamWalletPoolManager() {
       return;
     }
     setContent(await file.text());
+  }
+
+  function toggleChain(chain: (typeof CHAINS)[number]) {
+    setSelectedChains((current) =>
+      current.includes(chain)
+        ? current.filter((value) => value !== chain)
+        : [...current, chain],
+    );
   }
 
   async function changeStatus(wallet: TeamWallet) {
@@ -269,21 +300,9 @@ export function TeamWalletPoolManager() {
           </SectionTitle>
           {showImport ? (
             <div className="mb-5 rounded-3xl border border-blue-400/15 bg-blue-500/[0.045] p-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <label>
-                  <span className="kos-label">Default chain</span>
-                  <select
-                    className="kos-input"
-                    value={defaultChain}
-                    onChange={(event) => setDefaultChain(event.target.value)}
-                  >
-                    {CHAINS.map((chain) => (
-                      <option key={chain}>{chain}</option>
-                    ))}
-                  </select>
-                </label>
+              <div className="grid gap-3">
                 {data.viewer.canManageAll ? (
-                  <label>
+                  <label className="max-w-md">
                     <span className="kos-label">Wallet owner</span>
                     <select
                       className="kos-input"
@@ -298,6 +317,43 @@ export function TeamWalletPoolManager() {
                     </select>
                   </label>
                 ) : null}
+                <fieldset>
+                  <legend className="kos-label">Use wallets on</legend>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+                    {CHAINS.map((chain) => {
+                      const checked = selectedChains.includes(chain);
+                      return (
+                        <label
+                          key={chain}
+                          className={`flex cursor-pointer items-center gap-2 rounded-2xl border px-3 py-2.5 text-sm transition ${
+                            checked
+                              ? "border-blue-400/35 bg-blue-500/10 text-blue-100"
+                              : "border-white/[0.08] bg-white/[0.025] text-kos-muted hover:border-white/[0.16] hover:text-white"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-blue-500"
+                            checked={checked}
+                            onChange={() => toggleChain(chain)}
+                          />
+                          <span>{CHAIN_LABELS[chain]}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-kos-muted">
+                    Wallets without a CSV chain column are assigned to every
+                    selected chain. Each address must be valid on all of those
+                    chains; an explicit chain column overrides this selection
+                    for that row.
+                  </p>
+                  {!selectedChains.length ? (
+                    <p className="mt-1 text-xs text-amber-300">
+                      Select at least one chain.
+                    </p>
+                  ) : null}
+                </fieldset>
               </div>
               <label className="mt-3 block">
                 <span className="kos-label">Paste addresses or CSV</span>
@@ -306,7 +362,7 @@ export function TeamWalletPoolManager() {
                   value={content}
                   onChange={(event) => setContent(event.target.value)}
                   placeholder={
-                    "One address per line, or CSV with chain,wallet_address"
+                    "One address per line. Optional CSV: chain,wallet_address"
                   }
                 />
               </label>
@@ -331,7 +387,11 @@ export function TeamWalletPoolManager() {
                 <button
                   type="button"
                   className="kos-btn-primary"
-                  disabled={!content.trim() || busy === "import"}
+                  disabled={
+                    !content.trim() ||
+                    !selectedChains.length ||
+                    busy === "import"
+                  }
                   onClick={importWallets}
                 >
                   {busy === "import" ? "Validating…" : "Validate & add"}
@@ -597,7 +657,18 @@ function WalletRows({
           </button>
         </td>
         <td>{wallet.ownerName}</td>
-        <td className="text-kos-muted">{wallet.chain}</td>
+        <td>
+          <div className="flex max-w-56 flex-wrap gap-1">
+            {wallet.chains.map((chain) => (
+              <span
+                key={chain}
+                className="rounded-lg border border-white/[0.08] bg-white/[0.035] px-2 py-1 text-[11px] text-kos-muted"
+              >
+                {CHAIN_LABELS[chain as keyof typeof CHAIN_LABELS] ?? chain}
+              </span>
+            ))}
+          </div>
+        </td>
         <td>
           <StatusBadge status={wallet.status} />
         </td>

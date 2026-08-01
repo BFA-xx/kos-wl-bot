@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { WalletChain } from "@prisma/client";
+import { Prisma, type WalletChain } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { logAudit, requireOrgAccess, withAccess } from "@/lib/access";
@@ -9,7 +9,10 @@ import {
   organizationTeamMembers,
 } from "@/lib/team-wallet-server";
 import { isWalletChain } from "@/lib/wallet-validation";
-import { parseTeamWalletImport } from "@/lib/team-wallet-pool";
+import {
+  parseTeamWalletImport,
+  teamWalletChains,
+} from "@/lib/team-wallet-pool";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -63,6 +66,7 @@ export const GET = withAccess(async (request, { params }) => {
     ownerId: wallet.ownerId,
     ownerName: wallet.owner.globalName ?? wallet.owner.username,
     chain: wallet.chain,
+    chains: teamWalletChains(wallet),
     address: decryptSecret(wallet.address),
     status: wallet.status,
     timesUsed: wallet.timesUsed,
@@ -81,9 +85,12 @@ export const GET = withAccess(async (request, { params }) => {
   }));
   const filtered = query
     ? serialized.filter((wallet) =>
-        [wallet.address, wallet.ownerName, wallet.chain, wallet.status].some(
-          (value) => value.toLowerCase().includes(query),
-        ),
+        [
+          wallet.address,
+          wallet.ownerName,
+          ...wallet.chains,
+          wallet.status,
+        ].some((value) => value.toLowerCase().includes(query)),
       )
     : serialized;
   const start = (page - 1) * pageSize;
@@ -178,7 +185,9 @@ export const POST = withAccess(async (request, { params }) => {
     typeof body.ownerId === "string" && body.ownerId.trim()
       ? body.ownerId.trim()
       : access.user.id;
-  const defaultChain = String(body.defaultChain ?? "ETHEREUM").toUpperCase();
+  const requestedChains: unknown[] = Array.isArray(body.chains)
+    ? body.chains
+    : [body.defaultChain ?? "ETHEREUM"];
   if (ownerId !== access.user.id && !canManageAll) {
     return NextResponse.json(
       { error: "You can only add wallets to your own pool." },
@@ -197,12 +206,25 @@ export const POST = withAccess(async (request, { params }) => {
       { status: 413 },
     );
   }
-  if (!isWalletChain(defaultChain)) {
+  if (
+    requestedChains.length === 0 ||
+    requestedChains.length > 5 ||
+    requestedChains.some(
+      (chain) => !isWalletChain(String(chain).trim().toUpperCase()),
+    )
+  ) {
     return NextResponse.json(
-      { error: "Unknown default chain." },
+      { error: "Select at least one valid wallet chain." },
       { status: 400 },
     );
   }
+  const selectedChains = [
+    ...new Set(
+      requestedChains.map((chain) =>
+        String(chain).trim().toUpperCase(),
+      ) as WalletChain[],
+    ),
+  ];
   const members = await organizationTeamMembers(
     access.org.id,
     access.org.ownerId,
@@ -214,71 +236,157 @@ export const POST = withAccess(async (request, { params }) => {
     );
   }
 
-  const parsed = parseTeamWalletImport(content, defaultChain as WalletChain);
-  const existing = parsed.rows.length
-    ? await prisma.teamWallet.findMany({
-        where: {
-          addressHash: { in: parsed.rows.map((row) => row.addressHash) },
+  const parsed = parseTeamWalletImport(content, selectedChains);
+  const pool = await ensureDefaultTeamWalletPool(access.org.id);
+  let result:
+    | {
+        created: number;
+        updated: number;
+        requestedCreates: number;
+        errors: { row: number; error: string }[];
+      }
+    | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      result = await prisma.$transaction(
+        async (tx) => {
+          const existing = parsed.rows.length
+            ? await tx.teamWallet.findMany({
+                where: {
+                  addressHash: {
+                    in: parsed.rows.map((row) => row.addressHash),
+                  },
+                },
+                select: {
+                  id: true,
+                  poolId: true,
+                  ownerId: true,
+                  chain: true,
+                  chains: true,
+                  addressHash: true,
+                  deletedAt: true,
+                },
+              })
+            : [];
+          const existingByHash = new Map(
+            existing.map((wallet) => [wallet.addressHash, wallet]),
+          );
+          const creates: typeof parsed.rows = [];
+          const updates: { id: string; chains: WalletChain[] }[] = [];
+          const errors = [...parsed.errors];
+
+          for (const row of parsed.rows) {
+            const wallet = existingByHash.get(row.addressHash);
+            if (!wallet) {
+              creates.push(row);
+              continue;
+            }
+            if (
+              wallet.poolId !== pool.id ||
+              wallet.ownerId !== ownerId ||
+              wallet.deletedAt
+            ) {
+              errors.push({
+                row: row.row,
+                error: "This wallet already exists in a Team Wallet Pool.",
+              });
+              continue;
+            }
+            const currentChains = teamWalletChains(wallet);
+            const nextChains = [
+              ...currentChains,
+              ...row.chains.filter(
+                (chain) => !currentChains.includes(chain),
+              ),
+            ];
+            if (nextChains.length === currentChains.length) {
+              errors.push({
+                row: row.row,
+                error: "This wallet already covers the selected chains.",
+              });
+              continue;
+            }
+            updates.push({ id: wallet.id, chains: nextChains });
+          }
+
+          if (!creates.length && !updates.length) {
+            return {
+              created: 0,
+              updated: 0,
+              requestedCreates: 0,
+              errors,
+            };
+          }
+          const seatCount = await tx.teamWalletPoolMember.count({
+            where: { poolId: pool.id },
+          });
+          await tx.teamWalletPoolMember.upsert({
+            where: { poolId_userId: { poolId: pool.id, userId: ownerId } },
+            create: { poolId: pool.id, userId: ownerId, priority: seatCount },
+            update: {},
+          });
+          for (const update of updates) {
+            await tx.teamWallet.update({
+              where: { id: update.id },
+              data: { chains: update.chains },
+            });
+          }
+          const created = creates.length
+            ? await tx.teamWallet.createMany({
+                data: creates.map((row) => ({
+                  poolId: pool.id,
+                  ownerId,
+                  chain: row.chain,
+                  chains: row.chains,
+                  address: encryptSecret(row.address),
+                  addressHash: row.addressHash,
+                })),
+                skipDuplicates: true,
+              })
+            : { count: 0 };
+          return {
+            created: created.count,
+            updated: updates.length,
+            requestedCreates: creates.length,
+            errors,
+          };
         },
-        select: { addressHash: true },
-      })
-    : [];
-  const duplicateHashes = new Set(existing.map((wallet) => wallet.addressHash));
-  const accepted = parsed.rows.filter(
-    (row) => !duplicateHashes.has(row.addressHash),
-  );
-  const errors = [
-    ...parsed.errors,
-    ...parsed.rows
-      .filter((row) => duplicateHashes.has(row.addressHash))
-      .map((row) => ({
-        row: row.row,
-        error: "This wallet already exists in a Team Wallet Pool.",
-      })),
-  ];
-  if (!accepted.length) {
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+      break;
+    } catch (error) {
+      const retryable =
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2034";
+      if (!retryable || attempt === 2) throw error;
+    }
+  }
+  if (!result || result.created + result.updated === 0) {
     return NextResponse.json(
       {
-        error: "No wallet addresses could be added.",
+        error: "No wallet addresses or chain assignments could be added.",
         imported: 0,
-        errors: errors.slice(0, 100),
+        updated: 0,
+        errors: result?.errors.slice(0, 100) ?? parsed.errors.slice(0, 100),
       },
       { status: 422 },
     );
   }
-
-  const pool = await ensureDefaultTeamWalletPool(access.org.id);
-  const seatCount = await prisma.teamWalletPoolMember.count({
-    where: { poolId: pool.id },
-  });
-  const result = await prisma.$transaction(async (tx) => {
-    await tx.teamWalletPoolMember.upsert({
-      where: { poolId_userId: { poolId: pool.id, userId: ownerId } },
-      create: { poolId: pool.id, userId: ownerId, priority: seatCount },
-      update: {},
-    });
-    return tx.teamWallet.createMany({
-      data: accepted.map((row) => ({
-        poolId: pool.id,
-        ownerId,
-        chain: row.chain,
-        address: encryptSecret(row.address),
-        addressHash: row.addressHash,
-      })),
-      skipDuplicates: true,
-    });
-  });
   await logAudit(access.org.id, access.user.id, "TEAM_WALLETS_IMPORTED", {
     targetType: "team_wallet_pool",
     targetId: pool.id,
     metadata: {
       ownerId,
-      imported: result.count,
-      rejected: errors.length + accepted.length - result.count,
+      imported: result.created,
+      updated: result.updated,
+      rejected:
+        result.errors.length + result.requestedCreates - result.created,
+      selectedChains,
     },
   });
   return NextResponse.json({
-    imported: result.count,
-    errors: errors.slice(0, 100),
+    imported: result.created,
+    updated: result.updated,
+    errors: result.errors.slice(0, 100),
   });
 });

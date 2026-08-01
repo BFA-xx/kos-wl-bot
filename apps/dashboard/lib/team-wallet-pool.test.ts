@@ -3,6 +3,7 @@ import {
   parseTeamWalletImport,
   selectTeamWallets,
   teamWalletAddressHash,
+  teamWalletChains,
   type TeamWalletCandidate,
 } from "./team-wallet-pool";
 
@@ -112,6 +113,59 @@ describe("Team Wallet Pool imports", () => {
       "BASE",
     );
     expect(pasted.rows).toHaveLength(2);
+  });
+
+  it("assigns an unqualified wallet to every selected compatible chain", () => {
+    const parsed = parseTeamWalletImport(
+      "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      ["ETHEREUM", "BASE", "ROBINHOOD"],
+    );
+
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows).toHaveLength(1);
+    expect(parsed.rows[0]?.chains).toEqual([
+      "ETHEREUM",
+      "BASE",
+      "ROBINHOOD",
+    ]);
+  });
+
+  it("requires a wallet to validate on every selected chain", () => {
+    const parsed = parseTeamWalletImport(
+      "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      ["ETHEREUM", "SOLANA"],
+    );
+
+    expect(parsed.rows).toEqual([]);
+    expect(parsed.errors[0]).toMatchObject({ row: 1 });
+    expect(parsed.errors[0]?.error).toContain("SOLANA");
+  });
+
+  it("lets explicit CSV chains override the multi-chain selection", () => {
+    const parsed = parseTeamWalletImport(
+      "chain,wallet_address\nbase,0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      ["ETHEREUM", "SOLANA"],
+    );
+
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows[0]?.chains).toEqual(["BASE"]);
+  });
+
+  it("merges compatible explicit rows for one globally unique address", () => {
+    const parsed = parseTeamWalletImport(
+      "ethereum,0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nbase,0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "ETHEREUM",
+    );
+
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows).toHaveLength(1);
+    expect(parsed.rows[0]?.chains).toEqual(["ETHEREUM", "BASE"]);
+  });
+
+  it("falls back to the primary chain for migration-safe legacy rows", () => {
+    expect(teamWalletChains({ chain: "BITCOIN", chains: [] })).toEqual([
+      "BITCOIN",
+    ]);
   });
 
   it("deduplicates the same EVM address across compatible chains", () => {

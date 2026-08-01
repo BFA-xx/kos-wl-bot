@@ -634,7 +634,7 @@ dashboard instruction.
 
 ## D054 — Team Wallet Pool reservations are organization-owned and export-linked
 
-**Status:** Accepted; implemented locally 2026-08-01
+**Status:** Accepted; deployed 2026-08-01
 **Decision:** Store team wallets under an organization-owned pool and an
 explicit team-member owner. Encrypt addresses with the existing wallet key and
 enforce one normalized address across all pools through a deterministic unique
@@ -650,3 +650,20 @@ wallet profile. Organization ownership preserves tenant isolation; explicit
 member ownership enables fair rotation and permissions; immutable raffle links
 make usage auditable; and extending the existing export keeps one source of
 truth for the final submission sheet.
+
+## D055 — One Team Wallet record may cover several compatible chains
+
+**Status:** Accepted; implemented locally 2026-08-01
+**Decision:** Store a chain set on each globally unique Team Wallet while
+retaining its original chain as a backward-compatible primary value. A pasted
+wallet without row-level chain data is validated against every chain selected
+in the import UI and saved once with that complete set. Explicit CSV chain data
+continues to override the selection per row. Re-importing the same active
+wallet for the same owner expands its chain set; it does not create a duplicate
+or reset usage history. Raffle selection matches any assigned chain, and export
+chooses the first compatible chain from the raffle configuration.
+**Why:** EVM team wallets commonly serve Ethereum, Base, and Robinhood with the
+same address. Duplicating those records would conflict with database-wide
+deduplication and would unfairly multiply one wallet's rotation weight. A
+single multi-chain record preserves ownership, status, and usage accounting
+while removing repetitive one-chain-at-a-time imports.

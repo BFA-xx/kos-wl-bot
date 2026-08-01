@@ -21,6 +21,7 @@ export interface TeamWalletMemberOrder {
 export interface TeamWalletImportRow {
   row: number;
   chain: WalletChain;
+  chains: WalletChain[];
   address: string;
   addressHash: string;
 }
@@ -41,6 +42,15 @@ export function teamWalletAddressHash(
       ? validation.normalized.toLowerCase()
       : validation.normalized;
   return createHash("sha256").update(normalized).digest("hex");
+}
+
+export function teamWalletChains(wallet: {
+  chain: WalletChain;
+  chains?: readonly WalletChain[];
+}): WalletChain[] {
+  return wallet.chains?.length
+    ? [...new Set(wallet.chains)]
+    : [wallet.chain];
 }
 
 function csvCells(line: string, delimiter: string): string[] {
@@ -73,9 +83,11 @@ function headerIndex(headers: string[], candidates: string[]): number {
 
 export function parseTeamWalletImport(
   content: string,
-  defaultChain: WalletChain,
+  selectedChains: WalletChain | readonly WalletChain[],
   maxRows = 5_000,
 ): { rows: TeamWalletImportRow[]; errors: TeamWalletImportError[] } {
+  const defaultChains =
+    typeof selectedChains === "string" ? [selectedChains] : selectedChains;
   const lines = content
     .replace(/^\uFEFF/u, "")
     .split(/\r?\n/u)
@@ -96,36 +108,69 @@ export function parseTeamWalletImport(
   const start = hasHeader ? 1 : 0;
   const rows: TeamWalletImportRow[] = [];
   const errors: TeamWalletImportError[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, TeamWalletImportRow>();
   let attempted = 0;
 
-  const accept = (rawAddress: string, rawChain: unknown, row: number) => {
+  const accept = (
+    rawAddress: string,
+    rawChains: unknown | readonly unknown[],
+    row: number,
+  ) => {
     attempted += 1;
     if (attempted > maxRows) return;
-    const chain = String(rawChain ?? defaultChain)
-      .trim()
-      .toUpperCase();
-    if (!isWalletChain(chain)) {
-      errors.push({ row, error: "Wallet chain is invalid." });
+    const requested = Array.isArray(rawChains) ? rawChains : [rawChains];
+    const chains: WalletChain[] = [];
+    for (const value of requested) {
+      const chain = String(value ?? "")
+        .trim()
+        .toUpperCase();
+      if (!isWalletChain(chain)) {
+        errors.push({ row, error: "Wallet chain is invalid." });
+        return;
+      }
+      if (!chains.includes(chain)) chains.push(chain);
+    }
+    if (!chains.length) {
+      errors.push({ row, error: "Select at least one wallet chain." });
       return;
     }
-    const validation = validateWalletAddress(chain, rawAddress);
-    if (!validation.ok) {
-      errors.push({ row, error: validation.error });
+
+    const validations = chains.map((chain) => ({
+      chain,
+      validation: validateWalletAddress(chain, rawAddress),
+    }));
+    const invalid = validations.find((item) => !item.validation.ok);
+    if (invalid && !invalid.validation.ok) {
+      errors.push({
+        row,
+        error: `${invalid.chain}: ${invalid.validation.error}`,
+      });
       return;
     }
-    const addressHash = teamWalletAddressHash(chain, validation.normalized);
-    if (seen.has(addressHash)) {
+    const address = validations[0]!.validation;
+    if (!address.ok) return;
+    const addressHash = teamWalletAddressHash(chains[0]!, address.normalized);
+    const duplicate = seen.get(addressHash);
+    if (duplicate) {
+      const additions = chains.filter(
+        (chain) => !duplicate.chains.includes(chain),
+      );
+      if (additions.length) {
+        duplicate.chains.push(...additions);
+        return;
+      }
       errors.push({ row, error: "Duplicate address in this import." });
       return;
     }
-    seen.add(addressHash);
-    rows.push({
+    const parsed = {
       row,
-      chain,
-      address: validation.normalized,
+      chain: chains[0]!,
+      chains,
+      address: address.normalized,
       addressHash,
-    });
+    };
+    seen.set(addressHash, parsed);
+    rows.push(parsed);
   };
 
   for (
@@ -138,7 +183,7 @@ export function parseTeamWalletImport(
     if (hasHeader) {
       accept(
         values[addressHeader] ?? "",
-        chainHeader >= 0 ? values[chainHeader] : defaultChain,
+        chainHeader >= 0 ? values[chainHeader] : defaultChains,
         row,
       );
       continue;
@@ -153,7 +198,7 @@ export function parseTeamWalletImport(
     }
     const pasted =
       values.length > 1 ? values : lines[index]!.trim().split(/\s+/u);
-    for (const address of pasted) accept(address, defaultChain, row);
+    for (const address of pasted) accept(address, defaultChains, row);
   }
 
   if (attempted > maxRows) {
