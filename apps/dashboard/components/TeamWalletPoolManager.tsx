@@ -114,11 +114,15 @@ export function TeamWalletPoolManager() {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const query = useMemo(() => {
-    const params = new URLSearchParams({ page: String(page), pageSize: "100" });
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
     if (deferredSearch.trim()) params.set("q", deferredSearch.trim());
     return params.toString();
-  }, [deferredSearch, page]);
+  }, [deferredSearch, page, pageSize]);
   const { data, error, isLoading, mutate } = useSWR<PoolData>(
     `/api/${slug}/team-wallets?${query}`,
     fetcher,
@@ -139,8 +143,16 @@ export function TeamWalletPoolManager() {
   const [selectionMode, setSelectionMode] =
     useState<SelectionMode>("ROUND_ROBIN");
   const fileRef = useRef<HTMLInputElement>(null);
+  const walletSectionRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => setPage(1), [deferredSearch]);
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const syncPageSize = () => setPageSize(desktop.matches ? 100 : 25);
+    syncPageSize();
+    desktop.addEventListener("change", syncPageSize);
+    return () => desktop.removeEventListener("change", syncPageSize);
+  }, []);
+  useEffect(() => setPage(1), [deferredSearch, pageSize]);
   useEffect(() => {
     if (!data) return;
     setPriorityIds(data.members.map((member) => member.userId));
@@ -261,6 +273,14 @@ export function TeamWalletPoolManager() {
     });
   }
 
+  function goToPage(nextPage: number) {
+    setPage(nextPage);
+    walletSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
   if (error) return <Empty>{error.message}</Empty>;
   if (isLoading || !data) return <Empty>Loading Team Wallet Pool…</Empty>;
   const memberById = new Map(
@@ -278,7 +298,7 @@ export function TeamWalletPoolManager() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.42fr)]">
-        <div className="kos-card p-3 sm:p-5">
+        <div ref={walletSectionRef} className="kos-card p-3 sm:p-5">
           <SectionTitle
             action={
               <button
@@ -480,19 +500,22 @@ export function TeamWalletPoolManager() {
           )}
           {data.pagination.totalPages > 1 ? (
             <div className="mt-4 flex flex-col gap-3 text-sm text-kos-muted sm:flex-row sm:items-center sm:justify-between">
-              <span>{data.pagination.total} wallets</span>
+              <span>
+                {data.pagination.total} wallets · Page {data.pagination.page} of{" "}
+                {data.pagination.totalPages}
+              </span>
               <div className="grid grid-cols-2 gap-2 sm:flex">
                 <button
                   className="kos-btn min-h-11 justify-center"
                   disabled={page <= 1}
-                  onClick={() => setPage((value) => value - 1)}
+                  onClick={() => goToPage(page - 1)}
                 >
                   Previous
                 </button>
                 <button
                   className="kos-btn min-h-11 justify-center"
                   disabled={page >= data.pagination.totalPages}
-                  onClick={() => setPage((value) => value + 1)}
+                  onClick={() => goToPage(page + 1)}
                 >
                   Next
                 </button>
