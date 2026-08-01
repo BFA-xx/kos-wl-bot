@@ -12,7 +12,12 @@ import {
   TableShell,
 } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
-import { IconArrowDown, IconArrowUp, IconSearch } from "@/components/icons";
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconChevron,
+  IconSearch,
+} from "@/components/icons";
 
 const fetcher = (url: string) =>
   fetch(url).then(async (response) => {
@@ -283,10 +288,6 @@ export function TeamWalletPoolManager() {
 
   if (error) return <Empty>{error.message}</Empty>;
   if (isLoading || !data) return <Empty>Loading Team Wallet Pool…</Empty>;
-  const memberById = new Map(
-    data.members.map((member) => [member.userId, member]),
-  );
-
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
@@ -296,6 +297,34 @@ export function TeamWalletPoolManager() {
         <StatCard label="Disabled" value={data.stats.disabled} />
         <StatCard label="Team Members" value={data.stats.totalTeamMembers} />
       </div>
+
+      <details className="kos-card group overflow-hidden lg:hidden">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold">Selection settings</div>
+            <div className="mt-0.5 truncate text-xs text-kos-muted">
+              {MODES.find((mode) => mode.value === selectionMode)?.label} ·{" "}
+              {priorityIds.length} team member
+              {priorityIds.length === 1 ? "" : "s"}
+            </div>
+          </div>
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.035] text-kos-muted transition-transform group-open:rotate-180">
+            <IconChevron />
+          </span>
+        </summary>
+        <div className="border-t border-white/[0.08] p-4">
+          <SelectionSettings
+            members={data.members}
+            priorityIds={priorityIds}
+            selectionMode={selectionMode}
+            canManageAll={data.viewer.canManageAll}
+            busy={busy === "priority"}
+            onModeChange={setSelectionMode}
+            onMove={movePriority}
+            onSave={() => void savePriority()}
+          />
+        </div>
+      </details>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.42fr)]">
         <div ref={walletSectionRef} className="kos-card p-3 sm:p-5">
@@ -565,90 +594,18 @@ export function TeamWalletPoolManager() {
             </div>
           </div>
 
-          <div className="kos-card p-4">
+          <div className="kos-card hidden p-4 lg:block">
             <SectionTitle>Selection settings</SectionTitle>
-            <label>
-              <span className="kos-label">Default mode</span>
-              <select
-                className="kos-input"
-                value={selectionMode}
-                disabled={!data.viewer.canManageAll}
-                onChange={(event) =>
-                  setSelectionMode(event.target.value as SelectionMode)
-                }
-              >
-                {MODES.map((mode) => (
-                  <option key={mode.value} value={mode.value}>
-                    {mode.label}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-kos-muted">
-                {MODES.find((mode) => mode.value === selectionMode)?.hint}
-              </p>
-            </label>
-            <div className="mt-4 space-y-2">
-              <div className="kos-label">Member priority</div>
-              {priorityIds.map((userId, index) => {
-                const member = memberById.get(userId);
-                if (!member) return null;
-                return (
-                  <div
-                    key={userId}
-                    className="flex items-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-2.5"
-                  >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.05] text-xs text-kos-muted">
-                      {index + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">
-                        {member.name}
-                      </div>
-                      <div className="text-[11px] text-kos-muted">
-                        {member.roleName}
-                      </div>
-                    </div>
-                    {data.viewer.canManageAll ? (
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          aria-label={`Move ${member.name} up`}
-                          className="flex h-10 w-10 items-center justify-center rounded-xl text-kos-muted hover:bg-white/[0.06] hover:text-white disabled:opacity-30"
-                          disabled={index === 0}
-                          onClick={() => movePriority(index, -1)}
-                        >
-                          <IconArrowUp width={15} height={15} />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Move ${member.name} down`}
-                          className="flex h-10 w-10 items-center justify-center rounded-xl text-kos-muted hover:bg-white/[0.06] hover:text-white disabled:opacity-30"
-                          disabled={index === priorityIds.length - 1}
-                          onClick={() => movePriority(index, 1)}
-                        >
-                          <IconArrowDown width={15} height={15} />
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-            {data.viewer.canManageAll ? (
-              <button
-                type="button"
-                className="kos-btn-primary mt-4 w-full"
-                disabled={busy === "priority"}
-                onClick={savePriority}
-              >
-                {busy === "priority" ? "Saving…" : "Save settings"}
-              </button>
-            ) : (
-              <p className="mt-4 text-xs leading-5 text-kos-muted">
-                Admins arrange priority. Round Robin remains the default fill
-                mode.
-              </p>
-            )}
+            <SelectionSettings
+              members={data.members}
+              priorityIds={priorityIds}
+              selectionMode={selectionMode}
+              canManageAll={data.viewer.canManageAll}
+              busy={busy === "priority"}
+              onModeChange={setSelectionMode}
+              onMove={movePriority}
+              onSave={() => void savePriority()}
+            />
           </div>
         </div>
       </div>
@@ -662,6 +619,116 @@ export function TeamWalletPoolManager() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function SelectionSettings({
+  members,
+  priorityIds,
+  selectionMode,
+  canManageAll,
+  busy,
+  onModeChange,
+  onMove,
+  onSave,
+}: {
+  members: PoolMember[];
+  priorityIds: string[];
+  selectionMode: SelectionMode;
+  canManageAll: boolean;
+  busy: boolean;
+  onModeChange: (mode: SelectionMode) => void;
+  onMove: (index: number, direction: -1 | 1) => void;
+  onSave: () => void;
+}) {
+  const memberById = new Map(members.map((member) => [member.userId, member]));
+
+  return (
+    <>
+      <label>
+        <span className="kos-label">Default mode</span>
+        <select
+          className="kos-input"
+          value={selectionMode}
+          disabled={!canManageAll}
+          onChange={(event) =>
+            onModeChange(event.target.value as SelectionMode)
+          }
+        >
+          {MODES.map((mode) => (
+            <option key={mode.value} value={mode.value}>
+              {mode.label}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-kos-muted">
+          {MODES.find((mode) => mode.value === selectionMode)?.hint}
+        </p>
+      </label>
+      <div className="mt-4">
+        <div className="kos-label">Member priority</div>
+        <div className="max-h-[22rem] space-y-2 overflow-y-auto pr-1">
+          {priorityIds.map((userId, index) => {
+            const member = memberById.get(userId);
+            if (!member) return null;
+            return (
+              <div
+                key={userId}
+                className="flex items-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-2.5"
+              >
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.05] text-xs text-kos-muted">
+                  {index + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">
+                    {member.name}
+                  </div>
+                  <div className="text-[11px] text-kos-muted">
+                    {member.roleName}
+                  </div>
+                </div>
+                {canManageAll ? (
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      aria-label={`Move ${member.name} up`}
+                      className="flex h-10 w-10 items-center justify-center rounded-xl text-kos-muted hover:bg-white/[0.06] hover:text-white disabled:opacity-30"
+                      disabled={index === 0}
+                      onClick={() => onMove(index, -1)}
+                    >
+                      <IconArrowUp width={15} height={15} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Move ${member.name} down`}
+                      className="flex h-10 w-10 items-center justify-center rounded-xl text-kos-muted hover:bg-white/[0.06] hover:text-white disabled:opacity-30"
+                      disabled={index === priorityIds.length - 1}
+                      onClick={() => onMove(index, 1)}
+                    >
+                      <IconArrowDown width={15} height={15} />
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {canManageAll ? (
+        <button
+          type="button"
+          className="kos-btn-primary mt-4 w-full"
+          disabled={busy}
+          onClick={onSave}
+        >
+          {busy ? "Saving…" : "Save settings"}
+        </button>
+      ) : (
+        <p className="mt-4 text-xs leading-5 text-kos-muted">
+          Admins arrange priority. Round Robin remains the default fill mode.
+        </p>
+      )}
+    </>
   );
 }
 

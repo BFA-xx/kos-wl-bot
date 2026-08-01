@@ -193,7 +193,7 @@ function EditModal({
           onSubmit={save}
           className="min-h-dvh w-full max-w-3xl rounded-none border border-white/[0.10] bg-[#0A0A0A]/95 p-4 shadow-2xl shadow-black/60 sm:my-8 sm:min-h-0 sm:rounded-[2rem] sm:p-6"
         >
-          <div className="mb-5 flex items-start justify-between gap-4 border-b border-white/[0.08] pb-4">
+          <div className="sticky top-0 z-20 -mx-4 -mt-4 mb-5 flex items-start justify-between gap-4 border-b border-white/[0.08] bg-[#0A0A0A]/95 px-4 py-4 backdrop-blur-xl sm:static sm:mx-0 sm:mt-0 sm:bg-transparent sm:px-0 sm:pt-0">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300/90">
                 Raffle settings
@@ -209,7 +209,7 @@ function EditModal({
               type="button"
               aria-label="Close raffle editor"
               onClick={onClose}
-              className="rounded-xl p-2 text-kos-muted transition-colors hover:bg-white/[0.06] hover:text-kos-fg"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-kos-muted transition-colors hover:bg-white/[0.06] hover:text-kos-fg"
             >
               <IconClose />
             </button>
@@ -286,7 +286,7 @@ function EditModal({
                     {meta.roles.map((r) => (
                       <label
                         key={r.id}
-                        className="flex items-center gap-2 text-sm"
+                        className="flex min-h-10 items-center gap-2 rounded-xl px-2.5 py-2 text-sm transition-colors hover:bg-white/[0.05]"
                       >
                         <input
                           type="checkbox"
@@ -350,7 +350,7 @@ function EditModal({
                   {raffle.verificationTasks.map((t) => (
                     <label
                       key={t.id}
-                      className="flex items-center gap-2 text-sm"
+                      className="flex min-h-10 items-center gap-2 rounded-xl px-2.5 py-2 text-sm transition-colors hover:bg-white/[0.05]"
                     >
                       <input
                         type="checkbox"
@@ -379,7 +379,10 @@ function EditModal({
             <F label="Social tasks">
               <div className="space-y-2">
                 {tasks.map((t, i) => (
-                  <div key={i} className="flex gap-2">
+                  <div
+                    key={i}
+                    className="grid gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-2 sm:grid-cols-[1fr_1fr_auto] sm:items-center"
+                  >
                     <input
                       className="kos-input"
                       placeholder="Label"
@@ -407,9 +410,10 @@ function EditModal({
                     <button
                       type="button"
                       onClick={() => setTasks(tasks.filter((_, j) => j !== i))}
-                      className="shrink-0 px-2 text-kos-muted hover:text-red-400"
+                      className="kos-btn min-h-10 text-xs text-kos-muted hover:text-red-400 sm:w-auto"
+                      aria-label="Remove task"
                     >
-                      ✕
+                      Remove
                     </button>
                   </div>
                 ))}
@@ -438,9 +442,12 @@ function EditModal({
                 </select>
               </F>
               <F label="Wallet chains">
-                <div className="flex flex-wrap gap-2 pt-1.5">
+                <div className="grid grid-cols-2 gap-2 pt-1.5 sm:flex sm:flex-wrap">
                   {CHAINS.map((c) => (
-                    <label key={c} className="flex items-center gap-1 text-xs">
+                    <label
+                      key={c}
+                      className="flex min-h-11 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.025] px-2.5 py-2 text-xs"
+                    >
                       <input
                         type="checkbox"
                         checked={chains.includes(c)}
@@ -453,8 +460,8 @@ function EditModal({
               </F>
             </div>
 
-            <div className="flex flex-wrap gap-4 text-sm">
-              <label className="flex items-center gap-2">
+            <div className="grid gap-2 text-sm sm:grid-cols-2">
+              <label className="flex min-h-11 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2.5">
                 <input
                   type="checkbox"
                   checked={hideEntries}
@@ -462,7 +469,7 @@ function EditModal({
                 />{" "}
                 Hide entry count
               </label>
-              <label className="flex items-center gap-2">
+              <label className="flex min-h-11 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2.5">
                 <input
                   type="checkbox"
                   checked={collectWallets}
@@ -470,7 +477,7 @@ function EditModal({
                 />{" "}
                 Collect wallets
               </label>
-              <label className="flex items-center gap-2">
+              <label className="flex min-h-11 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2.5">
                 <input
                   type="checkbox"
                   checked={requireWallet}
@@ -478,7 +485,7 @@ function EditModal({
                 />{" "}
                 Require wallet
               </label>
-              <label className="flex items-center gap-2">
+              <label className="flex min-h-11 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2.5">
                 <input
                   type="checkbox"
                   checked={useRoleWeights}
@@ -496,18 +503,20 @@ function EditModal({
             ) : null}
           </div>
 
-          <div className="mt-6 flex flex-col-reverse gap-2 border-t border-white/[0.08] pt-4 sm:flex-row sm:items-center sm:justify-end">
-            <button type="button" onClick={onClose} className="kos-btn">
-              Cancel
-            </button>
-            <button type="submit" disabled={busy} className="kos-btn-primary">
-              {busy ? "Saving…" : "Save changes"}
-            </button>
+          <div className="sticky bottom-0 z-20 -mx-4 -mb-4 mt-6 border-t border-white/[0.08] bg-[#0A0A0A]/95 px-4 py-4 backdrop-blur-xl sm:static sm:mx-0 sm:mb-0 sm:bg-transparent sm:px-0 sm:pb-0">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+              <button type="button" onClick={onClose} className="kos-btn">
+                Cancel
+              </button>
+              <button type="submit" disabled={busy} className="kos-btn-primary">
+                {busy ? "Saving…" : "Save changes"}
+              </button>
+            </div>
+            <p className="mt-2 text-center text-[11px] text-kos-muted/70 sm:text-right">
+              If it's already posted, the bot updates the Discord message within
+              a few seconds.
+            </p>
           </div>
-          <p className="mt-2 text-right text-[11px] text-kos-muted/70">
-            If it's already posted, the bot updates the Discord message within a
-            few seconds.
-          </p>
         </form>
       </div>
     </div>,
