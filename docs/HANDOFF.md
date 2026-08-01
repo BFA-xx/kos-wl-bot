@@ -3,7 +3,7 @@
 Last updated: 2026-08-01
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited production application commit: `75faa5c`
+Audited production application commit: `cfbe80c`
 
 ## Current state
 
@@ -102,6 +102,10 @@ Phase 3 is implemented through S2.5:
   community/team export and reservation lifecycle added in `f733761`.
 - The Team Wallet multi-chain import follow-up is committed, migrated, and
   deployed across both Vercel dashboard projects and the aligned EC2 runtime.
+- The Team Wallet Pool mobile optimization is deployed across both Vercel
+  dashboard projects. Mobile uses wallet cards and 25-row pages while desktop
+  retains the 100-row table; the multi-chain importer is touch-sized and has
+  no horizontal overflow at the authenticated production phone viewport.
 
 ## Team Wallet Pool — production release 2026-08-01
 
@@ -286,6 +290,44 @@ Follow-up modified files:
 - `docs/ARCHITECTURE.md`
 - `docs/DECISIONS.md`
 - `docs/HANDOFF.md`
+
+### Mobile optimization follow-up — production release 2026-08-01
+
+- Replaced the eight-column wallet table below 1024 px with compact wallet
+  cards. Each card retains owner, chain set, status, usage count, dates,
+  enable/disable, delete, and inline raffle-linked history controls.
+- Mobile requests 25 wallets per page to avoid rendering 100 large cards;
+  desktop retains 100-row pages. Pagination shows the current page and scrolls
+  the wallet section back into view after navigation.
+- Multi-chain selectors, priority arrows, importer actions, and pagination use
+  40-44 px touch targets. Upload and validation actions span the available
+  mobile width, and the bulk-paste field retains a 160 px working height above
+  the phone keyboard.
+- Desktop behavior and all wallet import, reservation, selection, history, and
+  permission boundaries are unchanged.
+
+Mobile verification and production evidence:
+
+- Dashboard typecheck passed. The five focused wallet-pool suites passed all
+  20 tests, and the optimized dashboard production build passed before the
+  final pagination/CSS-only refinements. Both Vercel projects built the exact
+  final commit successfully.
+- Production Prisma reported all 33 existing migrations current. This release
+  has no schema change, so no migration or database backup was required. The
+  EC2 bot stayed scheduler-ready and did not need a restart.
+- Responsive commits `6d1415b`, `b6151bb`, and final fix `cfbe80c` were pushed
+  to `origin/main`. Both `Vercel – kos-wl-bot-dashboard` and
+  `Vercel – kos-wl-bot-dashboard-3a8x` succeeded for `cfbe80c`.
+- Authenticated production QA on `https://raffle.koslabs.app/kos/team-wallet-pool`
+  at the phone viewport found 25 visible wallet cards, no visible desktop
+  table, `110 wallets · Page 1 of 5`, and document scroll width equal to the
+  viewport width. Page 2 loaded 25 cards, and inline usage history expanded.
+- The importer retained one selected default chain, all five chain controls
+  and both action buttons measured 44 px high, and the paste field measured
+  160 px high. No wallet was imported, modified, reserved, released, or
+  deleted during production QA.
+- Concurrent Collab Hub spreadsheet work was preserved in the shared worktree
+  and excluded from these commits and this deployment.
 
 ### Modified files
 
