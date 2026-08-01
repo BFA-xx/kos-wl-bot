@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { OrgProvider, type OrgClientContext } from "@/lib/org-context";
 import { OrgSidebarContent } from "./OrgSidebar";
@@ -24,6 +24,15 @@ export function OrgShell({
   const [q, setQ] = useState("");
   const router = useRouter();
   const pathname = usePathname();
+
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
 
   function search(e: React.FormEvent) {
     e.preventDefault();
@@ -122,15 +131,30 @@ export function OrgShell({
               className="absolute inset-0 bg-black/60 backdrop-blur-sm"
               onClick={() => setOpen(false)}
             />
-            <div className="absolute inset-y-0 left-0 w-80 border-r border-white/[0.08] bg-[#0A0A0A] px-4 py-6 shadow-2xl">
-              <button
-                onClick={() => setOpen(false)}
-                className="absolute right-3 top-4 rounded-lg p-1.5 text-kos-muted hover:text-kos-fg"
-                aria-label="Close menu"
-              >
-                <IconClose />
-              </button>
-              <OrgSidebarContent onNavigate={() => setOpen(false)} />
+            <div className="absolute inset-y-0 left-0 flex w-[min(20rem,calc(100vw-1rem))] flex-col border-r border-white/[0.08] bg-[#0A0A0A] px-4 py-4 shadow-2xl">
+              <div className="mb-4 flex items-center justify-between gap-3 border-b border-white/[0.08] pb-4">
+                <div>
+                  <div className="text-sm font-semibold tracking-tight">
+                    KOS
+                  </div>
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-kos-muted">
+                    Command Center
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <ThemeToggle />
+                  <button
+                    onClick={() => setOpen(false)}
+                    className="flex h-10 w-10 items-center justify-center rounded-xl text-kos-muted hover:bg-white/[0.05] hover:text-kos-fg"
+                    aria-label="Close menu"
+                  >
+                    <IconClose />
+                  </button>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1">
+                <OrgSidebarContent onNavigate={() => setOpen(false)} />
+              </div>
             </div>
           </div>
         ) : null}
@@ -140,15 +164,18 @@ export function OrgShell({
           className={`transition-all duration-300 ${collapsed ? "lg:pl-24" : "lg:pl-72"}`}
         >
           <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#0A0A0A]/70 backdrop-blur-2xl">
-            <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
+            <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3 lg:px-8">
               <button
                 onClick={() => setOpen(true)}
-                className="rounded-lg p-2 text-kos-muted hover:text-kos-fg lg:hidden"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-kos-muted hover:bg-white/[0.05] hover:text-kos-fg lg:hidden"
                 aria-label="Open menu"
               >
                 <IconMenu />
               </button>
-              <form onSubmit={search} className="relative max-w-md flex-1">
+              <form
+                onSubmit={search}
+                className="relative min-w-0 max-w-md flex-1"
+              >
                 <IconSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-kos-muted" />
                 <input
                   value={q}
@@ -170,7 +197,7 @@ export function OrgShell({
                 </Link>
                 <Link
                   href="/me"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/[0.10] bg-white/[0.04] text-[11px] font-bold text-kos-fg transition-colors hover:border-white/[0.18] hover:bg-white/[0.07]"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/[0.10] bg-white/[0.04] text-[11px] font-bold text-kos-fg transition-colors hover:border-white/[0.18] hover:bg-white/[0.07]"
                   aria-label="Open My KOS profile"
                   title="My KOS profile"
                 >
@@ -185,12 +212,14 @@ export function OrgShell({
                     ctx.user.name.slice(0, 2).toUpperCase()
                   )}
                 </Link>
-                <ThemeToggle />
+                <div className="hidden sm:block">
+                  <ThemeToggle />
+                </div>
               </div>
             </div>
           </header>
 
-          <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <main className="mx-auto min-w-0 max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
             <AnnouncementBanner items={announcements} />
             <div className="kos-fade">{children}</div>
           </main>

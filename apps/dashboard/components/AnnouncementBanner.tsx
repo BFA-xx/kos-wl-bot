@@ -57,7 +57,7 @@ export function AnnouncementBanner({ items }: { items: BannerItem[] }) {
           </div>
           <button
             onClick={() => dismiss(a.id)}
-            className="shrink-0 rounded-lg p-1 opacity-70 hover:opacity-100"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg opacity-70 hover:bg-black/10 hover:opacity-100"
             aria-label="Dismiss"
           >
             <IconClose />

@@ -234,7 +234,7 @@ export default async function ParticipantDetailPage({
         title={displayName}
         subtitle={`Discord ID ${user.id} · Activity inside ${org.name}`}
         action={
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <MemberAvatar name={displayName} src={user.avatarUrl} />
             <a
               href={`https://discord.com/users/${user.id}`}

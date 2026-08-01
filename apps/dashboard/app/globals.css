@@ -35,6 +35,9 @@
 
 html {
   color-scheme: light;
+  min-width: 0;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 html.dark {
   color-scheme: dark;
@@ -55,6 +58,8 @@ body:has(.kos-public-dark) {
 
 html,
 body {
+  min-width: 0;
+  overflow-x: clip;
   background-color: rgb(var(--kos-bg));
   color: rgb(var(--kos-fg));
   font-family: var(--font-sans);
@@ -65,6 +70,21 @@ body {
     "cv03" 1,
     "cv04" 1,
     "cv11" 1;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
 }
 
 .dark body {
@@ -111,13 +131,13 @@ body {
     @apply transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.16] hover:bg-kos-card hover:shadow-[0_18px_60px_-35px_rgba(59,130,246,0.35)];
   }
   .kos-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-white/[0.10] bg-white/[0.04] px-4 py-2 text-sm font-medium text-kos-fg shadow-[0_1px_0_0_rgba(255,255,255,0.05)_inset] transition-all hover:border-white/[0.18] hover:bg-white/[0.07] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/[0.10] bg-white/[0.04] px-4 py-2 text-center text-sm font-medium text-kos-fg shadow-[0_1px_0_0_rgba(255,255,255,0.05)_inset] transition-all hover:border-white/[0.18] hover:bg-white/[0.07] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
   }
   .kos-btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-blue-400/30 bg-gradient-to-b from-blue-500 to-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_14px_40px_-20px_rgba(59,130,246,0.85),0_1px_0_rgba(255,255,255,0.2)_inset] transition-all hover:from-blue-400 hover:to-blue-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl border border-blue-400/30 bg-gradient-to-b from-blue-500 to-blue-600 px-4 py-2 text-center text-sm font-semibold text-white shadow-[0_14px_40px_-20px_rgba(59,130,246,0.85),0_1px_0_rgba(255,255,255,0.2)_inset] transition-all hover:from-blue-400 hover:to-blue-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
   }
   .kos-input {
-    @apply w-full rounded-2xl border border-white/[0.09] bg-black/20 px-3.5 py-2 text-sm text-kos-fg placeholder:text-kos-muted/65 shadow-[0_1px_0_0_rgba(255,255,255,0.03)_inset] transition-all focus:border-blue-400/60 focus:bg-black/30 focus:outline-none focus:ring-4 focus:ring-blue-500/10;
+    @apply min-w-0 w-full max-w-full rounded-2xl border border-white/[0.09] bg-black/20 px-3.5 py-2 text-sm text-kos-fg placeholder:text-kos-muted/65 shadow-[0_1px_0_0_rgba(255,255,255,0.03)_inset] transition-all focus:border-blue-400/60 focus:bg-black/30 focus:outline-none focus:ring-4 focus:ring-blue-500/10;
   }
   .kos-badge {
     @apply inline-flex items-center gap-1.5 rounded-full border border-white/[0.10] bg-white/[0.03] px-2.5 py-0.5 text-xs font-medium;
@@ -138,7 +158,8 @@ body {
     @apply overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.025] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset];
   }
   .kos-table-scroll {
-    @apply overflow-x-auto;
+    @apply overflow-x-auto overscroll-x-contain;
+    -webkit-overflow-scrolling: touch;
   }
   .kos-table {
     @apply min-w-full text-sm;
@@ -160,6 +181,81 @@ body {
   }
   .kos-label {
     @apply mb-1.5 block text-xs font-medium uppercase tracking-[0.14em] text-kos-muted;
+  }
+  .kos-page-actions {
+    @apply mt-5 flex w-full min-w-0 shrink-0 flex-wrap items-center gap-2 sm:mt-0 sm:w-auto;
+  }
+}
+
+@media (max-width: 639px) {
+  .dark body {
+    background-attachment: scroll;
+  }
+
+  .kos-btn,
+  .kos-btn-primary,
+  .kos-input {
+    min-height: 44px;
+  }
+
+  .kos-input {
+    font-size: 16px;
+  }
+
+  .kos-card,
+  .kos-panel,
+  .kos-table-wrap {
+    border-radius: 1.25rem;
+  }
+
+  .kos-card,
+  .kos-panel {
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+
+  .kos-table {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .kos-table th,
+  .kos-table td {
+    padding-left: 0.875rem;
+    padding-right: 0.875rem;
+  }
+
+  .kos-page-actions > div {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .kos-page-actions > input,
+  .kos-page-actions > select {
+    max-width: none;
+  }
+
+  .kos-card p,
+  .kos-card dd,
+  .kos-card code {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .kos-card-hover:hover {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

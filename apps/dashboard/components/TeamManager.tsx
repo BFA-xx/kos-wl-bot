@@ -49,7 +49,10 @@ export function TeamManager() {
     const res = await fetch(`/api/${slug}/members`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ discordUserId: discordId.trim(), roleId: effectiveRole }),
+      body: JSON.stringify({
+        discordUserId: discordId.trim(),
+        roleId: effectiveRole,
+      }),
     });
     const body = await res.json().catch(() => ({}));
     if (res.ok) {
@@ -104,7 +107,8 @@ export function TeamManager() {
   }
 
   async function transfer(userId: string, name: string) {
-    if (!confirm(`Transfer ownership to ${name}? You'll become an Admin.`)) return;
+    if (!confirm(`Transfer ownership to ${name}? You'll become an Admin.`))
+      return;
     const res = await fetch(`/api/${slug}/transfer-owner`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -131,17 +135,28 @@ export function TeamManager() {
               value={discordId}
               onChange={(e) => setDiscordId(e.target.value)}
             />
-            <select className="kos-input sm:max-w-[180px]" value={effectiveRole} onChange={(e) => setRoleId(e.target.value)}>
+            <select
+              className="kos-input sm:max-w-[180px]"
+              value={effectiveRole}
+              onChange={(e) => setRoleId(e.target.value)}
+            >
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
                 </option>
               ))}
             </select>
-            <button className="kos-btn whitespace-nowrap" onClick={addMember} disabled={!discordId.trim()}>
+            <button
+              className="kos-btn whitespace-nowrap"
+              onClick={addMember}
+              disabled={!discordId.trim()}
+            >
               Add by ID
             </button>
-            <button className="kos-btn-primary whitespace-nowrap" onClick={createInvite}>
+            <button
+              className="kos-btn-primary whitespace-nowrap"
+              onClick={createInvite}
+            >
               Create link
             </button>
           </div>
@@ -161,11 +176,18 @@ export function TeamManager() {
         ) : (
           <div className="space-y-2">
             {data.members.map((m) => (
-              <div key={m.userId} className="flex items-center gap-3 rounded-xl border border-kos-border bg-kos-panel/50 p-3">
+              <div
+                key={m.userId}
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-kos-border bg-kos-panel/50 p-3"
+              >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-kos-panel text-[11px] font-bold">
                   {m.avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={m.avatarUrl} alt="" className="h-full w-full object-cover" />
+                    <img
+                      src={m.avatarUrl}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     m.name.slice(0, 2).toUpperCase()
                   )}
@@ -173,14 +195,18 @@ export function TeamManager() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">
                     {m.name}
-                    {m.isOwner ? <span className="ml-2 text-[11px] text-kos-fg">Owner</span> : null}
+                    {m.isOwner ? (
+                      <span className="ml-2 text-[11px] text-kos-fg">
+                        Owner
+                      </span>
+                    ) : null}
                   </div>
                   <div className="text-[11px] text-kos-muted">{m.userId}</div>
                 </div>
 
                 {canManage && !m.isOwner ? (
                   <select
-                    className="kos-input max-w-[150px] text-xs"
+                    className="kos-input w-full text-xs sm:max-w-[150px]"
                     value={m.roleId}
                     onChange={(e) => changeRole(m.userId, e.target.value)}
                   >
@@ -191,17 +217,22 @@ export function TeamManager() {
                     ))}
                   </select>
                 ) : (
-                  <span className="kos-badge border-kos-border text-kos-muted">{m.roleName}</span>
+                  <span className="kos-badge border-kos-border text-kos-muted">
+                    {m.roleName}
+                  </span>
                 )}
 
                 {isOwner && !m.isOwner ? (
-                  <button className="kos-btn text-xs" onClick={() => transfer(m.userId, m.name)}>
+                  <button
+                    className="kos-btn flex-1 text-xs sm:flex-none"
+                    onClick={() => transfer(m.userId, m.name)}
+                  >
                     Make owner
                   </button>
                 ) : null}
                 {canManage && !m.isOwner ? (
                   <button
-                    className="rounded-lg px-2 py-1 text-xs text-kos-muted hover:text-red-400"
+                    className="min-h-10 flex-1 rounded-lg px-2 py-1 text-xs text-kos-muted hover:bg-white/[0.04] hover:text-red-400 sm:flex-none"
                     onClick={() => removeMember(m.userId)}
                   >
                     Remove
@@ -218,10 +249,15 @@ export function TeamManager() {
           <SectionTitle>Pending invites</SectionTitle>
           <div className="space-y-2">
             {data.invites.map((i) => (
-              <div key={i.id} className="flex items-center justify-between gap-3 rounded-xl border border-kos-border bg-kos-panel/50 p-3 text-sm">
+              <div
+                key={i.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-kos-border bg-kos-panel/50 p-3 text-sm"
+              >
                 <span className="text-kos-muted">Link · {i.roleName}</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-[11px] text-kos-muted">expires {new Date(i.expiresAt).toLocaleDateString()}</span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-[11px] text-kos-muted">
+                    expires {new Date(i.expiresAt).toLocaleDateString()}
+                  </span>
                   {canManage ? (
                     <button
                       className="text-xs text-kos-muted hover:text-red-400"

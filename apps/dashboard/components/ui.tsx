@@ -28,8 +28,8 @@ export function StatCard({
       >
         {label}
       </div>
-      <div className="mt-2 flex items-end justify-between gap-2">
-        <div className="text-2xl font-semibold tracking-tight sm:text-3xl">
+      <div className="mt-2 flex min-w-0 items-end justify-between gap-2">
+        <div className="min-w-0 break-words text-2xl font-semibold leading-tight tracking-tight sm:text-3xl">
           {value}
         </div>
         {typeof trend === "number" ? (
@@ -78,8 +78,8 @@ export function PageTitle({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-8 overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-white/[0.055] via-white/[0.025] to-transparent p-5 shadow-[0_1px_0_rgba(255,255,255,0.05)_inset] sm:flex sm:items-end sm:justify-between sm:gap-6 sm:p-6">
-      <div>
+    <div className="mb-5 overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-white/[0.055] via-white/[0.025] to-transparent p-4 shadow-[0_1px_0_rgba(255,255,255,0.05)_inset] sm:mb-8 sm:flex sm:items-end sm:justify-between sm:gap-6 sm:p-6">
+      <div className="min-w-0">
         <div className="mb-2 h-1 w-10 rounded-full bg-gradient-to-r from-blue-500 to-violet-500" />
         {eyebrow ? (
           <div className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-blue-300/90">
@@ -95,11 +95,7 @@ export function PageTitle({
           </p>
         ) : null}
       </div>
-      {action ? (
-        <div className="mt-5 flex shrink-0 flex-wrap gap-2 sm:mt-0">
-          {action}
-        </div>
-      ) : null}
+      {action ? <div className="kos-page-actions">{action}</div> : null}
     </div>
   );
 }
@@ -114,7 +110,7 @@ export function Segmented<T extends string>({
   onChange: (key: T) => void;
 }) {
   return (
-    <div className="inline-flex rounded-full border border-white/[0.08] bg-white/[0.04] p-1 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
+    <div className="inline-flex max-w-full overflow-x-auto rounded-full border border-white/[0.08] bg-white/[0.04] p-1 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
       {options.map((o) => (
         <button
           key={o.key}
@@ -130,7 +126,7 @@ export function Segmented<T extends string>({
 
 export function Empty({ children }: { children: ReactNode }) {
   return (
-    <div className="kos-card overflow-hidden p-10 text-center text-sm text-kos-muted">
+    <div className="kos-card overflow-hidden p-6 text-center text-sm text-kos-muted sm:p-10">
       <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.08] bg-gradient-to-br from-blue-500/15 to-violet-500/15 shadow-[0_16px_60px_-32px_rgba(59,130,246,0.9)]">
         <span className="h-2.5 w-2.5 rounded-full bg-blue-300" />
       </div>
@@ -157,7 +153,7 @@ export function SectionTitle({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-3 flex items-center justify-between">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
       <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-kos-muted">
         {children}
       </h2>

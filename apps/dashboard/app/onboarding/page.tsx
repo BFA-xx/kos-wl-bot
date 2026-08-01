@@ -30,7 +30,11 @@ export default function OnboardingPage() {
     const res = await fetch("/api/orgs", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, slug: effectiveSlug, logoUrl: logoUrl || null }),
+      body: JSON.stringify({
+        name,
+        slug: effectiveSlug,
+        logoUrl: logoUrl || null,
+      }),
     });
     const body = await res.json().catch(() => ({}));
     setBusy(false);
@@ -45,12 +49,14 @@ export default function OnboardingPage() {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-5 py-10">
       <div className="pointer-events-none absolute -top-40 right-10 h-[36rem] w-[36rem] rounded-full bg-kos-fg/[0.04] blur-3xl" />
-      <div className="relative w-full max-w-lg rounded-2xl border border-kos-border bg-kos-panel/60 p-8 backdrop-blur-xl">
+      <div className="relative w-full max-w-lg rounded-2xl border border-kos-border bg-kos-panel/60 p-5 backdrop-blur-xl sm:p-8">
         <div className="mb-6">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-kos-fg text-sm font-black text-kos-bg">
             KOS
           </div>
-          <h1 className="mt-4 text-xl font-semibold">Create your organization</h1>
+          <h1 className="mt-4 text-xl font-semibold">
+            Create your organization
+          </h1>
           <p className="mt-1 text-sm text-kos-muted">
             An organization is your community's space on KOS. You'll connect a
             Discord server next.
@@ -82,8 +88,8 @@ export default function OnboardingPage() {
             <label className="mb-1.5 block text-xs font-medium text-kos-muted">
               Handle (URL)
             </label>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-kos-muted">kos.app/</span>
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 text-sm text-kos-muted">kos.app/</span>
               <input
                 value={effectiveSlug}
                 onChange={(e) => {

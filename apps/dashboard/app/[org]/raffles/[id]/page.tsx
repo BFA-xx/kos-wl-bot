@@ -128,7 +128,7 @@ export default async function RaffleDetailPage({
         title={raffle.title}
         subtitle={`${raffle.projectName} · Raffle #${raffle.id}`}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <RaffleEditButton
               initialOpen={searchParams?.edit === "1"}
               raffle={{

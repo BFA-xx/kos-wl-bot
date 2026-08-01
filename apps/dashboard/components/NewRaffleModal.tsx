@@ -285,13 +285,13 @@ export function NewRaffleModal({
       transition={{ duration: 0.16, ease: "easeOut" }}
       className="fixed inset-0 z-[100] overflow-y-auto bg-black/75 backdrop-blur-xl"
     >
-      <div className="flex min-h-full items-start justify-center p-3 sm:p-6">
+      <div className="flex min-h-full items-start justify-center p-0 sm:p-6">
         <motion.form
           initial={{ opacity: 0, y: 18, scale: 0.985 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
           onSubmit={submit}
-          className="my-4 w-full max-w-3xl rounded-[2rem] border border-white/[0.10] bg-[#0A0A0A]/95 p-5 shadow-2xl shadow-black/60 sm:my-8 sm:p-6"
+          className="min-h-dvh w-full max-w-3xl rounded-none border border-white/[0.10] bg-[#0A0A0A]/95 p-4 shadow-2xl shadow-black/60 sm:my-8 sm:min-h-0 sm:rounded-[2rem] sm:p-6"
         >
           <div className="mb-5 flex items-start justify-between gap-4 border-b border-white/[0.08] pb-4">
             <div>
@@ -346,7 +346,7 @@ export function NewRaffleModal({
               ) : null}
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Project name">
                 <input
                   className="kos-input"
@@ -391,7 +391,7 @@ export function NewRaffleModal({
               onChange={setBannerUrl}
             />
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Field label="WL spots">
                 <input
                   type="number"
@@ -487,7 +487,7 @@ export function NewRaffleModal({
             ) : null}
 
             {meta?.hasBotToken ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Winners channel (optional)">
                   <select
                     className="kos-input"
@@ -604,7 +604,7 @@ export function NewRaffleModal({
               </div>
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Start">
                 <select
                   className="kos-input"
@@ -634,7 +634,7 @@ export function NewRaffleModal({
               </Field>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Ping on start">
                 <select
                   className="kos-input"

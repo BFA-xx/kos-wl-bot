@@ -20,7 +20,10 @@ export default async function AdminLogsPage() {
 
   return (
     <>
-      <PageTitle title="Logs" subtitle="Platform audit trail and bot activity." />
+      <PageTitle
+        title="Logs"
+        subtitle="Platform audit trail and bot activity."
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -30,10 +33,15 @@ export default async function AdminLogsPage() {
               <p className="text-sm text-kos-muted">No audit entries yet.</p>
             ) : (
               audit.map((a) => (
-                <div key={a.id} className="rounded-lg border border-kos-border/60 bg-kos-panel/40 px-3 py-2 text-xs">
-                  <div className="flex items-center justify-between">
+                <div
+                  key={a.id}
+                  className="rounded-lg border border-kos-border/60 bg-kos-panel/40 px-3 py-2 text-xs"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-1">
                     <span className="font-medium">{a.action}</span>
-                    <span className="text-kos-muted">{fmtDate(a.createdAt)}</span>
+                    <span className="text-kos-muted">
+                      {fmtDate(a.createdAt)}
+                    </span>
                   </div>
                   <div className="text-kos-muted">
                     {a.organization.name} · actor {a.actorId ?? "system"}
@@ -51,10 +59,15 @@ export default async function AdminLogsPage() {
               <p className="text-sm text-kos-muted">No bot logs yet.</p>
             ) : (
               botLogs.map((l) => (
-                <div key={l.id} className="rounded-lg border border-kos-border/60 bg-kos-panel/40 px-3 py-2 text-xs">
-                  <div className="flex items-center justify-between">
+                <div
+                  key={l.id}
+                  className="rounded-lg border border-kos-border/60 bg-kos-panel/40 px-3 py-2 text-xs"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-1">
                     <span className="font-medium">{l.action}</span>
-                    <span className="text-kos-muted">{fmtDate(l.createdAt)}</span>
+                    <span className="text-kos-muted">
+                      {fmtDate(l.createdAt)}
+                    </span>
                   </div>
                   <div className="truncate text-kos-muted">{l.message}</div>
                 </div>

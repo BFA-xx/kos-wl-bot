@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ReactNode, type SVGProps } from "react";
+import { useEffect, useState, type ReactNode, type SVGProps } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 import { NotificationsBell } from "./NotificationsBell";
 import {
@@ -49,6 +49,15 @@ export function MeShell({
   const active = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
 
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
+
   return (
     <div className="min-h-screen">
       {open ? (
@@ -60,7 +69,7 @@ export function MeShell({
           <aside className="absolute inset-y-0 left-0 flex w-[min(22rem,calc(100vw-2rem))] flex-col border-r border-white/[0.08] bg-[#0A0A0A] p-4 shadow-2xl">
             <button
               onClick={() => setOpen(false)}
-              className="absolute right-3 top-4 rounded-lg p-1.5 text-kos-muted hover:bg-white/[0.05] hover:text-kos-fg"
+              className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-xl text-kos-muted hover:bg-white/[0.05] hover:text-kos-fg"
               aria-label="Close menu"
             >
               <IconClose />
@@ -148,7 +157,7 @@ export function MeShell({
         <div className="flex w-full items-center gap-3 px-4 py-3 sm:px-6 lg:px-8 xl:px-10">
           <button
             onClick={() => setOpen(true)}
-            className="rounded-lg p-2 text-kos-muted hover:bg-white/[0.05] hover:text-kos-fg md:hidden"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-kos-muted hover:bg-white/[0.05] hover:text-kos-fg md:hidden"
             aria-label="Open menu"
           >
             <IconMenu />
@@ -219,7 +228,7 @@ export function MeShell({
         </div>
       </header>
 
-      <main className="w-full px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
+      <main className="w-full min-w-0 px-4 py-5 sm:px-6 sm:py-8 lg:px-8 xl:px-10">
         <div className="kos-fade">{children}</div>
       </main>
     </div>

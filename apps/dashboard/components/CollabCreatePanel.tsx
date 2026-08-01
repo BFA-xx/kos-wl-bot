@@ -114,22 +114,22 @@ export function CollabCreatePanel({
       <motion.div
         initial={{ opacity: 0, y: 24, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        className="flex max-h-[96vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-[2rem] border border-white/[0.10] bg-[#101010] shadow-2xl sm:rounded-[2rem]"
+        className="flex max-h-[96dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-[2rem] border border-white/[0.10] bg-[#101010] shadow-2xl sm:rounded-[2rem]"
         role="dialog"
         aria-modal="true"
         aria-label="Create collaboration"
       >
         <div className="flex items-start justify-between border-b border-white/[0.08] px-5 py-5 sm:px-7">
-          <div>
+          <div className="min-w-0">
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300">
               New collaboration
             </div>
-            <h2 className="mt-1 text-xl font-semibold sm:text-2xl">
+            <h2 className="mt-1 text-xl font-semibold leading-tight sm:text-2xl">
               Add a partner to your pipeline
             </h2>
           </div>
           <button
-            className="kos-btn h-10 w-10 p-0"
+            className="kos-btn h-10 w-10 shrink-0 p-0"
             onClick={onClose}
             aria-label="Close"
           >
@@ -405,7 +405,7 @@ export function CollabCreatePanel({
           ) : null}
         </div>
 
-        <div className="flex items-center justify-between border-t border-white/[0.08] px-5 py-4 sm:px-7">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.08] px-5 py-4 sm:px-7">
           <button
             className="kos-btn"
             onClick={step === 0 ? onClose : () => setStep((value) => value - 1)}

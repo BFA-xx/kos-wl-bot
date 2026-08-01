@@ -8,22 +8,29 @@ export const runtime = "nodejs";
 export default async function AdminHealthPage() {
   await guardAdmin();
 
-  const [orgs, guilds, raffles, live, participants, wallets] = await Promise.all([
-    prisma.organization.count(),
-    prisma.guildConnection.count(),
-    prisma.raffle.count(),
-    prisma.raffle.count({ where: { status: "LIVE" } }),
-    prisma.participant.count(),
-    prisma.walletProfile.count(),
-  ]);
+  const [orgs, guilds, raffles, live, participants, wallets] =
+    await Promise.all([
+      prisma.organization.count(),
+      prisma.guildConnection.count(),
+      prisma.raffle.count(),
+      prisma.raffle.count({ where: { status: "LIVE" } }),
+      prisma.participant.count(),
+      prisma.walletProfile.count(),
+    ]);
 
   // The bot writes a heartbeat row every ~60s; treat it as online if we've
   // heard from it in the last 3 minutes.
-  const hb = await prisma.systemStatus.findUnique({ where: { key: "bot-heartbeat" } });
-  const botOnline = Boolean(hb && Date.now() - hb.updatedAt.getTime() < 3 * 60_000);
+  const hb = await prisma.systemStatus.findUnique({
+    where: { key: "bot-heartbeat" },
+  });
+  const botOnline = Boolean(
+    hb && Date.now() - hb.updatedAt.getTime() < 3 * 60_000,
+  );
   const hbInfo = (() => {
     try {
-      return hb?.value ? (JSON.parse(hb.value) as { guilds?: number; user?: string }) : null;
+      return hb?.value
+        ? (JSON.parse(hb.value) as { guilds?: number; user?: string })
+        : null;
     } catch {
       return null;
     }
@@ -36,7 +43,10 @@ export default async function AdminHealthPage() {
 
   return (
     <>
-      <PageTitle title="Server Health" subtitle="Platform metrics at a glance." />
+      <PageTitle
+        title="Server Health"
+        subtitle="Platform metrics at a glance."
+      />
 
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard label="Organizations" value={orgs} />
@@ -63,12 +73,22 @@ export default async function AdminHealthPage() {
   );
 }
 
-function Service({ name, ok, label }: { name: string; ok: boolean; label: string }) {
+function Service({
+  name,
+  ok,
+  label,
+}: {
+  name: string;
+  ok: boolean;
+  label: string;
+}) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-kos-border bg-kos-panel/50 px-4 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-kos-border bg-kos-panel/50 px-4 py-3">
       <span className="font-medium">{name}</span>
-      <span className="flex items-center gap-2 text-kos-muted">
-        <span className={`h-2 w-2 rounded-full ${ok ? "bg-emerald-400" : "bg-amber-400"}`} />
+      <span className="flex min-w-0 items-center gap-2 text-right text-kos-muted">
+        <span
+          className={`h-2 w-2 rounded-full ${ok ? "bg-emerald-400" : "bg-amber-400"}`}
+        />
         {label}
       </span>
     </div>

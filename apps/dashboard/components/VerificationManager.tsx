@@ -1395,7 +1395,7 @@ function TextArea({
 
 function Metric({ value, label }: { value: number | string; label: string }) {
   return (
-    <div className="kos-metric min-w-24 text-center">
+    <div className="kos-metric min-w-0 text-center">
       <div className="text-lg font-semibold">{value}</div>
       <div className="text-[9px] uppercase tracking-[0.16em] text-kos-muted">
         {label}

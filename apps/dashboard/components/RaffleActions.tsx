@@ -267,7 +267,7 @@ export function RaffleActions({
             }
           }}
         >
-          <div className="w-full max-w-lg rounded-3xl border border-white/[0.10] bg-[#181818] p-5 shadow-2xl shadow-black/70 sm:p-6">
+          <div className="max-h-[calc(100dvh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-white/[0.10] bg-[#181818] p-5 shadow-2xl shadow-black/70 sm:rounded-3xl sm:p-6">
             <h2 id="team-wallet-modal-title" className="text-xl font-semibold">
               {teamWalletModal === "fill"
                 ? "Fill Team Wallets"

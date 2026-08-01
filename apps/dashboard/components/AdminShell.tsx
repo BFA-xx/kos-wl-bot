@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 import {
   IconGrid,
@@ -41,6 +41,15 @@ export function AdminShell({
   const active = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
 
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
+
   const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => (
     <div className="flex h-full flex-col">
       <div className="mb-8 flex items-center gap-3 px-2">
@@ -52,7 +61,7 @@ export function AdminShell({
           <div className="text-xs text-kos-muted">Super Admin</div>
         </div>
       </div>
-      <nav className="flex flex-1 flex-col gap-0.5">
+      <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {NAV.map(({ href, label, Icon, exact }) => {
           const a = active(href, exact);
           return (
@@ -61,17 +70,27 @@ export function AdminShell({
               href={href}
               onClick={onNavigate}
               className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
-                a ? "bg-kos-fg/10 text-kos-fg" : "text-kos-muted hover:bg-kos-fg/5 hover:text-kos-fg"
+                a
+                  ? "bg-kos-fg/10 text-kos-fg"
+                  : "text-kos-muted hover:bg-kos-fg/5 hover:text-kos-fg"
               }`}
             >
-              <Icon className={a ? "text-kos-fg" : "text-kos-muted group-hover:text-kos-fg"} />
+              <Icon
+                className={
+                  a ? "text-kos-fg" : "text-kos-muted group-hover:text-kos-fg"
+                }
+              />
               {label}
             </Link>
           );
         })}
       </nav>
       <div className="mt-4 space-y-2 border-t border-kos-border pt-4">
-        <Link href="/" onClick={onNavigate} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-kos-muted hover:bg-kos-fg/5 hover:text-kos-fg">
+        <Link
+          href="/"
+          onClick={onNavigate}
+          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-kos-muted hover:bg-kos-fg/5 hover:text-kos-fg"
+        >
           <IconGrid className="text-kos-muted" /> Back to app
         </Link>
         <form action="/api/auth/logout" method="post">
@@ -91,9 +110,16 @@ export function AdminShell({
 
       {open ? (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="absolute inset-y-0 left-0 w-72 border-r border-kos-border bg-kos-bg px-4 py-6">
-            <button onClick={() => setOpen(false)} className="absolute right-3 top-4 text-kos-muted" aria-label="Close">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute inset-y-0 left-0 w-[min(18rem,calc(100vw-1rem))] border-r border-kos-border bg-kos-bg px-4 py-6">
+            <button
+              onClick={() => setOpen(false)}
+              className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-xl text-kos-muted hover:bg-kos-fg/5"
+              aria-label="Close"
+            >
               <IconClose />
             </button>
             <Sidebar onNavigate={() => setOpen(false)} />
@@ -104,19 +130,26 @@ export function AdminShell({
       <div className="lg:pl-64">
         <header className="sticky top-0 z-20 border-b border-kos-border bg-kos-bg/60 backdrop-blur-xl">
           <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
-            <button onClick={() => setOpen(true)} className="text-kos-muted lg:hidden" aria-label="Menu">
+            <button
+              onClick={() => setOpen(true)}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-kos-muted hover:bg-kos-fg/5 lg:hidden"
+              aria-label="Menu"
+            >
               <IconMenu />
             </button>
             <span className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs font-medium text-red-400">
-              Internal · Super Admin
+              <span className="sm:hidden">Admin</span>
+              <span className="hidden sm:inline">Internal · Super Admin</span>
             </span>
             <div className="ml-auto flex items-center gap-2">
               <ThemeToggle />
-              <span className="hidden text-sm text-kos-muted sm:block">{user.name}</span>
+              <span className="hidden text-sm text-kos-muted sm:block">
+                {user.name}
+              </span>
             </div>
           </div>
         </header>
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <main className="mx-auto min-w-0 max-w-7xl px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
           <div className="kos-fade">{children}</div>
         </main>
       </div>

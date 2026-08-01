@@ -1,10 +1,15 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "KOS Raffles — Dashboard",
   description: "Premium NFT whitelist raffle management.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 const kosSans = Inter({

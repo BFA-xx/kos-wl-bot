@@ -52,7 +52,7 @@ export default async function CommunityPage({
   return (
     <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8">
       {/* Branded header */}
-      <div className="overflow-hidden rounded-[2rem] border border-white/[0.08] bg-white/[0.025] shadow-[0_1px_0_rgba(255,255,255,0.05)_inset]">
+      <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.025] shadow-[0_1px_0_rgba(255,255,255,0.05)_inset] sm:rounded-[2rem]">
         {org.bannerUrl ? (
           <div className="border-b border-white/[0.08] bg-[radial-gradient(circle_at_50%_0%,rgba(139,92,246,0.18),transparent_45%),linear-gradient(135deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] p-3 sm:p-5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -140,7 +140,7 @@ export default async function CommunityPage({
                   />
                 </div>
               ) : null}
-              <div className="flex items-center justify-between gap-4 p-4">
+              <div className="flex flex-col items-start justify-between gap-3 p-4 min-[440px]:flex-row min-[440px]:items-center">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <StatusBadge status={r.status} />

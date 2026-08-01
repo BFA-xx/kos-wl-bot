@@ -73,7 +73,7 @@ export function ParticipantsLive({ raffleId }: { raffleId: number }) {
             </span>
           ) : null}
         </h3>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 min-[440px]:flex-row">
           <input
             className="kos-input sm:max-w-[200px]"
             placeholder="Search…"

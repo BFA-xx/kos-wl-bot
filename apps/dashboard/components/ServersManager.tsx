@@ -59,7 +59,12 @@ export function ServersManager() {
   }
 
   async function disconnect(id: string) {
-    if (!confirm("Disconnect this server? Its raffles will no longer appear here.")) return;
+    if (
+      !confirm(
+        "Disconnect this server? Its raffles will no longer appear here.",
+      )
+    )
+      return;
     setBusy(id);
     await fetch(`/api/${slug}/guilds/${id}`, { method: "DELETE" });
     setBusy(null);
@@ -70,7 +75,9 @@ export function ServersManager() {
   const addable = (data?.guilds ?? []).filter((g) => !g.connectedHere);
   // Bot invite link with the server preselected.
   const inviteFor = (id: string) =>
-    data?.inviteBase ? `${data.inviteBase}&guild_id=${id}&disable_guild_select=true` : "#";
+    data?.inviteBase
+      ? `${data.inviteBase}&guild_id=${id}&disable_guild_select=true`
+      : "#";
 
   return (
     <div className="space-y-5">
@@ -81,11 +88,18 @@ export function ServersManager() {
         ) : (
           <div className="space-y-2">
             {connected.map((c) => (
-              <div key={c.id} className="flex items-center gap-3 rounded-xl border border-kos-border bg-kos-panel/50 p-3">
+              <div
+                key={c.id}
+                className="flex items-center gap-3 rounded-xl border border-kos-border bg-kos-panel/50 p-3"
+              >
                 <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-kos-fg/90 text-[10px] font-bold text-kos-bg">
                   {c.icon ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={c.icon} alt="" className="h-full w-full object-cover" />
+                    <img
+                      src={c.icon}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     <IconServer />
                   )}
@@ -126,52 +140,72 @@ export function ServersManager() {
           ) : !data ? (
             <Empty>Loading your servers…</Empty>
           ) : addable.length === 0 ? (
-            <Empty>No more servers you manage. Only servers where you're owner/admin appear here.</Empty>
+            <Empty>
+              No more servers you manage. Only servers where you're owner/admin
+              appear here.
+            </Empty>
           ) : (
             <>
-            <div className="space-y-2">
-              {addable.map((g) => (
-                <div key={g.id} className="flex items-center gap-3 rounded-xl border border-kos-border bg-kos-panel/50 p-3">
-                  <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-kos-panel text-[10px] font-bold text-kos-muted">
-                    {g.icon ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={g.icon} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      g.name.slice(0, 2).toUpperCase()
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{g.name}</div>
-                    <div className="text-[11px] text-kos-muted">
-                      {g.owner ? "Owner" : "Admin"}
-                      {g.connectedElsewhere ? " · connected to another org" : ""}
-                    </div>
-                  </div>
-                  {!g.connectedElsewhere ? (
-                    <a
-                      href={inviteFor(g.id)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="kos-btn whitespace-nowrap"
-                      title="Add the KOS bot to this server"
-                    >
-                      Invite bot ↗
-                    </a>
-                  ) : null}
-                  <button
-                    className="kos-btn-primary inline-flex items-center gap-1.5"
-                    onClick={() => connect(g.id)}
-                    disabled={busy === g.id || g.connectedElsewhere}
+              <div className="space-y-2">
+                {addable.map((g) => (
+                  <div
+                    key={g.id}
+                    className="flex flex-wrap items-center gap-3 rounded-xl border border-kos-border bg-kos-panel/50 p-3"
                   >
-                    {busy === g.id ? "…" : <><IconPlus /> Connect</>}
-                  </button>
-                </div>
-              ))}
-            </div>
-            <p className="mt-3 text-[11px] text-kos-muted/80">
-              Step 1: click <strong>Invite bot</strong> and authorize KOS in your
-              server. Step 2: click <strong>Connect</strong>.
-            </p>
+                    <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-kos-panel text-[10px] font-bold text-kos-muted">
+                      {g.icon ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={g.icon}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        g.name.slice(0, 2).toUpperCase()
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">
+                        {g.name}
+                      </div>
+                      <div className="text-[11px] text-kos-muted">
+                        {g.owner ? "Owner" : "Admin"}
+                        {g.connectedElsewhere
+                          ? " · connected to another org"
+                          : ""}
+                      </div>
+                    </div>
+                    {!g.connectedElsewhere ? (
+                      <a
+                        href={inviteFor(g.id)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="kos-btn w-full whitespace-nowrap sm:w-auto"
+                        title="Add the KOS bot to this server"
+                      >
+                        Invite bot ↗
+                      </a>
+                    ) : null}
+                    <button
+                      className="kos-btn-primary inline-flex w-full items-center gap-1.5 sm:w-auto"
+                      onClick={() => connect(g.id)}
+                      disabled={busy === g.id || g.connectedElsewhere}
+                    >
+                      {busy === g.id ? (
+                        "…"
+                      ) : (
+                        <>
+                          <IconPlus /> Connect
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-[11px] text-kos-muted/80">
+                Step 1: click <strong>Invite bot</strong> and authorize KOS in
+                your server. Step 2: click <strong>Connect</strong>.
+              </p>
             </>
           )}
           {msg ? (

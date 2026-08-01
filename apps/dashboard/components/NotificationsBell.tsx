@@ -38,10 +38,19 @@ export function NotificationsBell() {
     <div className="relative">
       <button
         onClick={openFeed}
-        className="relative rounded-lg p-1.5 text-kos-muted transition-colors hover:text-kos-fg"
+        className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-kos-muted transition-colors hover:bg-white/[0.05] hover:text-kos-fg"
         aria-label="Notifications"
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
           <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
         </svg>
@@ -55,7 +64,7 @@ export function NotificationsBell() {
       {open ? (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-2 max-h-[70vh] w-80 overflow-y-auto rounded-2xl border border-kos-border bg-kos-bg shadow-2xl">
+          <div className="fixed inset-x-3 top-16 z-50 max-h-[calc(100dvh-5rem)] w-auto overflow-y-auto rounded-2xl border border-kos-border bg-kos-bg shadow-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:max-h-[70vh] sm:w-80">
             <div className="border-b border-kos-border px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-kos-muted">
               Notifications
             </div>
@@ -69,13 +78,21 @@ export function NotificationsBell() {
                   const inner = (
                     <div className="px-4 py-3 hover:bg-kos-fg/[0.03]">
                       <div className="flex items-center gap-2">
-                        {n.kind === "personal" && n.type === "WIN" ? <span>🏆</span> : null}
+                        {n.kind === "personal" && n.type === "WIN" ? (
+                          <span>🏆</span>
+                        ) : null}
                         {n.kind === "announcement" ? <span>📢</span> : null}
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium">{n.title}</span>
-                        {n.unread ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" /> : null}
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                          {n.title}
+                        </span>
+                        {n.unread ? (
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
+                        ) : null}
                       </div>
                       {n.body ? (
-                        <p className="mt-0.5 line-clamp-2 text-xs text-kos-muted">{n.body}</p>
+                        <p className="mt-0.5 line-clamp-2 text-xs text-kos-muted">
+                          {n.body}
+                        </p>
                       ) : null}
                       <p className="mt-1 text-[10px] text-kos-muted/70">
                         {new Date(n.createdAt).toLocaleString()}
@@ -83,7 +100,12 @@ export function NotificationsBell() {
                     </div>
                   );
                   return n.link ? (
-                    <Link key={n.id} href={n.link} onClick={() => setOpen(false)} className="block">
+                    <Link
+                      key={n.id}
+                      href={n.link}
+                      onClick={() => setOpen(false)}
+                      className="block"
+                    >
                       {inner}
                     </Link>
                   ) : (

@@ -132,7 +132,7 @@ export default async function ShareableRafflePage({
           </span>
         </header>
 
-        <section className="kos-fade overflow-hidden rounded-[2rem] border border-white/[0.09] bg-[#111]/90 shadow-[0_30px_120px_-55px_rgba(0,0,0,0.95)] backdrop-blur-2xl">
+        <section className="kos-fade overflow-hidden rounded-3xl border border-white/[0.09] bg-[#111]/90 shadow-[0_30px_120px_-55px_rgba(0,0,0,0.95)] backdrop-blur-2xl sm:rounded-[2rem]">
           {bannerUrl ? (
             <div className="h-40 overflow-hidden border-b border-white/[0.08] bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,0.16),transparent_50%),rgba(255,255,255,0.02)] sm:h-56 lg:h-72">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -262,7 +262,7 @@ export default async function ShareableRafflePage({
         <div className="relative mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
           <div className="space-y-4">
             <section className="kos-card p-5 sm:p-6">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col items-start justify-between gap-3 min-[440px]:flex-row min-[440px]:items-center">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-kos-muted">
                     Eligibility
