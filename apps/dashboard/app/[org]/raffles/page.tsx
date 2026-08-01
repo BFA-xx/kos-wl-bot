@@ -110,76 +110,157 @@ function RafflesInner() {
             : "No raffles yet. Run one from Discord with /raffle."}
         </Empty>
       ) : (
-        <TableShell>
-          <table className="kos-table">
-            <thead>
-              <tr>
-                <th className="px-4 py-3">#</th>
-                <th className="px-4 py-3">Project / Title</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Entries</th>
-                <th className="px-4 py-3 text-right">Spots</th>
-                <th className="hidden px-4 py-3 md:table-cell">Ends</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {raffles.map((r) => (
-                <tr key={r.id}>
-                  <td className="px-4 py-3 text-kos-muted">
-                    <Link
-                      href={`/${org}/raffles/${r.id}`}
-                      className="hover:text-kos-fg"
-                    >
-                      #{r.id}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link href={`/${org}/raffles/${r.id}`} className="block">
-                      <div className="font-medium">{r.projectName}</div>
-                      <div className="text-xs text-kos-muted">{r.title}</div>
-                      <div className="mt-0.5 text-[11px] text-kos-muted/80">
-                        Hosted by {r.createdByName ?? "Unknown host"}
-                      </div>
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={r.status} />
-                  </td>
-                  <td className="px-4 py-3 text-right font-medium">
-                    {r.entryCount}
-                  </td>
-                  <td className="px-4 py-3 text-right text-kos-muted">
-                    {r.spots}
-                  </td>
-                  <td className="hidden px-4 py-3 text-kos-muted md:table-cell">
-                    {fmtDate(r.endAt)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end">
-                      <RaffleQuickActions
-                        raffleId={r.id}
-                        projectName={r.projectName}
-                        canDuplicate={canCreate}
-                        canDelete={canDelete}
-                        orgSlug={org}
-                        raffleStatus={r.status}
-                        onDeleted={() => void mutate()}
-                        editHref={
-                          canEdit &&
-                          r.status !== "ENDED" &&
-                          r.status !== "CANCELLED"
-                            ? `/${org}/raffles/${r.id}?edit=1`
-                            : undefined
-                        }
-                      />
+        <>
+          <div className="space-y-3 md:hidden">
+            {raffles.map((r) => (
+              <article key={r.id} className="kos-card overflow-hidden p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <Link
+                    href={`/${org}/raffles/${r.id}`}
+                    className="min-w-0 flex-1"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-kos-muted">#{r.id}</span>
+                      <StatusBadge status={r.status} />
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </TableShell>
+                    <h2 className="mt-2 truncate font-semibold">
+                      {r.projectName}
+                    </h2>
+                    <p className="mt-0.5 line-clamp-2 text-sm text-kos-muted">
+                      {r.title}
+                    </p>
+                  </Link>
+                  <RaffleQuickActions
+                    raffleId={r.id}
+                    projectName={r.projectName}
+                    canDuplicate={canCreate}
+                    canDelete={canDelete}
+                    orgSlug={org}
+                    raffleStatus={r.status}
+                    onDeleted={() => void mutate()}
+                    editHref={
+                      canEdit &&
+                      r.status !== "ENDED" &&
+                      r.status !== "CANCELLED"
+                        ? `/${org}/raffles/${r.id}?edit=1`
+                        : undefined
+                    }
+                  />
+                </div>
+
+                <Link
+                  href={`/${org}/raffles/${r.id}`}
+                  className="mt-4 grid min-h-14 grid-cols-3 gap-2 border-t border-white/[0.08] pt-3"
+                >
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-kos-muted">
+                      Entries
+                    </div>
+                    <div className="mt-1 text-sm font-semibold">
+                      {r.entryCount}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-kos-muted">
+                      Spots
+                    </div>
+                    <div className="mt-1 text-sm font-semibold">{r.spots}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-kos-muted">
+                      Ends
+                    </div>
+                    <div className="mt-1 text-xs text-kos-muted">
+                      {fmtDate(r.endAt)}
+                    </div>
+                  </div>
+                </Link>
+
+                <p className="mt-3 truncate text-[11px] text-kos-muted/80">
+                  Hosted by {r.createdByName ?? "Unknown host"}
+                </p>
+              </article>
+            ))}
+          </div>
+
+          <div className="hidden md:block">
+            <TableShell>
+              <table className="kos-table">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3">#</th>
+                    <th className="px-4 py-3">Project / Title</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Entries</th>
+                    <th className="px-4 py-3 text-right">Spots</th>
+                    <th className="hidden px-4 py-3 md:table-cell">Ends</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {raffles.map((r) => (
+                    <tr key={r.id}>
+                      <td className="px-4 py-3 text-kos-muted">
+                        <Link
+                          href={`/${org}/raffles/${r.id}`}
+                          className="hover:text-kos-fg"
+                        >
+                          #{r.id}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/${org}/raffles/${r.id}`}
+                          className="block"
+                        >
+                          <div className="font-medium">{r.projectName}</div>
+                          <div className="text-xs text-kos-muted">
+                            {r.title}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-kos-muted/80">
+                            Hosted by {r.createdByName ?? "Unknown host"}
+                          </div>
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={r.status} />
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium">
+                        {r.entryCount}
+                      </td>
+                      <td className="px-4 py-3 text-right text-kos-muted">
+                        {r.spots}
+                      </td>
+                      <td className="hidden px-4 py-3 text-kos-muted md:table-cell">
+                        {fmtDate(r.endAt)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end">
+                          <RaffleQuickActions
+                            raffleId={r.id}
+                            projectName={r.projectName}
+                            canDuplicate={canCreate}
+                            canDelete={canDelete}
+                            orgSlug={org}
+                            raffleStatus={r.status}
+                            onDeleted={() => void mutate()}
+                            editHref={
+                              canEdit &&
+                              r.status !== "ENDED" &&
+                              r.status !== "CANCELLED"
+                                ? `/${org}/raffles/${r.id}?edit=1`
+                                : undefined
+                            }
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableShell>
+          </div>
+        </>
       )}
     </>
   );
