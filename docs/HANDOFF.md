@@ -3,7 +3,7 @@
 Last updated: 2026-08-01
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited production application commit: `7560c66`
+Audited production application commit: `f733761`
 
 ## Current state
 
@@ -97,11 +97,11 @@ Phase 3 is implemented through S2.5:
   outcomes are atomically claimed, onboarding has `/config diagnose`, and the
   deploy script now fails unless tests, build, registration, PM2, and a real
   scheduler tick succeed.
-- Team Wallet Pool is implemented locally across Prisma, dashboard APIs/UI,
-  completed-raffle filling, exports, and bot-side deletion cleanup. It has not
-  been migrated or deployed to production.
+- Team Wallet Pool is committed, migrated, and deployed across both Vercel
+  dashboard projects and the EC2 bot. Production uses the source-aware
+  community/team export and reservation lifecycle added in `f733761`.
 
-## Team Wallet Pool — implemented locally, not deployed
+## Team Wallet Pool — production release 2026-08-01
 
 ### Delivered
 
@@ -156,8 +156,48 @@ Phase 3 is implemented through S2.5:
   permission boundaries, and workbook Source coverage.
 - Full workspace typecheck and build — passed. The dashboard production build
   emitted the Team Wallet Pool page and all five new API route surfaces.
-- Production migration, authenticated browser QA, and deployment were not run;
-  deployment requires explicit approval and migration-before-runtime ordering.
+- `git diff --check` passed before the application commit.
+
+### Production release evidence
+
+- Application commit `f733761` (`feat: add team wallet pool`) was pushed to
+  `origin/main`.
+- Before the migration, the production bot was healthy and Prisma reported all
+  31 existing migrations current. The new source was then synced to EC2 without
+  restarting the runtime, where Prisma reported exactly
+  `20260801120000_team_wallet_pool` pending.
+- A restricted custom-format logical backup was created before the migration at
+  `/home/ubuntu/backups/kos-neon-pre-team-wallet-pool-20260801T080816Z.dump`.
+  It is 41,985,544 bytes, mode `600`, has SHA-256
+  `3ff9c3196471274ed4514a02c7a279992dcff17217ad0cfa32ddc2266dfbbbb2`,
+  and `pg_restore --list` reads 459 archive entries.
+- Additive migration `20260801120000_team_wallet_pool` was applied from the EC2
+  production connection before either runtime changed. Prisma then reported all
+  32 migrations current.
+- Production database canaries found the completed migration row and zero rows
+  in each new customer-data table. All nine existing built-in Owner, Admin, and
+  Collab Manager system-role records received `team-wallet:fill`; no other
+  system role received it.
+- `./scripts/deploy-ec2.sh` passed all 28 bot tests, rebuilt the DB and bot,
+  registered nine global commands, and restarted PM2 process `kos-bot` as PID
+  `252115`. Rechecked health returned `{"ok":true,"ready":true,"guilds":2}`
+  with a successful scheduler tick, and Prisma remained current.
+- Both connected Vercel statuses succeeded for `f733761`:
+  `Vercel – kos-wl-bot-dashboard` and
+  `Vercel – kos-wl-bot-dashboard-3a8x`.
+- Production route canaries on `https://raffle.koslabs.app` return `307` to the
+  signed-out login flow for `/kos/team-wallet-pool` and `401`, not `404`, for
+  `/api/kos/team-wallets` and `/api/kos/raffles/1/team-wallets`. The public
+  `kos-wl-bot-dashboard.vercel.app` compatibility domain also responds with
+  authentication boundaries.
+- The exact `kos-wl-bot-dashboard-3a8x` deployment URL is successful and
+  protected by Vercel SSO. Its historical naked
+  `kos-wl-bot-dashboard-3a8x.vercel.app` alias returns `404`; it is not the
+  production origin and should be removed or reassigned in Vercel if it is
+  still intended as a public compatibility alias.
+- No live wallet, fill, export, or release record was created as a production
+  canary, and authenticated manager visual QA was not run. This avoided adding
+  or reserving team wallet data solely for deployment testing.
 
 ### Modified files
 
@@ -210,12 +250,15 @@ Phase 3 is implemented through S2.5:
   and global duplicate prevention remain intact. There is no restore UI yet.
 - Authenticated browser coverage does not yet exercise CSV import, priority
   reordering, fill confirmation, or cancellation release.
+- The old naked `kos-wl-bot-dashboard-3a8x.vercel.app` alias is stale even
+  though its connected Vercel project and exact deployment completed
+  successfully. The primary production origin is unaffected.
 
 ### Recommended next task
 
-- Review the additive migration and run an authenticated staging acceptance
-  raffle with mixed community/team rows, then apply the migration before the
-  dashboard and bot runtime release.
+- Run one staff-controlled authenticated acceptance raffle with non-sensitive
+  test wallets: verify mixed Community/Team Pool CSV and Excel rows, cancel it,
+  release the reservation, and confirm the pool returns to Available.
 
 ## Discord and web member verification — production release 2026-07-29
 
