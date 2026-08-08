@@ -1,18 +1,26 @@
 "use client";
 
 import { upload as uploadBlob } from "@vercel/blob/client";
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import { NewRaffleModal } from "./NewRaffleModal";
-import { PartnerMark } from "./CollabMedia";
+import { PartnerMark, RaffleBanner } from "./CollabMedia";
+import { ImageDrop } from "./ImageDrop";
 import {
   IconArrowDown,
   IconArrowUp,
+  IconCard,
+  IconChart,
   IconCheck,
   IconDoc,
+  IconGrid,
   IconPlus,
   IconSearch,
+  IconTicket,
+  IconUsers,
   IconWallet,
 } from "./icons";
 import { useCan } from "@/lib/org-context";
@@ -44,20 +52,31 @@ interface CollabRow {
   id: string;
   projectName: string;
   status: CollabStatus;
+  priority: string;
+  submissionStatus: string;
   whitelistAllocation: number;
   fcfsSpots: number;
   documentUrl: string | null;
   requirements: string | null;
   assignedToId: string | null;
   exportedAt: string | null;
+  hostAt: string | null;
+  walletSubmissionDeadline: string | null;
+  completedAt: string | null;
   createdAt: string;
   updatedAt: string;
   partner: {
     id: string;
     name: string;
     logoUrl: string | null;
+    bannerUrl: string | null;
+    websiteUrl: string | null;
     discordUrl: string | null;
     xUrl: string | null;
+    bio: string | null;
+    xVerified: boolean;
+    chain: string | null;
+    category: string | null;
   };
   tags: { tag: { id: string; name: string; color: string } }[];
   attachments: Attachment[];
@@ -67,9 +86,11 @@ interface CollabRow {
       projectName: string;
       title: string;
       status: string;
+      bannerUrl: string | null;
       spots: number;
       entryCount: number;
       endAt: string;
+      walletChains: string[];
       proof: {
         messageLink: string | null;
         artifactsStoredAt: string | null;
@@ -91,6 +112,24 @@ interface HubData {
   collaborations: CollabRow[];
   team: Person[];
   tags: { id: string; name: string; color: string }[];
+  summary?: {
+    active: number;
+    hostingToday: number;
+    waitingForWallets: number;
+    readyForSubmission: number;
+    completedAllTime: number;
+    totalWlSpots: number;
+    linkedRafflesAllTime: number;
+    unlinkedRaffles: number;
+  };
+  analytics?: {
+    total: number;
+    successRate: number;
+    averageCompletionDays: number;
+    wlCollected: number;
+    wlHosted: number;
+    pendingSubmissions: number;
+  };
 }
 
 type SheetStatus =
@@ -171,14 +210,6 @@ function hostname(value: string): string {
   }
 }
 
-function dateLabel(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
 function escapeCsv(value: unknown): string {
   const text = String(value ?? "");
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
@@ -196,11 +227,17 @@ type SortKey =
 interface DraftRow {
   projectName: string;
   xUrl: string;
+  logoUrl: string;
+  bannerUrl: string;
+  websiteUrl: string;
+  bio: string;
+  xVerified: boolean;
   discordUrl: string;
   documentUrl: string;
   gtd: number;
   fcfs: number;
   assignedToId: string;
+  hostAt: string;
   status: SheetStatus;
   notes: string;
 }
@@ -208,14 +245,139 @@ interface DraftRow {
 const EMPTY_DRAFT: DraftRow = {
   projectName: "",
   xUrl: "",
+  logoUrl: "",
+  bannerUrl: "",
+  websiteUrl: "",
+  bio: "",
+  xVerified: false,
   discordUrl: "",
   documentUrl: "",
   gtd: 0,
   fcfs: 0,
   assignedToId: "",
-  status: "IDEAS",
+  hostAt: "",
+  status: "NOT_STARTED",
   notes: "",
 };
+
+type View = "TABLE" | "BOARD" | "CALENDAR";
+type CalendarMode = "MONTH" | "WEEK" | "AGENDA";
+type ColumnKey =
+  | "project"
+  | "x"
+  | "discord"
+  | "document"
+  | "gtd"
+  | "fcfs"
+  | "host"
+  | "status"
+  | "winners"
+  | "wallet"
+  | "notes"
+  | "hosting";
+
+const DEFAULT_COLUMN_WIDTHS: Record<ColumnKey, number> = {
+  project: 300,
+  x: 170,
+  discord: 170,
+  document: 220,
+  gtd: 105,
+  fcfs: 105,
+  host: 160,
+  status: 175,
+  winners: 220,
+  wallet: 170,
+  notes: 240,
+  hosting: 145,
+};
+
+interface XProfileMetadata {
+  displayName: string;
+  username: string;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
+  bio: string | null;
+  websiteUrl: string | null;
+  verified: boolean;
+  profileUrl: string;
+}
+
+const BOARD_COLUMNS: {
+  id: string;
+  label: string;
+  status: CollabStatus;
+  tone: string;
+}[] = [
+  {
+    id: "NOT_STARTED",
+    label: "Not Started",
+    status: "REACHED_OUT",
+    tone: "from-zinc-400 to-zinc-600",
+  },
+  {
+    id: "HOSTING",
+    label: "Hosting",
+    status: "HOSTING",
+    tone: "from-blue-400 to-blue-600",
+  },
+  {
+    id: "HOSTED",
+    label: "Hosted",
+    status: "COLLECTING_WALLETS",
+    tone: "from-amber-300 to-orange-500",
+  },
+  {
+    id: "WALLETS_SUBMITTED",
+    label: "Wallet Submission",
+    status: "SUBMITTED",
+    tone: "from-violet-400 to-indigo-500",
+  },
+  {
+    id: "COMPLETED",
+    label: "Completed",
+    status: "COMPLETED",
+    tone: "from-emerald-300 to-emerald-600",
+  },
+];
+
+function boardColumn(status: CollabStatus): string | null {
+  const visible = sheetStatus(status);
+  if (visible === "IDEAS" || visible === "NOT_STARTED" || visible === "READY")
+    return "NOT_STARTED";
+  if (visible === "HOSTING") return "HOSTING";
+  if (visible === "HOSTED") return "HOSTED";
+  if (visible === "WALLETS_SUBMITTED") return "WALLETS_SUBMITTED";
+  if (visible === "COMPLETED") return "COMPLETED";
+  return null;
+}
+
+function projectBanner(row: CollabRow): string | null {
+  if (row.partner.bannerUrl) return row.partner.bannerUrl;
+  const raffle = [...row.raffles].sort(
+    (left, right) =>
+      new Date(right.raffle.endAt).getTime() -
+      new Date(left.raffle.endAt).getTime(),
+  )[0];
+  return raffle?.raffle.bannerUrl ?? null;
+}
+
+function xUsername(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).pathname.split("/").filter(Boolean)[0] ?? null;
+  } catch {
+    return value.replace(/^@/u, "") || null;
+  }
+}
+
+function rowChains(row: CollabRow): string[] {
+  const configured = row.raffles.flatMap(
+    ({ raffle }) => raffle.walletChains ?? [],
+  );
+  return [
+    ...new Set([...configured, row.partner.chain].filter(Boolean)),
+  ] as string[];
+}
 
 export function CollabHub() {
   const { org } = useParams<{ org: string }>();
@@ -237,6 +399,10 @@ export function CollabHub() {
   const [dateFilter, setDateFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [view, setView] = useState<View>("TABLE");
+  const [calendarMode, setCalendarMode] = useState<CalendarMode>("MONTH");
+  const [calendarDate, setCalendarDate] = useState(() => new Date());
+  const [columnWidths, setColumnWidths] = useState(DEFAULT_COLUMN_WIDTHS);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<DraftRow>(EMPTY_DRAFT);
@@ -244,6 +410,34 @@ export function CollabHub() {
   const [uploading, setUploading] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [raffleRow, setRaffleRow] = useState<CollabRow | null>(null);
+  const [brandingRow, setBrandingRow] = useState<CollabRow | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(
+      `kos-collab-view:${org}`,
+    ) as View | null;
+    if (saved && ["TABLE", "BOARD", "CALENDAR"].includes(saved)) {
+      setView(saved);
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(
+        target?.tagName ?? "",
+      );
+      if (event.key === "/" && !typing) {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+      if (event.key.toLowerCase() === "n" && !typing && canCreate) {
+        event.preventDefault();
+        setView("TABLE");
+        setAdding(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [canCreate, org]);
 
   const teamById = useMemo(
     () => new Map((data?.team ?? []).map((person) => [person.id, person])),
@@ -268,7 +462,10 @@ export function CollabHub() {
           : "";
         const searchable = [
           row.projectName,
+          row.partner.name,
           row.partner.xUrl,
+          row.partner.websiteUrl,
+          row.partner.bio,
           row.partner.discordUrl,
           row.documentUrl,
           row.requirements,
@@ -330,10 +527,47 @@ export function CollabHub() {
       hosting: all.filter((row) => sheetStatus(row.status) === "HOSTING")
         .length,
       hosted: all.filter((row) => sheetStatus(row.status) === "HOSTED").length,
+      waitingWallets: all.filter((row) =>
+        ["COLLECTING_WALLETS", "READY_FOR_SUBMISSION"].includes(row.status),
+      ).length,
       completed: all.filter((row) => sheetStatus(row.status) === "COMPLETED")
         .length,
+      totalSpots: all.reduce(
+        (total, row) =>
+          total + row.whitelistAllocation + Math.max(0, row.fcfsSpots),
+        0,
+      ),
+      averageDays: data?.analytics?.averageCompletionDays ?? 0,
     };
-  }, [data?.collaborations]);
+  }, [data?.analytics?.averageCompletionDays, data?.collaborations]);
+
+  function changeView(next: View) {
+    setView(next);
+    window.localStorage.setItem(`kos-collab-view:${org}`, next);
+  }
+
+  function startColumnResize(
+    column: ColumnKey,
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = columnWidths[column];
+    const onMove = (moveEvent: PointerEvent) => {
+      const next = Math.max(
+        column === "project" ? 240 : 80,
+        Math.min(520, startWidth + moveEvent.clientX - startX),
+      );
+      setColumnWidths((current) => ({ ...current, [column]: next }));
+    };
+    const onEnd = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd);
+  }
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -365,20 +599,39 @@ export function CollabHub() {
     if (!canEdit) return;
     setBusy(row.id);
     setMessage(null);
+    const previous = data;
+    await mutate(
+      (current) =>
+        current
+          ? {
+              ...current,
+              collaborations: current.collaborations.map((item) =>
+                item.id === row.id
+                  ? ({ ...item, ...patch } as CollabRow)
+                  : item,
+              ),
+            }
+          : current,
+      false,
+    );
     const response = await fetch(`/api/${org}/collaborations/${row.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(patch),
     });
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) setMessage(body.error ?? "Could not save that change.");
-    await mutate();
+    if (!response.ok) {
+      setMessage(body.error ?? "Could not save that change.");
+      await mutate(previous, false);
+    } else {
+      await mutate();
+    }
     setBusy(null);
   }
 
   async function createRow() {
-    if (!draft.projectName.trim()) {
-      setMessage("Project name is required.");
+    if (!draft.projectName.trim() && !draft.xUrl.trim()) {
+      setMessage("Add a project name or paste its X profile.");
       return;
     }
     setBusy("new");
@@ -389,6 +642,9 @@ export function CollabHub() {
       body: JSON.stringify({
         projectName: draft.projectName,
         xUrl: draft.xUrl,
+        logoUrl: draft.logoUrl,
+        bannerUrl: draft.bannerUrl,
+        websiteUrl: draft.websiteUrl,
         discordUrl: draft.discordUrl,
         documentUrl: draft.documentUrl,
         whitelistAllocation: Number(draft.gtd),
@@ -396,6 +652,9 @@ export function CollabHub() {
         assignedToId: draft.assignedToId || null,
         status: STATUS_CANONICAL[draft.status],
         requirements: draft.notes,
+        hostAt: draft.hostAt
+          ? new Date(`${draft.hostAt}T12:00:00`).toISOString()
+          : null,
       }),
     });
     const body = await response.json().catch(() => ({}));
@@ -506,7 +765,7 @@ export function CollabHub() {
       "Winners",
       "Wallet Export",
       "Notes",
-      "Created At",
+      "Hosting Date",
     ];
     const lines = chosen.map((row) => {
       const winners = row.raffles.reduce(
@@ -530,7 +789,7 @@ export function CollabHub() {
         winners,
         walletState,
         row.requirements,
-        row.createdAt,
+        row.hostAt,
       ]
         .map(escapeCsv)
         .join(",");
@@ -593,51 +852,107 @@ export function CollabHub() {
     rows.length > 0 && rows.every((row) => selected.has(row.id));
 
   return (
-    <div className="min-w-0 space-y-4 pb-10">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="mb-2 h-1 w-10 rounded-full bg-gradient-to-r from-blue-500 to-violet-500" />
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Collab Hub
-          </h1>
-          <p className="mt-1 text-sm text-kos-muted">
-            Every whitelist collaboration, one row at a time.
-          </p>
+    <div data-testid="collab-hub-workspace" className="min-w-0 space-y-4 pb-10">
+      <header className="relative overflow-hidden rounded-[1.75rem] border border-white/[0.09] bg-gradient-to-br from-[#171a24]/95 via-[#111113]/95 to-[#21162d]/90 p-5 shadow-[0_30px_100px_-58px_rgba(99,102,241,0.7)] sm:p-6">
+        <div className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-violet-500/15 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 left-1/4 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="mb-3 h-1 w-10 rounded-full bg-gradient-to-r from-blue-400 to-violet-400 shadow-[0_0_22px_rgba(96,165,250,0.65)]" />
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              Collab Hub
+            </h1>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-kos-muted">
+              Your visual spreadsheet for every partnership, raffle handoff,
+              winner list, and wallet export.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <ViewSwitcher value={view} onChange={changeView} />
+            {canCreate ? (
+              <button
+                className="kos-btn-primary h-10"
+                onClick={() => {
+                  changeView("TABLE");
+                  setAdding(true);
+                }}
+              >
+                <IconPlus className="h-4 w-4" /> Add collaboration
+              </button>
+            ) : null}
+          </div>
         </div>
-        {canCreate ? (
-          <button
-            className="kos-btn-primary h-10"
-            onClick={() => setAdding(true)}
-          >
-            <IconPlus className="h-4 w-4" /> Add collaboration
-          </button>
-        ) : null}
       </header>
 
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border border-white/[0.07] bg-white/[0.025] px-4 py-3 text-sm">
-        <Metric label="Total" value={metrics.total} />
-        <Metric label="Hosting" value={metrics.hosting} tone="text-blue-300" />
-        <Metric label="Hosted" value={metrics.hosted} tone="text-amber-300" />
-        <Metric
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-7">
+        <MetricCard
+          label="Total collaborations"
+          value={metrics.total}
+          icon={<IconGrid />}
+          accent="from-blue-500 to-indigo-500"
+          trend="All records"
+        />
+        <MetricCard
+          label="Hosting"
+          value={metrics.hosting}
+          icon={<IconTicket />}
+          accent="from-cyan-400 to-blue-500"
+          trend="Live now"
+        />
+        <MetricCard
+          label="Hosted"
+          value={metrics.hosted}
+          icon={<IconCheck />}
+          accent="from-amber-300 to-orange-500"
+          trend="Raffle ended"
+        />
+        <MetricCard
+          label="Waiting for wallets"
+          value={metrics.waitingWallets}
+          icon={<IconWallet />}
+          accent="from-violet-400 to-fuchsia-500"
+          trend="Needs action"
+        />
+        <MetricCard
           label="Completed"
           value={metrics.completed}
-          tone="text-emerald-300"
+          icon={<IconChart />}
+          accent="from-emerald-300 to-emerald-600"
+          trend="All time"
         />
-        <span className="ml-auto text-xs text-kos-muted">
-          {rows.length} visible
-        </span>
+        <MetricCard
+          label="Total WL spots"
+          value={metrics.totalSpots}
+          icon={<IconUsers />}
+          accent="from-indigo-400 to-violet-500"
+          trend="GTD + FCFS"
+        />
+        <MetricCard
+          label="Avg completion"
+          value={`${metrics.averageDays}d`}
+          icon={<IconCard />}
+          accent="from-pink-400 to-rose-500"
+          trend="Per collab"
+        />
       </div>
 
-      <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3">
+      <section
+        data-testid="collab-controls"
+        className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3 shadow-[0_18px_55px_-42px_rgba(0,0,0,0.9)] backdrop-blur-xl"
+      >
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(240px,1.5fr)_repeat(5,minmax(130px,1fr))]">
           <label className="relative">
             <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-kos-muted" />
             <input
+              ref={searchRef}
               className="kos-input h-10 pl-9"
-              placeholder="Search collaborations…"
+              placeholder="Search projects, X handles, hosts…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
+            <span className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-md border border-white/[0.08] px-1.5 py-0.5 text-[9px] text-kos-muted lg:block">
+              /
+            </span>
           </label>
           <select
             className="kos-input h-10"
@@ -731,169 +1046,225 @@ export function CollabHub() {
         />
       ) : null}
 
-      <div className="overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0d0d0e]/75 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_24px_80px_-52px_rgba(0,0,0,0.9)]">
-        <div className="max-h-[calc(100dvh-290px)] min-h-[420px] overflow-auto overscroll-contain">
-          <table className="w-full min-w-[1960px] table-fixed text-left text-sm">
-            <colgroup>
-              <col className="w-11" />
-              <col className="w-[230px]" />
-              <col className="w-[170px]" />
-              <col className="w-[170px]" />
-              <col className="w-[220px]" />
-              <col className="w-[105px]" />
-              <col className="w-[105px]" />
-              <col className="w-[160px]" />
-              <col className="w-[175px]" />
-              <col className="w-[220px]" />
-              <col className="w-[170px]" />
-              <col className="w-[240px]" />
-              <col className="w-[135px]" />
-              <col className="w-[285px]" />
-            </colgroup>
-            <thead className="sticky top-0 z-30 bg-[#151516]/95 text-[10px] uppercase tracking-[0.15em] text-kos-muted backdrop-blur-xl">
-              <tr>
-                <th className="sticky left-0 z-40 border-b border-r border-white/[0.08] bg-[#151516] px-3 py-3">
-                  <input
-                    type="checkbox"
-                    checked={allVisibleSelected}
-                    onChange={toggleAll}
-                    aria-label="Select all visible rows"
+      {view === "TABLE" ? (
+        <div className="overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0d0d0e]/75 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_24px_80px_-52px_rgba(0,0,0,0.9)]">
+          <div className="max-h-[calc(100dvh-290px)] min-h-[420px] overflow-auto overscroll-contain">
+            <table
+              className="w-full table-fixed text-left text-sm"
+              style={{
+                minWidth:
+                  44 +
+                  285 +
+                  Object.values(columnWidths).reduce(
+                    (total, width) => total + width,
+                    0,
+                  ),
+              }}
+            >
+              <colgroup>
+                <col className="w-11" />
+                {(
+                  [
+                    "project",
+                    "x",
+                    "discord",
+                    "document",
+                    "gtd",
+                    "fcfs",
+                    "host",
+                    "status",
+                    "winners",
+                    "wallet",
+                    "notes",
+                    "hosting",
+                  ] as ColumnKey[]
+                ).map((column) => (
+                  <col key={column} style={{ width: columnWidths[column] }} />
+                ))}
+                <col className="w-[285px]" />
+              </colgroup>
+              <thead className="sticky top-0 z-30 bg-[#151516]/95 text-[10px] uppercase tracking-[0.15em] text-kos-muted backdrop-blur-xl">
+                <tr>
+                  <th className="sticky left-0 z-40 border-b border-r border-white/[0.08] bg-[#151516] px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleAll}
+                      aria-label="Select all visible rows"
+                    />
+                  </th>
+                  <SortableHeader
+                    label="Project"
+                    sort="projectName"
+                    active={sortKey}
+                    direction={sortDirection}
+                    onSort={toggleSort}
+                    sticky
+                    column="project"
+                    onResize={startColumnResize}
                   />
-                </th>
-                <SortableHeader
-                  label="Project"
-                  sort="projectName"
-                  active={sortKey}
-                  direction={sortDirection}
-                  onSort={toggleSort}
-                  sticky
-                />
-                <PlainHeader>Project X Link</PlainHeader>
-                <PlainHeader>Discord Invite</PlainHeader>
-                <PlainHeader>Collab Document</PlainHeader>
-                <SortableHeader
-                  label="GTD Spots"
-                  sort="gtd"
-                  active={sortKey}
-                  direction={sortDirection}
-                  onSort={toggleSort}
-                />
-                <SortableHeader
-                  label="FCFS Spots"
-                  sort="fcfs"
-                  active={sortKey}
-                  direction={sortDirection}
-                  onSort={toggleSort}
-                />
-                <SortableHeader
-                  label="Host"
-                  sort="host"
-                  active={sortKey}
-                  direction={sortDirection}
-                  onSort={toggleSort}
-                />
-                <SortableHeader
-                  label="Status"
-                  sort="status"
-                  active={sortKey}
-                  direction={sortDirection}
-                  onSort={toggleSort}
-                />
-                <SortableHeader
-                  label="Winner List"
-                  sort="winners"
-                  active={sortKey}
-                  direction={sortDirection}
-                  onSort={toggleSort}
-                />
-                <PlainHeader>Wallet Export</PlainHeader>
-                <PlainHeader>Notes</PlainHeader>
-                <SortableHeader
-                  label="Created At"
-                  sort="createdAt"
-                  active={sortKey}
-                  direction={sortDirection}
-                  onSort={toggleSort}
-                />
-                <th className="sticky right-0 z-40 border-b border-l border-white/[0.08] bg-[#151516] px-4 py-3">
-                  Quick actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {adding ? (
-                <NewRow
-                  draft={draft}
-                  team={data?.team ?? []}
-                  canAssign={canAssign}
-                  busy={busy === "new"}
-                  onChange={(patch) =>
-                    setDraft((current) => ({ ...current, ...patch }))
-                  }
-                  onSave={createRow}
-                  onCancel={() => {
-                    setDraft(EMPTY_DRAFT);
-                    setAdding(false);
-                  }}
-                />
-              ) : null}
-              {rows.map((row) => (
-                <CollabTableRow
-                  key={row.id}
-                  row={row}
-                  org={org}
-                  team={data?.team ?? []}
-                  selected={selected.has(row.id)}
-                  busy={busy === row.id}
-                  uploading={uploading === row.id}
-                  canEdit={canEdit}
-                  canCreate={canCreate}
-                  canAssign={canAssign}
-                  canArchive={canArchive}
-                  canExport={canExport}
-                  canCreateRaffle={canCreateRaffle}
-                  onSelect={() => toggleSelected(row.id)}
-                  onUpdate={(patch) => updateRow(row, patch)}
-                  onUpload={(file) => uploadDocument(row, file)}
-                  onCreateRaffle={() => setRaffleRow(row)}
-                  onDuplicate={() => duplicateRow(row)}
-                  onArchive={() => archiveRow(row)}
-                  onDelete={() => deleteRow(row)}
-                  onWalletExported={() =>
-                    window.setTimeout(() => void mutate(), 1200)
-                  }
-                  teamById={teamById}
-                />
-              ))}
-            </tbody>
-          </table>
+                  <PlainHeader column="x" onResize={startColumnResize}>
+                    Project X Link
+                  </PlainHeader>
+                  <PlainHeader column="discord" onResize={startColumnResize}>
+                    Discord Invite
+                  </PlainHeader>
+                  <PlainHeader column="document" onResize={startColumnResize}>
+                    Collab Document
+                  </PlainHeader>
+                  <SortableHeader
+                    label="GTD Spots"
+                    sort="gtd"
+                    active={sortKey}
+                    direction={sortDirection}
+                    onSort={toggleSort}
+                    column="gtd"
+                    onResize={startColumnResize}
+                  />
+                  <SortableHeader
+                    label="FCFS Spots"
+                    sort="fcfs"
+                    active={sortKey}
+                    direction={sortDirection}
+                    onSort={toggleSort}
+                    column="fcfs"
+                    onResize={startColumnResize}
+                  />
+                  <SortableHeader
+                    label="Host"
+                    sort="host"
+                    active={sortKey}
+                    direction={sortDirection}
+                    onSort={toggleSort}
+                    column="host"
+                    onResize={startColumnResize}
+                  />
+                  <SortableHeader
+                    label="Status"
+                    sort="status"
+                    active={sortKey}
+                    direction={sortDirection}
+                    onSort={toggleSort}
+                    column="status"
+                    onResize={startColumnResize}
+                  />
+                  <SortableHeader
+                    label="Winner List"
+                    sort="winners"
+                    active={sortKey}
+                    direction={sortDirection}
+                    onSort={toggleSort}
+                    column="winners"
+                    onResize={startColumnResize}
+                  />
+                  <PlainHeader column="wallet" onResize={startColumnResize}>
+                    Wallet Export
+                  </PlainHeader>
+                  <PlainHeader column="notes" onResize={startColumnResize}>
+                    Notes
+                  </PlainHeader>
+                  <PlainHeader column="hosting" onResize={startColumnResize}>
+                    Hosting date
+                  </PlainHeader>
+                  <th className="sticky right-0 z-40 border-b border-l border-white/[0.08] bg-[#151516] px-4 py-3">
+                    Quick actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {adding ? (
+                  <NewRow
+                    draft={draft}
+                    org={org}
+                    team={data?.team ?? []}
+                    canAssign={canAssign}
+                    busy={busy === "new"}
+                    onChange={(patch) =>
+                      setDraft((current) => ({ ...current, ...patch }))
+                    }
+                    onSave={createRow}
+                    onCancel={() => {
+                      setDraft(EMPTY_DRAFT);
+                      setAdding(false);
+                    }}
+                  />
+                ) : null}
+                {rows.map((row) => (
+                  <CollabTableRow
+                    key={row.id}
+                    row={row}
+                    org={org}
+                    team={data?.team ?? []}
+                    selected={selected.has(row.id)}
+                    busy={busy === row.id}
+                    uploading={uploading === row.id}
+                    canEdit={canEdit}
+                    canCreate={canCreate}
+                    canAssign={canAssign}
+                    canArchive={canArchive}
+                    canExport={canExport}
+                    canCreateRaffle={canCreateRaffle}
+                    onSelect={() => toggleSelected(row.id)}
+                    onUpdate={(patch) => updateRow(row, patch)}
+                    onUpload={(file) => uploadDocument(row, file)}
+                    onCreateRaffle={() => setRaffleRow(row)}
+                    onEditBranding={() => setBrandingRow(row)}
+                    onDuplicate={() => duplicateRow(row)}
+                    onArchive={() => archiveRow(row)}
+                    onDelete={() => deleteRow(row)}
+                    onWalletExported={() =>
+                      window.setTimeout(() => void mutate(), 1200)
+                    }
+                    teamById={teamById}
+                  />
+                ))}
+              </tbody>
+            </table>
 
-          {isLoading ? (
-            <div className="flex min-h-64 items-center justify-center text-sm text-kos-muted">
-              Loading collaborations…
-            </div>
-          ) : error ? (
-            <div className="flex min-h-64 items-center justify-center px-5 text-center text-sm text-red-300">
-              {error.message || "Could not load collaborations."}
-            </div>
-          ) : !rows.length && !adding ? (
-            <div className="flex min-h-64 flex-col items-center justify-center px-5 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04]">
-                <IconDoc className="text-blue-300" />
+            {isLoading ? (
+              <div className="flex min-h-64 items-center justify-center text-sm text-kos-muted">
+                Loading collaborations…
               </div>
-              <p className="mt-4 font-medium">No collaborations found</p>
-              <p className="mt-1 max-w-sm text-sm text-kos-muted">
-                Add a row or clear the filters to bring your collaboration list
-                into one place.
-              </p>
-            </div>
-          ) : null}
+            ) : error ? (
+              <div className="flex min-h-64 items-center justify-center px-5 text-center text-sm text-red-300">
+                {error.message || "Could not load collaborations."}
+              </div>
+            ) : !rows.length && !adding ? (
+              <div className="flex min-h-64 flex-col items-center justify-center px-5 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04]">
+                  <IconDoc className="text-blue-300" />
+                </div>
+                <p className="mt-4 font-medium">No collaborations found</p>
+                <p className="mt-1 max-w-sm text-sm text-kos-muted">
+                  Add a row or clear the filters to bring your collaboration
+                  list into one place.
+                </p>
+              </div>
+            ) : null}
+          </div>
+          <div className="flex items-center justify-between border-t border-white/[0.07] bg-white/[0.02] px-4 py-2 text-xs text-kos-muted">
+            <span>Click a cell to edit · Enter saves · Tab moves across</span>
+            <span>{data?.collaborations.length ?? 0} collaborations</span>
+          </div>
         </div>
-        <div className="flex items-center justify-between border-t border-white/[0.07] bg-white/[0.02] px-4 py-2 text-xs text-kos-muted">
-          <span>Click a cell to edit · Enter saves · Tab moves across</span>
-          <span>{data?.collaborations.length ?? 0} collaborations</span>
-        </div>
-      </div>
+      ) : view === "BOARD" ? (
+        <BoardView
+          rows={rows}
+          org={org}
+          canEdit={canEdit}
+          teamById={teamById}
+          onMove={(row, status) => updateRow(row, { status })}
+        />
+      ) : (
+        <CalendarView
+          rows={rows}
+          org={org}
+          mode={calendarMode}
+          date={calendarDate}
+          onModeChange={setCalendarMode}
+          onDateChange={setCalendarDate}
+        />
+      )}
 
       {raffleRow ? (
         <NewRaffleModal
@@ -910,29 +1281,119 @@ export function CollabHub() {
           }}
         />
       ) : null}
+      {brandingRow ? (
+        <BrandingOverrideModal
+          row={brandingRow}
+          org={org}
+          onClose={() => setBrandingRow(null)}
+          onSave={async (patch) => {
+            await updateRow(brandingRow, patch);
+            setBrandingRow(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
-function Metric({
-  label,
+function ViewSwitcher({
   value,
-  tone = "text-kos-fg",
+  onChange,
 }: {
-  label: string;
-  value: number;
-  tone?: string;
+  value: View;
+  onChange: (view: View) => void;
 }) {
+  const views: { id: View; label: string; icon: React.ReactNode }[] = [
+    { id: "TABLE", label: "Table", icon: <IconGrid className="h-3.5 w-3.5" /> },
+    { id: "BOARD", label: "Board", icon: <IconCard className="h-3.5 w-3.5" /> },
+    {
+      id: "CALENDAR",
+      label: "Calendar",
+      icon: <IconChart className="h-3.5 w-3.5" />,
+    },
+  ];
   return (
-    <span className="inline-flex items-baseline gap-2">
-      <span className={`font-semibold tabular-nums ${tone}`}>{value}</span>
-      <span className="text-xs text-kos-muted">{label}</span>
-    </span>
+    <div
+      className="inline-flex rounded-2xl border border-white/[0.10] bg-black/25 p-1 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]"
+      aria-label="Collaboration view"
+    >
+      {views.map((item) => (
+        <button
+          key={item.id}
+          className={`inline-flex h-8 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium transition-all sm:px-3 ${
+            value === item.id
+              ? "bg-white text-black shadow-lg"
+              : "text-kos-muted hover:bg-white/[0.06] hover:text-white"
+          }`}
+          aria-pressed={value === item.id}
+          onClick={() => onChange(item.id)}
+        >
+          {item.icon}
+          {item.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
-function PlainHeader({ children }: { children: React.ReactNode }) {
-  return <th className="border-b border-white/[0.08] px-4 py-3">{children}</th>;
+function MetricCard({
+  label,
+  value,
+  icon,
+  accent,
+  trend,
+}: {
+  label: string;
+  value: number | string;
+  icon: React.ReactNode;
+  accent: string;
+  trend: string;
+}) {
+  return (
+    <div className="group relative min-h-28 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#141415]/90 p-3.5 shadow-[0_20px_50px_-40px_rgba(0,0,0,0.9)] transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.15] hover:bg-[#181819]">
+      <div
+        className={`absolute inset-x-0 top-0 h-px bg-gradient-to-r ${accent} opacity-80`}
+      />
+      <div className="flex items-start justify-between gap-2">
+        <div
+          className={`rounded-xl bg-gradient-to-br ${accent} p-2 text-white shadow-lg`}
+        >
+          {icon}
+        </div>
+        <span className="rounded-full border border-white/[0.07] bg-white/[0.03] px-2 py-1 text-[9px] text-kos-muted">
+          ↗ {trend}
+        </span>
+      </div>
+      <div className="mt-3 text-2xl font-semibold tabular-nums tracking-tight">
+        {value}
+      </div>
+      <div className="mt-0.5 truncate text-[10px] uppercase tracking-[0.13em] text-kos-muted">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function PlainHeader({
+  children,
+  column,
+  onResize,
+}: {
+  children: React.ReactNode;
+  column?: ColumnKey;
+  onResize?: (
+    column: ColumnKey,
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => void;
+}) {
+  return (
+    <th className="relative border-b border-white/[0.08] px-4 py-3">
+      {children}
+      {column && onResize ? (
+        <ColumnResizeHandle column={column} onPointerDown={onResize} />
+      ) : null}
+    </th>
+  );
 }
 
 function SortableHeader({
@@ -942,6 +1403,8 @@ function SortableHeader({
   direction,
   onSort,
   sticky = false,
+  column,
+  onResize,
 }: {
   label: string;
   sort: SortKey;
@@ -949,13 +1412,18 @@ function SortableHeader({
   direction: "asc" | "desc";
   onSort: (key: SortKey) => void;
   sticky?: boolean;
+  column?: ColumnKey;
+  onResize?: (
+    column: ColumnKey,
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => void;
 }) {
   return (
     <th
       className={`border-b border-white/[0.08] px-4 py-3 ${
         sticky
           ? "sticky left-11 z-40 border-r bg-[#151516] shadow-[8px_0_18px_-16px_rgba(0,0,0,0.9)]"
-          : ""
+          : "relative"
       }`}
     >
       <button
@@ -971,7 +1439,32 @@ function SortableHeader({
           )
         ) : null}
       </button>
+      {column && onResize ? (
+        <ColumnResizeHandle column={column} onPointerDown={onResize} />
+      ) : null}
     </th>
+  );
+}
+
+function ColumnResizeHandle({
+  column,
+  onPointerDown,
+}: {
+  column: ColumnKey;
+  onPointerDown: (
+    column: ColumnKey,
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => void;
+}) {
+  return (
+    <button
+      className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize touch-none opacity-0 transition-opacity hover:opacity-100 focus:opacity-100"
+      onPointerDown={(event) => onPointerDown(column, event)}
+      aria-label={`Resize ${column} column`}
+      title="Drag to resize"
+    >
+      <span className="mx-auto block h-4 w-px bg-blue-300/70" />
+    </button>
   );
 }
 
@@ -992,6 +1485,7 @@ function CollabTableRow({
   onUpdate,
   onUpload,
   onCreateRaffle,
+  onEditBranding,
   onDuplicate,
   onArchive,
   onDelete,
@@ -1014,6 +1508,7 @@ function CollabTableRow({
   onUpdate: (patch: Record<string, unknown>) => void;
   onUpload: (file?: File) => void;
   onCreateRaffle: () => void;
+  onEditBranding: () => void;
   onDuplicate: () => void;
   onArchive: () => void;
   onDelete: () => void;
@@ -1034,7 +1529,7 @@ function CollabTableRow({
   const host = row.assignedToId ? teamById.get(row.assignedToId) : null;
   return (
     <tr
-      className={`group border-b border-white/[0.065] transition-colors hover:bg-white/[0.035] ${
+      className={`group border-b border-white/[0.065] even:bg-white/[0.012] transition-colors hover:bg-white/[0.045] ${
         selected ? "bg-blue-500/[0.07]" : ""
       } ${busy ? "opacity-65" : ""}`}
     >
@@ -1047,34 +1542,13 @@ function CollabTableRow({
         />
       </td>
       <td className="sticky left-11 z-20 border-r border-white/[0.07] bg-[#101011] px-4 py-4 shadow-[8px_0_18px_-16px_rgba(0,0,0,0.9)] group-hover:bg-[#151516]">
-        <div className="flex min-w-0 items-center gap-3">
-          <a
-            href={row.partner.xUrl ?? undefined}
-            target={row.partner.xUrl ? "_blank" : undefined}
-            rel={row.partner.xUrl ? "noreferrer" : undefined}
-            className="shrink-0"
-            aria-label={`Open ${row.projectName} on X`}
-          >
-            <PartnerMark
-              name={row.projectName}
-              src={row.partner.logoUrl}
-              className="h-9 w-9 rounded-xl"
-            />
-          </a>
-          <div className="min-w-0 flex-1">
-            <ProjectNameCell
-              value={row.projectName}
-              xUrl={row.partner.xUrl}
-              disabled={!canEdit}
-              onSave={(value) => onUpdate({ projectName: value })}
-            />
-            {row.tags.length ? (
-              <div className="mt-1 truncate text-[10px] text-kos-muted">
-                {row.tags.map(({ tag }) => tag.name).join(" · ")}
-              </div>
-            ) : null}
-          </div>
-        </div>
+        <ProjectIdentityCell
+          row={row}
+          org={org}
+          hostName={host?.name ?? "Unassigned"}
+          disabled={!canEdit}
+          onSave={(value) => onUpdate({ projectName: value })}
+        />
       </td>
       <td className="px-4 py-4">
         <InlineUrl
@@ -1223,13 +1697,22 @@ function CollabTableRow({
           {row.walletProgress.collected}/{row.walletProgress.total} collected
         </div>
         {row.walletProgress.collected > 0 && canExport ? (
-          <a
-            href={`/api/${org}/collaborations/${row.id}/wallets/export?format=csv`}
-            className="mt-1 inline-flex text-xs text-blue-300 hover:text-blue-200"
-            onClick={onWalletExported}
-          >
-            Download
-          </a>
+          <div className="mt-1.5 flex gap-2 text-[10px]">
+            {[
+              ["CSV", "csv"],
+              ["TXT", "txt"],
+              ["Excel", "xlsx"],
+            ].map(([label, format]) => (
+              <a
+                key={format}
+                href={`/api/${org}/collaborations/${row.id}/wallets/export?format=${format}`}
+                className="text-blue-300 hover:text-blue-200"
+                onClick={onWalletExported}
+              >
+                {label}
+              </a>
+            ))}
+          </div>
         ) : null}
       </td>
       <td className="px-3 py-4">
@@ -1241,8 +1724,12 @@ function CollabTableRow({
           onSave={(value) => onUpdate({ requirements: value })}
         />
       </td>
-      <td className="px-4 py-4 text-xs text-kos-muted">
-        <time dateTime={row.createdAt}>{dateLabel(row.createdAt)}</time>
+      <td className="px-3 py-4 text-xs text-kos-muted">
+        <DateCell
+          value={row.hostAt}
+          disabled={!canEdit}
+          onSave={(value) => onUpdate({ hostAt: value })}
+        />
       </td>
       <td className="sticky right-0 z-20 border-l border-white/[0.07] bg-[#101011] px-3 py-4 group-hover:bg-[#151516]">
         <div className="flex items-center gap-1.5">
@@ -1269,6 +1756,23 @@ function CollabTableRow({
               Winners
             </a>
           ) : null}
+          {raffle?.proof?.messageLink ? (
+            <a
+              href={raffle.proof.messageLink}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl border border-white/[0.09] bg-white/[0.035] px-3 py-2 text-xs hover:bg-white/[0.07]"
+            >
+              Proof
+            </a>
+          ) : raffle?.proof?.artifactsStoredAt ? (
+            <a
+              href={`/api/${org}/collaborations/${row.id}/artifacts/${raffle.id}/pdf`}
+              className="rounded-xl border border-white/[0.09] bg-white/[0.035] px-3 py-2 text-xs hover:bg-white/[0.07]"
+            >
+              Proof
+            </a>
+          ) : null}
           <details className="relative">
             <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-xl border border-white/[0.09] bg-white/[0.035] text-lg text-kos-muted hover:bg-white/[0.07] hover:text-kos-fg">
               ···
@@ -1291,6 +1795,14 @@ function CollabTableRow({
               >
                 Duplicate row
               </button>
+              {canEdit ? (
+                <button
+                  className="block w-full rounded-xl px-3 py-2 text-left text-xs hover:bg-white/[0.06]"
+                  onClick={onEditBranding}
+                >
+                  Edit project branding
+                </button>
+              ) : null}
               {row.walletProgress.collected > 0 && canExport ? (
                 <a
                   className="block w-full rounded-xl px-3 py-2 text-left text-xs hover:bg-white/[0.06]"
@@ -1321,6 +1833,241 @@ function CollabTableRow({
         </div>
       </td>
     </tr>
+  );
+}
+
+function ProjectIdentityCell({
+  row,
+  org,
+  hostName,
+  disabled,
+  onSave,
+}: {
+  row: CollabRow;
+  org: string;
+  hostName: string;
+  disabled: boolean;
+  onSave: (value: string) => void;
+}) {
+  const [preview, setPreview] = useState<{ top: number; left: number } | null>(
+    null,
+  );
+  const closeTimer = useRef<number | null>(null);
+  const handle = xUsername(row.partner.xUrl);
+  const banner = projectBanner(row);
+  const chains = rowChains(row);
+
+  const cancelClose = () => {
+    if (closeTimer.current) window.clearTimeout(closeTimer.current);
+  };
+  const scheduleClose = () => {
+    closeTimer.current = window.setTimeout(() => setPreview(null), 110);
+  };
+  const openPreview = (element: HTMLElement) => {
+    cancelClose();
+    const rect = element.getBoundingClientRect();
+    const width = 350;
+    setPreview({
+      top: Math.max(12, Math.min(rect.top - 20, window.innerHeight - 510)),
+      left:
+        rect.right + width + 18 <= window.innerWidth
+          ? rect.right + 10
+          : Math.max(12, rect.left - width - 10),
+    });
+  };
+
+  return (
+    <>
+      <div
+        className="flex min-w-0 items-center gap-3"
+        onMouseEnter={(event) => openPreview(event.currentTarget)}
+        onMouseLeave={scheduleClose}
+        onFocus={(event) => openPreview(event.currentTarget)}
+        onBlur={scheduleClose}
+      >
+        <div className="relative h-12 w-[74px] shrink-0 overflow-hidden rounded-xl border border-white/[0.09] bg-gradient-to-br from-blue-500/25 to-violet-500/20">
+          {banner ? (
+            <img
+              src={banner}
+              alt=""
+              className="h-full w-full object-cover opacity-85"
+            />
+          ) : null}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent" />
+          <PartnerMark
+            name={row.projectName}
+            src={row.partner.logoUrl}
+            className="absolute bottom-1 left-1 h-7 w-7 rounded-lg border-black/30"
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <ProjectNameCell
+            value={row.projectName}
+            xUrl={row.partner.xUrl}
+            disabled={disabled}
+            onSave={onSave}
+          />
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] text-kos-muted">
+            {handle ? <span className="truncate">@{handle}</span> : null}
+            {row.partner.xVerified ? (
+              <span
+                className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-500 text-[8px] font-bold text-white"
+                title="Verified on X"
+              >
+                ✓
+              </span>
+            ) : null}
+            {chains[0] ? (
+              <span className="shrink-0 rounded-full border border-white/[0.07] bg-white/[0.035] px-1.5 py-0.5">
+                {chains[0]}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-1 text-[10px] text-kos-muted">
+            <span className="font-medium text-zinc-300">
+              {row.whitelistAllocation} GTD
+            </span>
+            <span className="mx-1.5 text-white/20">·</span>
+            <span>{row.fcfsSpots} FCFS</span>
+          </div>
+        </div>
+      </div>
+      {preview && typeof document !== "undefined"
+        ? createPortal(
+            <ProjectHoverPreview
+              row={row}
+              org={org}
+              hostName={hostName}
+              position={preview}
+              onMouseEnter={cancelClose}
+              onMouseLeave={scheduleClose}
+            />,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+function ProjectHoverPreview({
+  row,
+  org,
+  hostName,
+  position,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  row: CollabRow;
+  org: string;
+  hostName: string;
+  position: { top: number; left: number };
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+}) {
+  const raffle = row.raffles[0]?.raffle;
+  const winners = row.raffles.reduce(
+    (sum, link) => sum + link.raffle._count.winners,
+    0,
+  );
+  const handle = xUsername(row.partner.xUrl);
+  return (
+    <aside
+      className="fixed z-[90] w-[350px] overflow-hidden rounded-[1.5rem] border border-white/[0.12] bg-[#171719]/98 shadow-[0_32px_100px_-28px_rgba(0,0,0,0.95)] backdrop-blur-2xl"
+      style={position}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <RaffleBanner
+        name={row.projectName}
+        src={projectBanner(row)}
+        compact
+        className="h-28 w-full"
+      />
+      <div className="relative px-4 pb-4">
+        <PartnerMark
+          name={row.projectName}
+          src={row.partner.logoUrl}
+          className="-mt-6 h-14 w-14 rounded-2xl border-2 border-[#171719]"
+        />
+        <div className="mt-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <h3 className="truncate font-semibold">{row.projectName}</h3>
+              {row.partner.xVerified ? (
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[9px] font-bold">
+                  ✓
+                </span>
+              ) : null}
+            </div>
+            {handle ? (
+              <p className="text-xs text-kos-muted">@{handle}</p>
+            ) : null}
+          </div>
+          <span
+            className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-medium ${statusTone(
+              sheetStatus(row.status),
+            )}`}
+          >
+            {STATUS_LABELS[sheetStatus(row.status)]}
+          </span>
+        </div>
+        {row.partner.bio ? (
+          <p className="mt-3 line-clamp-3 text-xs leading-5 text-zinc-300">
+            {row.partner.bio}
+          </p>
+        ) : null}
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <PreviewStat label="GTD" value={row.whitelistAllocation} />
+          <PreviewStat label="FCFS" value={row.fcfsSpots} />
+          <PreviewStat label="Host" value={hostName} />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-white/[0.07] pt-3">
+          {row.partner.xUrl ? (
+            <a
+              className="kos-btn h-8 px-3 text-xs"
+              href={row.partner.xUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open X ↗
+            </a>
+          ) : null}
+          {raffle ? (
+            <Link
+              className="kos-btn h-8 px-3 text-xs"
+              href={`/${org}/raffles/${raffle.id}`}
+            >
+              Open raffle
+            </Link>
+          ) : null}
+          {raffle && winners ? (
+            <Link
+              className="kos-btn h-8 px-3 text-xs"
+              href={`/${org}/raffles/${raffle.id}`}
+            >
+              {winners} winner{winners === 1 ? "" : "s"}
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function PreviewStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-white/[0.07] bg-white/[0.025] px-2.5 py-2">
+      <div className="truncate text-xs font-semibold">{value}</div>
+      <div className="mt-0.5 text-[9px] uppercase tracking-wider text-kos-muted">
+        {label}
+      </div>
+    </div>
   );
 }
 
@@ -1568,6 +2315,42 @@ function NumberCell({
   );
 }
 
+function DateCell({
+  value,
+  disabled,
+  onSave,
+}: {
+  value: string | null;
+  disabled: boolean;
+  onSave: (value: string | null) => void;
+}) {
+  const dateValue = value ? new Date(value).toISOString().slice(0, 10) : "";
+  const [draft, setDraft] = useState(dateValue);
+  return (
+    <label className="block rounded-xl border border-transparent px-2 py-2 hover:border-white/[0.08] hover:bg-white/[0.03] focus-within:border-blue-400/40 focus-within:bg-black/20">
+      <input
+        type="date"
+        className="w-full bg-transparent text-xs outline-none"
+        value={draft}
+        disabled={disabled}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          if (draft === dateValue) return;
+          onSave(draft ? new Date(`${draft}T12:00:00`).toISOString() : null);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") {
+            setDraft(dateValue);
+            event.currentTarget.blur();
+          }
+        }}
+        aria-label="Hosting date"
+      />
+    </label>
+  );
+}
+
 function DocumentCell({
   row,
   org,
@@ -1724,6 +2507,7 @@ function BulkBar({
 
 function NewRow({
   draft,
+  org,
   team,
   canAssign,
   busy,
@@ -1732,6 +2516,7 @@ function NewRow({
   onCancel,
 }: {
   draft: DraftRow;
+  org: string;
   team: Person[];
   canAssign: boolean;
   busy: boolean;
@@ -1739,6 +2524,67 @@ function NewRow({
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const [metadataState, setMetadataState] = useState<
+    "idle" | "loading" | "success" | "unavailable"
+  >("idle");
+  const lastFetched = useRef("");
+
+  useEffect(() => {
+    const xUrl = draft.xUrl.trim();
+    if (
+      !/(?:^|\.)x\.com\/[A-Za-z0-9_]{1,15}\/?(?:[?#].*)?$/iu.test(
+        xUrl.replace(/^https?:\/\//iu, ""),
+      ) ||
+      lastFetched.current === xUrl
+    ) {
+      if (!xUrl) setMetadataState("idle");
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setMetadataState("loading");
+      try {
+        const response = await fetch(
+          `/api/${org}/collaborations/x-profile?url=${encodeURIComponent(xUrl)}`,
+          { signal: controller.signal },
+        );
+        const body = (await response.json().catch(() => ({}))) as {
+          profile?: XProfileMetadata;
+        };
+        if (!response.ok || !body.profile) {
+          setMetadataState("unavailable");
+          return;
+        }
+        lastFetched.current = body.profile.profileUrl;
+        onChange({
+          projectName: draft.projectName.trim()
+            ? draft.projectName
+            : body.profile.displayName,
+          xUrl: body.profile.profileUrl,
+          logoUrl: body.profile.avatarUrl ?? "",
+          bannerUrl: body.profile.bannerUrl ?? "",
+          websiteUrl: body.profile.websiteUrl ?? "",
+          bio: body.profile.bio ?? "",
+          xVerified: body.profile.verified,
+        });
+        setMetadataState("success");
+      } catch (metadataError) {
+        if (
+          !(metadataError instanceof DOMException) ||
+          metadataError.name !== "AbortError"
+        ) {
+          setMetadataState("unavailable");
+        }
+      }
+    }, 450);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+    // This fetch is intentionally keyed only to the pasted X URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.xUrl, org]);
+
   const input =
     "w-full rounded-xl border border-white/[0.09] bg-black/20 px-2.5 py-2 text-xs outline-none focus:border-blue-400/50";
   return (
@@ -1762,13 +2608,41 @@ function NewRow({
         />
       </td>
       <td className="px-3 py-4">
-        <input
-          type="url"
-          className={input}
-          placeholder="https://x.com/…"
-          value={draft.xUrl}
-          onChange={(event) => onChange({ xUrl: event.target.value })}
-        />
+        <div>
+          <input
+            type="url"
+            className={input}
+            placeholder="https://x.com/…"
+            value={draft.xUrl}
+            onChange={(event) => onChange({ xUrl: event.target.value })}
+          />
+          {metadataState !== "idle" ? (
+            <div
+              className={`mt-1.5 flex items-center gap-1.5 text-[10px] ${
+                metadataState === "success"
+                  ? "text-emerald-300"
+                  : metadataState === "unavailable"
+                    ? "text-amber-300"
+                    : "text-blue-300"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  metadataState === "loading"
+                    ? "animate-pulse bg-blue-300"
+                    : metadataState === "success"
+                      ? "bg-emerald-300"
+                      : "bg-amber-300"
+                }`}
+              />
+              {metadataState === "loading"
+                ? "Fetching project information…"
+                : metadataState === "success"
+                  ? "Project information added"
+                  : "Continue manually"}
+            </div>
+          ) : null}
+        </div>
       </td>
       <td className="px-3 py-4">
         <input
@@ -1822,19 +2696,11 @@ function NewRow({
         </select>
       </td>
       <td className="px-3 py-4">
-        <select
-          className={input}
-          value={draft.status}
-          onChange={(event) =>
-            onChange({ status: event.target.value as SheetStatus })
-          }
+        <span
+          className={`inline-flex rounded-xl border px-2.5 py-2 text-xs font-medium ${statusTone("NOT_STARTED")}`}
         >
-          {SHEET_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {STATUS_LABELS[status]}
-            </option>
-          ))}
-        </select>
+          Not Started
+        </span>
       </td>
       <td className="px-4 py-4 text-xs text-kos-muted">After raffle</td>
       <td className="px-4 py-4 text-xs text-kos-muted">Pending</td>
@@ -1846,7 +2712,15 @@ function NewRow({
           onChange={(event) => onChange({ notes: event.target.value })}
         />
       </td>
-      <td className="px-4 py-4 text-xs text-kos-muted">Now</td>
+      <td className="px-3 py-4">
+        <input
+          type="date"
+          className={input}
+          value={draft.hostAt}
+          onChange={(event) => onChange({ hostAt: event.target.value })}
+          aria-label="Hosting date"
+        />
+      </td>
       <td className="sticky right-0 z-20 border-l border-white/[0.07] bg-[#11151b] px-3 py-4">
         <div className="flex gap-2">
           <button
@@ -1866,5 +2740,709 @@ function NewRow({
         </div>
       </td>
     </tr>
+  );
+}
+
+function BoardView({
+  rows,
+  org,
+  canEdit,
+  teamById,
+  onMove,
+}: {
+  rows: CollabRow[];
+  org: string;
+  canEdit: boolean;
+  teamById: Map<string, Person>;
+  onMove: (row: CollabRow, status: CollabStatus) => void;
+}) {
+  const [dragging, setDragging] = useState<string | null>(null);
+  return (
+    <section data-testid="collab-board" className="space-y-3">
+      <div className="flex items-end justify-between gap-3 px-1">
+        <div>
+          <h2 className="text-sm font-semibold">Pipeline board</h2>
+          <p className="mt-0.5 text-xs text-kos-muted">
+            Drag a project to move the same spreadsheet row through its
+            workflow.
+          </p>
+        </div>
+        <span className="text-xs text-kos-muted">{rows.length} visible</span>
+      </div>
+      <div className="grid gap-3 overflow-x-auto pb-2 lg:grid-cols-5">
+        {BOARD_COLUMNS.map((column) => {
+          const items = rows.filter(
+            (row) => boardColumn(row.status) === column.id,
+          );
+          return (
+            <div
+              key={column.id}
+              className={`min-h-[360px] min-w-[260px] rounded-2xl border bg-[#111112]/85 p-2.5 transition-colors ${
+                dragging
+                  ? "border-blue-400/20 bg-blue-500/[0.025]"
+                  : "border-white/[0.08]"
+              }`}
+              onDragOver={(event) => {
+                if (canEdit) event.preventDefault();
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const id =
+                  event.dataTransfer.getData("text/kos-collaboration") ||
+                  dragging;
+                const row = rows.find((item) => item.id === id);
+                if (row && canEdit && boardColumn(row.status) !== column.id) {
+                  void onMove(row, column.status);
+                }
+                setDragging(null);
+              }}
+            >
+              <div className="mb-2.5 flex items-center justify-between px-1 py-1">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`h-2 w-2 rounded-full bg-gradient-to-br ${column.tone}`}
+                  />
+                  <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
+                    {column.label}
+                  </h3>
+                </div>
+                <span className="rounded-full border border-white/[0.07] bg-white/[0.035] px-2 py-0.5 text-[10px] text-kos-muted">
+                  {items.length}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {items.map((row) => (
+                  <BoardCard
+                    key={row.id}
+                    row={row}
+                    org={org}
+                    host={
+                      row.assignedToId
+                        ? (teamById.get(row.assignedToId) ?? null)
+                        : null
+                    }
+                    draggable={canEdit}
+                    dragging={dragging === row.id}
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData(
+                        "text/kos-collaboration",
+                        row.id,
+                      );
+                      setDragging(row.id);
+                    }}
+                    onDragEnd={() => setDragging(null)}
+                  />
+                ))}
+                {!items.length ? (
+                  <div className="flex min-h-28 items-center justify-center rounded-2xl border border-dashed border-white/[0.07] text-center text-[10px] text-kos-muted">
+                    Drop a collaboration here
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function BoardCard({
+  row,
+  org,
+  host,
+  draggable,
+  dragging,
+  onDragStart,
+  onDragEnd,
+}: {
+  row: CollabRow;
+  org: string;
+  host: Person | null;
+  draggable: boolean;
+  dragging: boolean;
+  onDragStart: (event: React.DragEvent<HTMLElement>) => void;
+  onDragEnd: () => void;
+}) {
+  return (
+    <article
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={`group overflow-hidden rounded-2xl border border-white/[0.08] bg-[#181819] shadow-[0_18px_50px_-40px_rgba(0,0,0,0.95)] transition-all hover:-translate-y-0.5 hover:border-white/[0.16] hover:shadow-[0_22px_60px_-34px_rgba(59,130,246,0.28)] ${
+        dragging ? "scale-[0.98] opacity-45" : ""
+      } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+    >
+      <RaffleBanner
+        name={row.projectName}
+        src={projectBanner(row)}
+        compact
+        className="h-20 w-full transition-transform duration-500 group-hover:scale-[1.015]"
+      />
+      <Link
+        href={`/${org}/collabs/${row.id}`}
+        className="block p-3 focus:outline-none"
+      >
+        <div className="-mt-7 flex items-end justify-between gap-3">
+          <PartnerMark
+            name={row.projectName}
+            src={row.partner.logoUrl}
+            className="h-11 w-11 rounded-xl border-2 border-[#181819] shadow-lg"
+          />
+          <span
+            className={`mb-1 rounded-full border px-2 py-1 text-[9px] font-medium ${statusTone(
+              sheetStatus(row.status),
+            )}`}
+          >
+            {STATUS_LABELS[sheetStatus(row.status)]}
+          </span>
+        </div>
+        <div className="mt-2 truncate text-sm font-semibold">
+          {row.projectName}
+        </div>
+        <div className="mt-0.5 truncate text-[10px] text-kos-muted">
+          {xUsername(row.partner.xUrl)
+            ? `@${xUsername(row.partner.xUrl)}`
+            : rowChains(row).join(" · ") || "Project profile"}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <PreviewStat label="GTD spots" value={row.whitelistAllocation} />
+          <PreviewStat label="FCFS spots" value={row.fcfsSpots} />
+        </div>
+        <div className="mt-3 flex items-center justify-between border-t border-white/[0.07] pt-2.5 text-[10px] text-kos-muted">
+          <span className="truncate">
+            {host ? `Hosted by ${host.name}` : "Host unassigned"}
+          </span>
+          <span className="tabular-nums">
+            {row.walletProgress.collected}/{row.walletProgress.total} wallets
+          </span>
+        </div>
+      </Link>
+    </article>
+  );
+}
+
+type CalendarEventTone = "blue" | "amber" | "emerald";
+
+interface CollaborationCalendarEvent {
+  id: string;
+  date: Date;
+  label: string;
+  tone: CalendarEventTone;
+  row: CollabRow;
+}
+
+function calendarEvents(rows: CollabRow[]): CollaborationCalendarEvent[] {
+  return rows
+    .flatMap((row) => {
+      const events: CollaborationCalendarEvent[] = [];
+      if (row.hostAt) {
+        events.push({
+          id: `${row.id}-hosting`,
+          date: new Date(row.hostAt),
+          label: "Hosting",
+          tone: "blue",
+          row,
+        });
+      }
+      if (row.walletSubmissionDeadline) {
+        events.push({
+          id: `${row.id}-wallets`,
+          date: new Date(row.walletSubmissionDeadline),
+          label: "Wallet deadline",
+          tone: "amber",
+          row,
+        });
+      }
+      row.raffles.forEach(({ raffle }) => {
+        if (raffle.status === "ENDED") {
+          events.push({
+            id: `${row.id}-raffle-${raffle.id}`,
+            date: new Date(raffle.endAt),
+            label: "Raffle completed",
+            tone: "emerald",
+            row,
+          });
+        }
+      });
+      if (
+        row.status === "COMPLETED" &&
+        row.completedAt &&
+        !events.some(
+          (event) =>
+            event.tone === "emerald" &&
+            event.date.toDateString() ===
+              new Date(row.completedAt!).toDateString(),
+        )
+      ) {
+        events.push({
+          id: `${row.id}-completed`,
+          date: new Date(row.completedAt),
+          label: "Completed",
+          tone: "emerald",
+          row,
+        });
+      }
+      return events;
+    })
+    .filter((event) => !Number.isNaN(event.date.getTime()))
+    .sort((left, right) => left.date.getTime() - right.date.getTime());
+}
+
+function dateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function startOfCalendarWeek(value: Date): Date {
+  const start = new Date(
+    value.getFullYear(),
+    value.getMonth(),
+    value.getDate(),
+  );
+  start.setDate(start.getDate() - start.getDay());
+  return start;
+}
+
+function CalendarView({
+  rows,
+  org,
+  mode,
+  date,
+  onModeChange,
+  onDateChange,
+}: {
+  rows: CollabRow[];
+  org: string;
+  mode: CalendarMode;
+  date: Date;
+  onModeChange: (mode: CalendarMode) => void;
+  onDateChange: (date: Date) => void;
+}) {
+  const events = useMemo(() => calendarEvents(rows), [rows]);
+  const byDay = useMemo(() => {
+    const grouped = new Map<string, CollaborationCalendarEvent[]>();
+    events.forEach((event) => {
+      const key = dateKey(event.date);
+      grouped.set(key, [...(grouped.get(key) ?? []), event]);
+    });
+    return grouped;
+  }, [events]);
+  const weekStart = startOfCalendarWeek(date);
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(weekStart);
+    day.setDate(day.getDate() + index);
+    return day;
+  });
+  const firstOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+  const monthGridStart = startOfCalendarWeek(firstOfMonth);
+  const monthDays = Array.from({ length: 42 }, (_, index) => {
+    const day = new Date(monthGridStart);
+    day.setDate(day.getDate() + index);
+    return day;
+  });
+  const label =
+    mode === "WEEK"
+      ? `${weekDays[0]!.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        })} – ${weekDays[6]!.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })}`
+      : date.toLocaleDateString(undefined, {
+          month: "long",
+          year: "numeric",
+        });
+  const navigate = (direction: number) => {
+    const next = new Date(date);
+    if (mode === "WEEK") next.setDate(next.getDate() + direction * 7);
+    else next.setMonth(next.getMonth() + direction);
+    onDateChange(next);
+  };
+
+  return (
+    <section
+      data-testid="collab-calendar"
+      className="overflow-hidden rounded-[1.5rem] border border-white/[0.09] bg-[#111112]/90 shadow-[0_24px_80px_-50px_rgba(0,0,0,0.95)]"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] p-4 sm:px-5">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-300">
+            Collaboration calendar
+          </div>
+          <h2 className="mt-0.5 text-lg font-semibold">{label}</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-xl border border-white/[0.08] bg-black/20 p-1">
+            {(["MONTH", "WEEK", "AGENDA"] as CalendarMode[]).map((item) => (
+              <button
+                key={item}
+                className={`rounded-lg px-2.5 py-1.5 text-[10px] font-medium transition-colors ${
+                  mode === item
+                    ? "bg-white text-black"
+                    : "text-kos-muted hover:text-white"
+                }`}
+                onClick={() => onModeChange(item)}
+              >
+                {item[0]}
+                {item.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
+          <button
+            className="kos-btn h-9 px-3 text-xs"
+            onClick={() => onDateChange(new Date())}
+          >
+            Today
+          </button>
+          {mode !== "AGENDA" ? (
+            <div className="inline-flex rounded-xl border border-white/[0.08] bg-black/20 p-1">
+              <button
+                className="h-7 w-8 rounded-lg text-kos-muted hover:bg-white/[0.05] hover:text-white"
+                onClick={() => navigate(-1)}
+                aria-label={
+                  mode === "WEEK" ? "Previous week" : "Previous month"
+                }
+              >
+                ←
+              </button>
+              <button
+                className="h-7 w-8 rounded-lg text-kos-muted hover:bg-white/[0.05] hover:text-white"
+                onClick={() => navigate(1)}
+                aria-label={mode === "WEEK" ? "Next week" : "Next month"}
+              >
+                →
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {mode === "MONTH" ? (
+        <>
+          <div className="grid grid-cols-7 border-b border-white/[0.07] bg-white/[0.02] text-center text-[9px] font-semibold uppercase tracking-[0.14em] text-kos-muted">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+              <div key={day} className="py-2.5">
+                {day}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {monthDays.map((day) => {
+              const dayEvents = byDay.get(dateKey(day)) ?? [];
+              const inMonth = day.getMonth() === date.getMonth();
+              const today = dateKey(day) === dateKey(new Date());
+              return (
+                <div
+                  key={dateKey(day)}
+                  className={`min-h-24 border-b border-r border-white/[0.06] p-1.5 sm:min-h-32 sm:p-2 ${
+                    inMonth ? "bg-white/[0.008]" : "bg-black/15 opacity-50"
+                  }`}
+                >
+                  <div
+                    className={`mb-1.5 flex h-6 w-6 items-center justify-center rounded-lg text-[10px] ${
+                      today
+                        ? "bg-blue-500 font-semibold text-white"
+                        : "text-kos-muted"
+                    }`}
+                  >
+                    {day.getDate()}
+                  </div>
+                  <div className="space-y-1">
+                    {dayEvents.slice(0, 3).map((event) => (
+                      <CalendarEventPill
+                        key={event.id}
+                        event={event}
+                        org={org}
+                        compact
+                      />
+                    ))}
+                    {dayEvents.length > 3 ? (
+                      <div className="px-1 text-[9px] text-kos-muted">
+                        +{dayEvents.length - 3} more
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : mode === "WEEK" ? (
+        <div className="grid min-h-[480px] grid-cols-1 divide-y divide-white/[0.06] sm:grid-cols-7 sm:divide-x sm:divide-y-0">
+          {weekDays.map((day) => {
+            const dayEvents = byDay.get(dateKey(day)) ?? [];
+            return (
+              <div key={dateKey(day)} className="min-w-0 p-2.5">
+                <div className="mb-3 border-b border-white/[0.06] pb-2">
+                  <div className="text-[9px] uppercase tracking-wider text-kos-muted">
+                    {day.toLocaleDateString(undefined, { weekday: "short" })}
+                  </div>
+                  <div className="mt-0.5 text-lg font-semibold">
+                    {day.getDate()}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {dayEvents.map((event) => (
+                    <CalendarEventCard key={event.id} event={event} org={org} />
+                  ))}
+                  {!dayEvents.length ? (
+                    <div className="rounded-xl border border-dashed border-white/[0.06] px-2 py-5 text-center text-[9px] text-kos-muted">
+                      No events
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="divide-y divide-white/[0.06]">
+          {events.map((event) => (
+            <Link
+              key={event.id}
+              href={`/${org}/collabs/${event.row.id}`}
+              className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-white/[0.035] sm:px-5"
+            >
+              <div className="w-16 shrink-0 text-center">
+                <div className="text-lg font-semibold">
+                  {event.date.getDate()}
+                </div>
+                <div className="text-[9px] uppercase tracking-wider text-kos-muted">
+                  {event.date.toLocaleDateString(undefined, {
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </div>
+              </div>
+              <PartnerMark
+                name={event.row.projectName}
+                src={event.row.partner.logoUrl}
+                className="h-10 w-10 rounded-xl"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">
+                  {event.row.projectName}
+                </div>
+                <div className="mt-0.5 text-xs text-kos-muted">
+                  {event.label}
+                </div>
+              </div>
+              <CalendarToneDot tone={event.tone} />
+            </Link>
+          ))}
+          {!events.length ? (
+            <div className="flex min-h-64 flex-col items-center justify-center text-center">
+              <IconChart className="h-7 w-7 text-blue-300" />
+              <p className="mt-3 text-sm font-medium">
+                No scheduled events yet
+              </p>
+              <p className="mt-1 text-xs text-kos-muted">
+                Hosting dates and wallet deadlines will appear automatically.
+              </p>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CalendarToneDot({ tone }: { tone: CalendarEventTone }) {
+  return (
+    <span
+      className={`h-2 w-2 shrink-0 rounded-full ${
+        tone === "blue"
+          ? "bg-blue-400"
+          : tone === "amber"
+            ? "bg-amber-400"
+            : "bg-emerald-400"
+      }`}
+    />
+  );
+}
+
+function CalendarEventPill({
+  event,
+  org,
+  compact,
+}: {
+  event: CollaborationCalendarEvent;
+  org: string;
+  compact?: boolean;
+}) {
+  const tone =
+    event.tone === "blue"
+      ? "border-blue-400/15 bg-blue-500/10 text-blue-200"
+      : event.tone === "amber"
+        ? "border-amber-400/15 bg-amber-500/10 text-amber-200"
+        : "border-emerald-400/15 bg-emerald-500/10 text-emerald-200";
+  return (
+    <Link
+      href={`/${org}/collabs/${event.row.id}`}
+      title={`${event.label}: ${event.row.projectName}`}
+      className={`block truncate rounded-md border px-1.5 py-1 ${
+        compact ? "text-[8px] sm:text-[9px]" : "text-[10px]"
+      } ${tone}`}
+    >
+      {event.label} · {event.row.projectName}
+    </Link>
+  );
+}
+
+function CalendarEventCard({
+  event,
+  org,
+}: {
+  event: CollaborationCalendarEvent;
+  org: string;
+}) {
+  return (
+    <Link
+      href={`/${org}/collabs/${event.row.id}`}
+      className="block rounded-xl border border-white/[0.07] bg-white/[0.025] p-2 transition-colors hover:border-white/[0.14] hover:bg-white/[0.045]"
+    >
+      <div className="flex items-center gap-2">
+        <CalendarToneDot tone={event.tone} />
+        <span className="text-[9px] font-medium text-kos-muted">
+          {event.label}
+        </span>
+      </div>
+      <div className="mt-1.5 truncate text-[10px] font-semibold">
+        {event.row.projectName}
+      </div>
+    </Link>
+  );
+}
+
+function BrandingOverrideModal({
+  row,
+  org,
+  onClose,
+  onSave,
+}: {
+  row: CollabRow;
+  org: string;
+  onClose: () => void;
+  onSave: (patch: Record<string, unknown>) => Promise<void>;
+}) {
+  const [logoUrl, setLogoUrl] = useState(row.partner.logoUrl ?? "");
+  const [bannerUrl, setBannerUrl] = useState(row.partner.bannerUrl ?? "");
+  const [busy, setBusy] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function refreshFromX() {
+    if (!row.partner.xUrl) return;
+    setFetching(true);
+    setMessage(null);
+    const response = await fetch(
+      `/api/${org}/collaborations/x-profile?url=${encodeURIComponent(
+        row.partner.xUrl,
+      )}`,
+    );
+    const body = (await response.json().catch(() => ({}))) as {
+      profile?: XProfileMetadata;
+      error?: string;
+    };
+    if (body.profile) {
+      setLogoUrl(body.profile.avatarUrl ?? logoUrl);
+      setBannerUrl(body.profile.bannerUrl ?? bannerUrl);
+      setMessage("Latest X branding is ready to save.");
+    } else {
+      setMessage(body.error ?? "Could not refresh the X profile.");
+    }
+    setFetching(false);
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 p-0 backdrop-blur-md sm:items-center sm:p-5"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.currentTarget === event.target) onClose();
+      }}
+    >
+      <div
+        className="max-h-[95dvh] w-full max-w-xl overflow-y-auto rounded-t-[2rem] border border-white/[0.11] bg-[#151516] p-5 shadow-2xl sm:rounded-[2rem] sm:p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Edit ${row.projectName} branding`}
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-300">
+              Project branding
+            </div>
+            <h2 className="mt-1 text-xl font-semibold">{row.projectName}</h2>
+            <p className="mt-1 text-xs leading-5 text-kos-muted">
+              X branding fills automatically. Uploaded images always take
+              priority.
+            </p>
+          </div>
+          <button
+            className="kos-btn h-9 w-9 p-0"
+            onClick={onClose}
+            aria-label="Close branding editor"
+          >
+            ×
+          </button>
+        </div>
+        <div className="space-y-5">
+          <ImageDrop
+            label="Project logo or avatar"
+            value={logoUrl}
+            onChange={setLogoUrl}
+          />
+          <ImageDrop
+            label="Project banner"
+            value={bannerUrl}
+            onChange={setBannerUrl}
+          />
+        </div>
+        {message ? (
+          <p className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2 text-xs text-kos-muted">
+            {message}
+          </p>
+        ) : null}
+        <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-white/[0.08] pt-4">
+          {row.partner.xUrl ? (
+            <button
+              className="kos-btn h-9 px-3 text-xs"
+              disabled={fetching || busy}
+              onClick={refreshFromX}
+            >
+              {fetching ? "Fetching from X…" : "Refresh from X"}
+            </button>
+          ) : null}
+          <div className="ml-auto flex gap-2">
+            <button
+              className="kos-btn h-9 px-3 text-xs"
+              disabled={busy}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              className="kos-btn-primary h-9 px-3 text-xs"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                await onSave({ logoUrl, bannerUrl });
+                setBusy(false);
+              }}
+            >
+              {busy ? "Saving…" : "Save branding"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

@@ -13,6 +13,7 @@ import {
 } from "@/lib/collab-shared";
 import { sanitizeHttpUrl } from "@/lib/raffle-input";
 import { buildAllTimeActivityHistory } from "@/lib/collab-presentation";
+import { fetchXProfileMetadata } from "@/lib/x-profile-metadata";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -389,10 +390,17 @@ export const POST = withAccess(async (req, { params }) => {
     PERMISSIONS.COLLAB_CREATE,
   );
   const body = await req.json().catch(() => ({}));
-  const projectName = text(body.projectName, 120);
+  const requestedXUrl = sanitizeHttpUrl(body.xUrl);
+  const xProfile = requestedXUrl
+    ? await fetchXProfileMetadata(requestedXUrl).catch(() => null)
+    : null;
+  const projectName =
+    text(body.projectName, 120) || text(xProfile?.displayName, 120);
   if (!projectName) {
     return NextResponse.json(
-      { error: "Project name is required." },
+      {
+        error: "Project name is required when the X profile cannot be fetched.",
+      },
       { status: 400 },
     );
   }
@@ -458,7 +466,7 @@ export const POST = withAccess(async (req, { params }) => {
   const note = text(body.notes, 10_000);
 
   const collaboration = await prisma.$transaction(async (tx) => {
-    const partner = await tx.collaborationPartner.upsert({
+    let partner = await tx.collaborationPartner.upsert({
       where: {
         organizationId_normalizedName: {
           organizationId: org.id,
@@ -469,10 +477,18 @@ export const POST = withAccess(async (req, { params }) => {
         organizationId: org.id,
         name: projectName,
         normalizedName: normalizeCollabName(projectName),
-        logoUrl: sanitizeHttpUrl(body.logoUrl),
-        websiteUrl: sanitizeHttpUrl(body.websiteUrl),
+        logoUrl:
+          sanitizeHttpUrl(body.logoUrl) ?? sanitizeHttpUrl(xProfile?.avatarUrl),
+        bannerUrl:
+          sanitizeHttpUrl(body.bannerUrl) ??
+          sanitizeHttpUrl(xProfile?.bannerUrl),
+        websiteUrl:
+          sanitizeHttpUrl(body.websiteUrl) ??
+          sanitizeHttpUrl(xProfile?.websiteUrl),
         discordUrl: sanitizeHttpUrl(body.discordUrl),
-        xUrl: sanitizeHttpUrl(body.xUrl),
+        xUrl: sanitizeHttpUrl(xProfile?.profileUrl) ?? requestedXUrl,
+        bio: text(xProfile?.bio, 500) || null,
+        xVerified: xProfile?.verified ?? false,
         chain: text(body.chain, 40) || null,
         category: text(body.category, 80) || null,
         createdById: user.id,
@@ -485,11 +501,14 @@ export const POST = withAccess(async (req, { params }) => {
         ...(body.websiteUrl !== undefined
           ? { websiteUrl: sanitizeHttpUrl(body.websiteUrl) }
           : {}),
+        ...(body.bannerUrl !== undefined
+          ? { bannerUrl: sanitizeHttpUrl(body.bannerUrl) }
+          : {}),
         ...(body.discordUrl !== undefined
           ? { discordUrl: sanitizeHttpUrl(body.discordUrl) }
           : {}),
         ...(body.xUrl !== undefined
-          ? { xUrl: sanitizeHttpUrl(body.xUrl) }
+          ? { xUrl: sanitizeHttpUrl(xProfile?.profileUrl) ?? requestedXUrl }
           : {}),
         ...(body.chain !== undefined
           ? { chain: text(body.chain, 40) || null }
@@ -499,6 +518,28 @@ export const POST = withAccess(async (req, { params }) => {
           : {}),
       },
     });
+
+    if (xProfile) {
+      const discoveredBranding = {
+        ...(!partner.logoUrl && xProfile.avatarUrl
+          ? { logoUrl: sanitizeHttpUrl(xProfile.avatarUrl) }
+          : {}),
+        ...(!partner.bannerUrl && xProfile.bannerUrl
+          ? { bannerUrl: sanitizeHttpUrl(xProfile.bannerUrl) }
+          : {}),
+        ...(!partner.websiteUrl && xProfile.websiteUrl
+          ? { websiteUrl: sanitizeHttpUrl(xProfile.websiteUrl) }
+          : {}),
+        ...(!partner.bio && xProfile.bio
+          ? { bio: text(xProfile.bio, 500) }
+          : {}),
+        xVerified: xProfile.verified,
+      };
+      partner = await tx.collaborationPartner.update({
+        where: { id: partner.id },
+        data: discoveredBranding,
+      });
+    }
 
     const tagIds: string[] = [];
     for (const name of tags) {

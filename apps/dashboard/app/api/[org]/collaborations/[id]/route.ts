@@ -11,6 +11,7 @@ import {
 import { syncCollaborationState } from "@/lib/collab";
 import { sanitizeHttpUrl } from "@/lib/raffle-input";
 import { sanitizeRichText } from "@/lib/rich-text";
+import { fetchXProfileMetadata } from "@/lib/x-profile-metadata";
 import { del } from "@vercel/blob";
 import type { Prisma } from "@prisma/client";
 
@@ -251,6 +252,12 @@ export const PATCH = withAccess(async (req, { params }) => {
     );
   }
   const body = await req.json().catch(() => ({}));
+  const requestedXUrl =
+    "xUrl" in body ? sanitizeHttpUrl(body.xUrl) : existing.partner.xUrl;
+  const xProfile =
+    "xUrl" in body && requestedXUrl
+      ? await fetchXProfileMetadata(requestedXUrl).catch(() => null)
+      : null;
   const assignmentFields = ["ownerId", "assignedToId", "reviewerId"];
   if (assignmentFields.some((field) => field in body)) {
     await requireOrgAccess(params.org, PERMISSIONS.COLLAB_ASSIGN);
@@ -376,9 +383,30 @@ export const PATCH = withAccess(async (req, { params }) => {
     partnerData.name = name;
     partnerData.normalizedName = normalizedName;
   }
-  const partnerUrls = ["logoUrl", "websiteUrl", "discordUrl", "xUrl"] as const;
+  const partnerUrls = [
+    "logoUrl",
+    "bannerUrl",
+    "websiteUrl",
+    "discordUrl",
+    "xUrl",
+  ] as const;
   for (const field of partnerUrls) {
     if (field in body) partnerData[field] = sanitizeHttpUrl(body[field]);
+  }
+  if ("xUrl" in body) {
+    partnerData.xUrl =
+      sanitizeHttpUrl(xProfile?.profileUrl) ?? requestedXUrl ?? null;
+    partnerData.xVerified = xProfile?.verified ?? false;
+    if (xProfile) {
+      if (!existing.partner.logoUrl && !("logoUrl" in body))
+        partnerData.logoUrl = sanitizeHttpUrl(xProfile.avatarUrl);
+      if (!existing.partner.bannerUrl && !("bannerUrl" in body))
+        partnerData.bannerUrl = sanitizeHttpUrl(xProfile.bannerUrl);
+      if (!existing.partner.websiteUrl && !("websiteUrl" in body))
+        partnerData.websiteUrl = sanitizeHttpUrl(xProfile.websiteUrl);
+      if (!existing.partner.bio)
+        partnerData.bio = text(xProfile.bio, 500) || null;
+    }
   }
   if ("chain" in body) partnerData.chain = text(body.chain, 40) || null;
   if ("category" in body)

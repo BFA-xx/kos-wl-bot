@@ -85,9 +85,12 @@ interface DetailData {
       id: string;
       name: string;
       logoUrl: string | null;
+      bannerUrl: string | null;
       websiteUrl: string | null;
       discordUrl: string | null;
       xUrl: string | null;
+      bio: string | null;
+      xVerified: boolean;
       chain: string | null;
       category: string | null;
       privateNotes: string | null;
@@ -285,7 +288,10 @@ export function CollabDetail() {
           prefill={{
             projectName: collaboration.projectName,
             description: collaboration.requirements ?? undefined,
-            bannerUrl: collaboration.partner.logoUrl ?? undefined,
+            bannerUrl:
+              collaboration.partner.bannerUrl ??
+              collaboration.partner.logoUrl ??
+              undefined,
             externalUrl: collaboration.partner.websiteUrl ?? undefined,
             spots: Math.max(1, collaboration.whitelistAllocation),
           }}
@@ -300,13 +306,21 @@ export function CollabDetail() {
         ← Back to Collab Hub
       </Link>
       <div className="overflow-hidden rounded-[2rem] border border-white/[0.09] bg-gradient-to-br from-white/[0.06] via-white/[0.025] to-transparent shadow-[0_32px_100px_-60px_rgba(59,130,246,0.65)]">
+        <RaffleBanner
+          name={collaboration.projectName}
+          src={collaboration.partner.bannerUrl}
+          fallbackSources={collaboration.raffles
+            .map(({ raffle }) => raffle.bannerUrl)
+            .filter((value): value is string => Boolean(value))}
+          className="h-32 w-full sm:h-40"
+        />
         <div className="p-5 sm:p-7">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex min-w-0 items-start gap-4">
               <PartnerMark
                 name={collaboration.projectName}
                 src={collaboration.partner.logoUrl}
-                className="h-16 w-16 rounded-2xl text-lg sm:h-20 sm:w-20"
+                className="-mt-12 h-16 w-16 rounded-2xl border-2 border-[#141416] text-lg shadow-xl sm:-mt-14 sm:h-20 sm:w-20"
               />
               <div className="min-w-0">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -324,15 +338,30 @@ export function CollabDetail() {
                     priority
                   </span>
                 </div>
-                <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-4xl">
-                  {collaboration.projectName}
-                </h1>
+                <div className="flex min-w-0 items-center gap-2">
+                  <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-4xl">
+                    {collaboration.projectName}
+                  </h1>
+                  {collaboration.partner.xVerified ? (
+                    <span
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[11px] font-bold text-white"
+                      title="Verified on X"
+                    >
+                      ✓
+                    </span>
+                  ) : null}
+                </div>
                 <p className="mt-2 text-sm text-kos-muted">
                   {collaborationDescriptor(
                     collaboration.raffles,
                     collaboration.partner,
                   ) || "Community collaboration"}
                 </p>
+                {collaboration.partner.bio ? (
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
+                    {collaboration.partner.bio}
+                  </p>
+                ) : null}
                 <div className="mt-3 flex flex-wrap gap-2">
                   {collaboration.tags.map(({ tag }) => (
                     <span
@@ -608,6 +637,11 @@ function OverviewTab({
             label="Project logo URL"
             value={form.logoUrl}
             onChange={(value) => set("logoUrl", value)}
+          />
+          <Input
+            label="Project banner URL"
+            value={form.bannerUrl}
+            onChange={(value) => set("bannerUrl", value)}
           />
           <Input
             label="Website"
@@ -2225,6 +2259,7 @@ function overviewForm(c: DetailData["collaboration"]) {
   return {
     projectName: c.projectName,
     logoUrl: c.partner.logoUrl ?? "",
+    bannerUrl: c.partner.bannerUrl ?? "",
     websiteUrl: c.partner.websiteUrl ?? "",
     discordUrl: c.partner.discordUrl ?? "",
     xUrl: c.partner.xUrl ?? "",

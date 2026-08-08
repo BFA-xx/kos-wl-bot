@@ -985,9 +985,12 @@ model CollaborationPartner {
   name           String
   normalizedName String
   logoUrl        String?
+  bannerUrl      String?
   websiteUrl     String?
   discordUrl     String?
   xUrl           String?
+  bio            String?
+  xVerified      Boolean  @default(false)
   chain          String?
   category       String?
   privateNotes   String?
