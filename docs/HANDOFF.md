@@ -1,9 +1,9 @@
 # Engineering Handoff
 
-Last updated: 2026-08-01
+Last updated: 2026-08-08
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited production application commit: `2b67642`
+Audited production application commit: `39b49e9`
 
 ## Current state
 
@@ -106,11 +106,12 @@ Phase 3 is implemented through S2.5:
   dashboard projects. Mobile uses wallet cards and 25-row pages while desktop
   retains the 100-row table; the multi-chain importer is touch-sized and has
   no horizontal overflow at the authenticated production phone viewport.
-- Collab Hub Spreadsheet Edition is migrated and deployed. The CRM-style
-  board/calendar workspace has been replaced by one inline-editable tracker
-  with GTD/FCFS spots, host/status controls, document links/uploads, linked
-  raffle winners/proofs, wallet exports, sorting/filtering, and row/bulk
-  actions. Existing raffle and bot automation remains the source of truth.
+- Collab Hub Spreadsheet Edition and its non-redesign refinement are migrated
+  and deployed. Table remains the default inline-editable tracker, with Board
+  and Calendar views, GTD/FCFS spots, host/status controls, document
+  links/uploads, linked raffle winners/proofs, wallet exports,
+  sorting/filtering, and row/bulk actions. Existing raffle and bot automation
+  remains the source of truth.
 
 ## Team Wallet Pool — production release 2026-08-01
 
@@ -398,6 +399,60 @@ Mobile verification and production evidence:
   multi-chain EVM wallets, verify mixed Community/Team Pool CSV and Excel rows,
   cancel it, release the reservation, and confirm the pool returns to
   Available.
+
+## Collab Hub refinement — production release 2026-08-08
+
+### Delivered
+
+- Preserved the spreadsheet as the default Collab Hub workspace and restored
+  Table, Board, and Calendar view switching. Calendar supports Month, Week,
+  and Agenda modes; Board supports drag-and-drop pipeline movement.
+- Refined the existing table with KPI cards, richer partner and status cells,
+  resizable columns, row hover previews, streamlined inline creation, and
+  direct winner, proof, wallet CSV/TXT, and wallet XLSX actions.
+- Added partner logo/banner/bio/verified metadata, a tenant-scoped X profile
+  metadata endpoint, automatic best-effort enrichment, manual branding upload,
+  and a branded collaboration detail header without replacing manual image
+  overrides.
+- Added additive migration `20260808120000_collab_partner_branding` for
+  `CollaborationPartner.bannerUrl`, `bio`, and non-null `xVerified` with a
+  `false` default.
+
+### Verification
+
+- The full 35-migration history applied successfully to a disposable local
+  PostgreSQL database. Prisma reported the database current, all three new
+  columns had the expected nullability, and schema diff reported no difference.
+- All 96 dashboard tests passed, including the two X metadata parser tests.
+  Workspace DB/dashboard/bot typechecks, Prisma validation, `git diff --check`,
+  and the optimized dashboard production build passed. The build emitted the
+  new `/api/[org]/collaborations/x-profile` route.
+
+### Production release evidence
+
+- Application commit `39b49e9` (`feat: refine Collab Hub experience`) was
+  pushed directly to `main`.
+- Before migration, a mode-`600` custom-format logical backup was created at
+  `/home/ubuntu/backups/kos-neon-pre-collab-hub-refinement-20260808T111852Z.dump`:
+  48,194,921 bytes, 501 readable archive entries, SHA-256
+  `71df8e83383e7ba411f875f58a224d87c9d4ab9be892c95ec36c9e2bafd0090e`.
+- Migration `20260808120000_collab_partner_branding` was applied before the
+  dashboard push. Prisma reports all 35 migrations current; all 82 partner
+  records remain, `xVerified` has zero nulls, and no branding values were
+  fabricated for existing records.
+- The EC2 bot was not rebuilt or restarted because the release changes only
+  the dashboard and additive partner columns. PM2 kept `kos-bot` online as PID
+  `258485` with 49 historical restarts, and health remained `ok:true`,
+  `ready:true`, with two guilds and a successful scheduler tick.
+- Both connected Vercel projects succeeded for `39b49e9`:
+  `Vercel – kos-wl-bot-dashboard` and
+  `Vercel – kos-wl-bot-dashboard-3a8x`.
+- Live canaries on `https://raffle.koslabs.app` returned the expected `307` to
+  login for `/kos/collabs`, and authenticated `401` boundaries rather than
+  `404` or `500` for both collaboration APIs, including the new X metadata
+  route. The compatibility Vercel domain also returned the expected `401`.
+  Deployment QA did not create or modify collaboration, raffle, wallet,
+  document, or proof records.
 
 ## Collab Hub Spreadsheet Edition — production release 2026-08-01
 
