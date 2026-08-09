@@ -48,9 +48,7 @@ export function teamWalletChains(wallet: {
   chain: WalletChain;
   chains?: readonly WalletChain[];
 }): WalletChain[] {
-  return wallet.chains?.length
-    ? [...new Set(wallet.chains)]
-    : [wallet.chain];
+  return wallet.chains?.length ? [...new Set(wallet.chains)] : [wallet.chain];
 }
 
 function csvCells(line: string, delimiter: string): string[] {
@@ -248,7 +246,7 @@ function shuffle<T>(values: T[], random: () => number): T[] {
   return shuffled;
 }
 
-export function selectTeamWallets({
+export function selectTeamWallets<T extends TeamWalletCandidate>({
   candidates,
   members,
   needed,
@@ -256,13 +254,13 @@ export function selectTeamWallets({
   lastSelectedOwnerId,
   random = Math.random,
 }: {
-  candidates: TeamWalletCandidate[];
+  candidates: T[];
   members: TeamWalletMemberOrder[];
   needed: number;
   mode: TeamWalletSelectionMode;
   lastSelectedOwnerId?: string | null;
   random?: () => number;
-}): { selected: TeamWalletCandidate[]; lastSelectedOwnerId: string | null } {
+}): { selected: T[]; lastSelectedOwnerId: string | null } {
   if (needed <= 0 || candidates.length === 0) {
     return { selected: [], lastSelectedOwnerId: lastSelectedOwnerId ?? null };
   }
@@ -309,7 +307,7 @@ export function selectTeamWallets({
       ...ownerIds.slice(0, lastIndex + 1),
     ];
   }
-  const selected: TeamWalletCandidate[] = [];
+  const selected: T[] = [];
   while (selected.length < needed) {
     let progressed = false;
     for (const ownerId of ownerIds) {

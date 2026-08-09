@@ -57,6 +57,7 @@ export async function GET(
           "wallet_address",
           "submitted_at",
           "Source",
+          "Team Member",
         ],
         rows.map((r) => [
           r.position ?? "",
@@ -66,6 +67,7 @@ export async function GET(
           r.address,
           r.recordedAt?.toISOString() ?? "",
           r.source,
+          r.teamMember ?? "",
         ]),
       );
       filename = `winners-${id}.csv`;

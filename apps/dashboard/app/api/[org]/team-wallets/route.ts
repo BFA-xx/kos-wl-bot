@@ -4,7 +4,9 @@ import { prisma } from "@/lib/db";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { logAudit, requireOrgAccess, withAccess } from "@/lib/access";
 import {
+  ACTIVE_RAFFLE_STATUSES,
   canManageAllTeamWallets,
+  effectiveTeamWalletStatus,
   ensureDefaultTeamWalletPool,
   organizationTeamMembers,
 } from "@/lib/team-wallet-server";
@@ -38,6 +40,16 @@ export const GET = withAccess(async (request, { params }) => {
       },
       include: {
         owner: { select: { id: true, username: true, globalName: true } },
+        _count: {
+          select: {
+            usages: {
+              where: {
+                status: "RESERVED",
+                raffle: { status: { in: [...ACTIVE_RAFFLE_STATUSES] } },
+              },
+            },
+          },
+        },
         usages: {
           orderBy: { reservedAt: "desc" },
           take: 20,
@@ -68,7 +80,7 @@ export const GET = withAccess(async (request, { params }) => {
     chain: wallet.chain,
     chains: teamWalletChains(wallet),
     address: decryptSecret(wallet.address),
-    status: wallet.status,
+    status: effectiveTeamWalletStatus(wallet.status, wallet._count.usages),
     timesUsed: wallet.timesUsed,
     lastUsedAt: wallet.lastUsedAt,
     createdAt: wallet.createdAt,
@@ -101,12 +113,26 @@ export const GET = withAccess(async (request, { params }) => {
         where: { poolId: pool.id, deletedAt: null },
         include: {
           owner: { select: { id: true, username: true, globalName: true } },
+          _count: {
+            select: {
+              usages: {
+                where: {
+                  status: "RESERVED",
+                  raffle: { status: { in: [...ACTIVE_RAFFLE_STATUSES] } },
+                },
+              },
+            },
+          },
         },
       });
   const statusCounts = { AVAILABLE: 0, RESERVED: 0, DISABLED: 0 };
   const useByOwner = new Map<string, number>();
   for (const wallet of allPoolWallets) {
-    statusCounts[wallet.status] += 1;
+    const status = effectiveTeamWalletStatus(
+      wallet.status,
+      wallet._count.usages,
+    );
+    statusCounts[status] += 1;
     useByOwner.set(
       wallet.ownerId,
       (useByOwner.get(wallet.ownerId) ?? 0) + wallet.timesUsed,
@@ -238,14 +264,12 @@ export const POST = withAccess(async (request, { params }) => {
 
   const parsed = parseTeamWalletImport(content, selectedChains);
   const pool = await ensureDefaultTeamWalletPool(access.org.id);
-  let result:
-    | {
-        created: number;
-        updated: number;
-        requestedCreates: number;
-        errors: { row: number; error: string }[];
-      }
-    | null = null;
+  let result: {
+    created: number;
+    updated: number;
+    requestedCreates: number;
+    errors: { row: number; error: string }[];
+  } | null = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       result = await prisma.$transaction(
@@ -295,9 +319,7 @@ export const POST = withAccess(async (request, { params }) => {
             const currentChains = teamWalletChains(wallet);
             const nextChains = [
               ...currentChains,
-              ...row.chains.filter(
-                (chain) => !currentChains.includes(chain),
-              ),
+              ...row.chains.filter((chain) => !currentChains.includes(chain)),
             ];
             if (nextChains.length === currentChains.length) {
               errors.push({
@@ -379,8 +401,7 @@ export const POST = withAccess(async (request, { params }) => {
       ownerId,
       imported: result.created,
       updated: result.updated,
-      rejected:
-        result.errors.length + result.requestedCreates - result.created,
+      rejected: result.errors.length + result.requestedCreates - result.created,
       selectedChains,
     },
   });

@@ -5,6 +5,7 @@ export interface AddressRow {
   address: string;
   chain?: string | null;
   source?: "Community" | "Team Pool";
+  teamMember?: string | null;
 }
 
 /**
@@ -20,9 +21,13 @@ export async function addressesWorkbook(
   wb.creator = "KOS Raffles";
   const ws = wb.addWorksheet("Addresses");
   const includeSource = rows.some((row) => Boolean(row.source));
+  const includeTeamMember = rows.some((row) => Boolean(row.teamMember));
 
-  const lastCol =
-    mode === "full" ? (includeSource ? "D" : "C") : includeSource ? "B" : "A";
+  const columnCount =
+    (mode === "full" ? 3 : 1) +
+    (includeSource ? 1 : 0) +
+    (includeTeamMember ? 1 : 0);
+  const lastCol = String.fromCharCode(64 + columnCount);
   ws.mergeCells(`A1:${lastCol}1`);
   const title = ws.getCell("A1");
   title.value = `KOS X ${project}`;
@@ -42,8 +47,13 @@ export async function addressesWorkbook(
           "Chain",
           "Wallet Address",
           ...(includeSource ? ["Source"] : []),
+          ...(includeTeamMember ? ["Team Member"] : []),
         ]
-      : ["Wallet Address", ...(includeSource ? ["Source"] : [])];
+      : [
+          "Wallet Address",
+          ...(includeSource ? ["Source"] : []),
+          ...(includeTeamMember ? ["Team Member"] : []),
+        ];
   const headerRow = ws.addRow(header);
   headerRow.font = { bold: true };
 
@@ -54,8 +64,14 @@ export async function addressesWorkbook(
         r.chain ?? "",
         r.address,
         ...(includeSource ? [r.source ?? ""] : []),
+        ...(includeTeamMember ? [r.teamMember ?? ""] : []),
       ]);
-    else ws.addRow([r.address, ...(includeSource ? [r.source ?? ""] : [])]);
+    else
+      ws.addRow([
+        r.address,
+        ...(includeSource ? [r.source ?? ""] : []),
+        ...(includeTeamMember ? [r.teamMember ?? ""] : []),
+      ]);
   }
 
   // Column widths
@@ -64,9 +80,13 @@ export async function addressesWorkbook(
     ws.getColumn(2).width = 12;
     ws.getColumn(3).width = 50;
     if (includeSource) ws.getColumn(4).width = 16;
+    if (includeTeamMember)
+      ws.getColumn(3 + (includeSource ? 1 : 0) + 1).width = 24;
   } else {
     ws.getColumn(1).width = 50;
     if (includeSource) ws.getColumn(2).width = 16;
+    if (includeTeamMember)
+      ws.getColumn(1 + (includeSource ? 1 : 0) + 1).width = 24;
   }
 
   const out = await wb.xlsx.writeBuffer();

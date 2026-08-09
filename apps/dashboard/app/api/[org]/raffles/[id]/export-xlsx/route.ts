@@ -34,6 +34,7 @@ export async function GET(
       chain: row.chain,
       address: row.address,
       source: row.source,
+      teamMember: row.teamMember,
     }));
 
     const buf = await addressesWorkbook(raffle.projectName, rows, mode);

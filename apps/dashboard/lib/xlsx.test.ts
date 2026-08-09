@@ -18,6 +18,7 @@ describe("raffle wallet workbook sources", () => {
           chain: "ETHEREUM",
           address: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           source: "Team Pool",
+          teamMember: "Team Member A",
         },
       ],
       "full",
@@ -33,9 +34,12 @@ describe("raffle wallet workbook sources", () => {
       "Chain",
       "Wallet Address",
       "Source",
+      "Team Member",
     ]);
     expect(sheet.getCell("D3").value).toBe("Community");
     expect(sheet.getCell("D4").value).toBe("Team Pool");
+    expect(sheet.getCell("E3").value).toBe("");
+    expect(sheet.getCell("E4").value).toBe("Team Member A");
   });
 
   it("does not alter collaboration workbooks without source values", async () => {

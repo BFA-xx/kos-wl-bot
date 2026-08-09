@@ -5,6 +5,27 @@ import { useRouter } from "next/navigation";
 import { useOrg, useCan } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
 
+type TeamWalletMode = "ROUND_ROBIN" | "RANDOM" | "PRIORITY";
+
+interface TeamWalletPreview {
+  selectionMode: TeamWalletMode;
+  requiredWallets: number;
+  communityWallets: number;
+  teamWalletsReserved: number;
+  remainingWalletsNeeded: number;
+  availableWallets: number;
+  maxSelectable: number;
+  selectedCount: number;
+  selectedWallets: {
+    id: string;
+    address: string;
+    ownerId: string;
+    ownerName: string;
+    chain: string;
+    version: string;
+  }[];
+}
+
 export function RaffleActions({
   raffleId,
   status,
@@ -30,17 +51,14 @@ export function RaffleActions({
   const [teamWalletModal, setTeamWalletModal] = useState<
     "fill" | "release" | null
   >(null);
-  const [teamWalletPreview, setTeamWalletPreview] = useState<{
-    selectionMode: "ROUND_ROBIN" | "RANDOM" | "PRIORITY";
-    requiredWallets: number;
-    communityWallets: number;
-    teamWalletsReserved: number;
-    remainingWalletsNeeded: number;
-    availableWallets: number;
-  } | null>(null);
-  const [teamWalletMode, setTeamWalletMode] = useState<
-    "ROUND_ROBIN" | "RANDOM" | "PRIORITY"
-  >("ROUND_ROBIN");
+  const [teamWalletPreview, setTeamWalletPreview] =
+    useState<TeamWalletPreview | null>(null);
+  const [teamWalletMode, setTeamWalletMode] =
+    useState<TeamWalletMode>("ROUND_ROBIN");
+  const [teamWalletCount, setTeamWalletCount] = useState(0);
+  const [teamWalletPreviewLoading, setTeamWalletPreviewLoading] =
+    useState(false);
+  const [teamWalletError, setTeamWalletError] = useState<string | null>(null);
 
   const api = (path: string) => `/api/${slug}/raffles/${raffleId}${path}`;
 
@@ -96,38 +114,83 @@ export function RaffleActions({
   async function openTeamWalletModal(kind: "fill" | "release") {
     setTeamWalletModal(kind);
     setTeamWalletPreview(null);
+    setTeamWalletError(null);
     setMsg(null);
-    const res = await fetch(api("/team-wallets"));
+    await loadTeamWalletPreview(null, null, true);
+  }
+
+  async function loadTeamWalletPreview(
+    count: number | null,
+    selectionMode: TeamWalletMode | null,
+    closeOnError = false,
+  ) {
+    setTeamWalletPreviewLoading(true);
+    setTeamWalletError(null);
+    const search = new URLSearchParams();
+    if (count !== null) search.set("count", String(count));
+    if (selectionMode) search.set("selectionMode", selectionMode);
+    const res = await fetch(
+      api(`/team-wallets${search.size ? `?${search.toString()}` : ""}`),
+    );
     const body = await res.json().catch(() => ({}));
+    setTeamWalletPreviewLoading(false);
     if (!res.ok) {
-      setTeamWalletModal(null);
-      setMsg(body.error ?? "Couldn't load the Team Wallet Pool.");
+      const error = body.error ?? "Couldn't load the Team Wallet Pool.";
+      if (closeOnError) {
+        setTeamWalletModal(null);
+        setMsg(error);
+      } else {
+        setTeamWalletError(error);
+      }
       return;
     }
     setTeamWalletPreview(body);
     setTeamWalletMode(body.selectionMode ?? "ROUND_ROBIN");
+    setTeamWalletCount(body.selectedCount ?? 0);
   }
 
   async function confirmTeamWalletFill() {
+    if (!teamWalletPreview) return;
     setBusy("team-wallets");
+    setTeamWalletError(null);
     const res = await fetch(api("/team-wallets"), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ selectionMode: teamWalletMode }),
+      body: JSON.stringify({
+        selectionMode: teamWalletMode,
+        count: teamWalletCount,
+        wallets: teamWalletPreview.selectedWallets.map((wallet) => ({
+          id: wallet.id,
+          version: wallet.version,
+        })),
+      }),
     });
     const body = await res.json().catch(() => ({}));
     setBusy(null);
     if (!res.ok) {
-      setMsg(body.error ?? "Team wallets could not be reserved.");
+      setTeamWalletError(body.error ?? "Team wallets could not be reserved.");
       return;
     }
     setTeamWalletModal(null);
     setMsg(
       body.selected
-        ? `${body.selected} team wallet${body.selected === 1 ? "" : "s"} reserved. Final exports now include Source.`
+        ? `${body.selected} team wallet${body.selected === 1 ? "" : "s"} reserved. ${body.remaining} slot${body.remaining === 1 ? " remains" : "s remain"}.`
         : "This raffle already has all required wallets.",
     );
     router.refresh();
+  }
+
+  function updateTeamWalletCount(next: number) {
+    if (
+      !teamWalletPreview ||
+      teamWalletPreview.maxSelectable === 0 ||
+      !Number.isFinite(next)
+    )
+      return;
+    setTeamWalletCount(
+      Math.min(teamWalletPreview.maxSelectable, Math.max(1, next)),
+    );
+    setTeamWalletError(null);
   }
 
   async function confirmTeamWalletRelease() {
@@ -150,6 +213,11 @@ export function RaffleActions({
   const canShowTeamWalletFill = canFillTeamWallets && status === "ENDED";
   const canShowTeamWalletRelease =
     canReleaseTeamWallets && status === "CANCELLED";
+  const teamWalletPreviewIsCurrent = Boolean(
+    teamWalletPreview &&
+    teamWalletPreview.selectedCount === teamWalletCount &&
+    teamWalletPreview.selectionMode === teamWalletMode,
+  );
   const nothing =
     !canEnd &&
     !canRepost &&
@@ -267,7 +335,7 @@ export function RaffleActions({
             }
           }}
         >
-          <div className="max-h-[calc(100dvh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-white/[0.10] bg-[#181818] p-5 shadow-2xl shadow-black/70 sm:rounded-3xl sm:p-6">
+          <div className="max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl overflow-y-auto rounded-t-3xl border border-white/[0.10] bg-[#181818] p-5 shadow-2xl shadow-black/70 sm:rounded-3xl sm:p-6">
             <h2 id="team-wallet-modal-title" className="text-xl font-semibold">
               {teamWalletModal === "fill"
                 ? "Fill Team Wallets"
@@ -289,50 +357,203 @@ export function RaffleActions({
                     value={teamWalletPreview.communityWallets}
                   />
                   <TeamWalletMetric
-                    label="Reserved"
-                    value={teamWalletPreview.teamWalletsReserved}
+                    label="Team Wallets"
+                    value={
+                      teamWalletPreview.teamWalletsReserved +
+                      (teamWalletModal === "fill" ? teamWalletCount : 0)
+                    }
                   />
                   <TeamWalletMetric
-                    label="Need"
-                    value={teamWalletPreview.remainingWalletsNeeded}
+                    label="Remaining"
+                    value={Math.max(
+                      0,
+                      teamWalletPreview.remainingWalletsNeeded -
+                        (teamWalletModal === "fill" ? teamWalletCount : 0),
+                    )}
                     accent
                   />
                 </div>
 
                 {teamWalletModal === "fill" ? (
-                  <div className="mt-5">
-                    <label className="kos-label" htmlFor="team-wallet-mode">
-                      Selection mode
-                    </label>
-                    <select
-                      id="team-wallet-mode"
-                      className="kos-input"
-                      value={teamWalletMode}
-                      onChange={(event) =>
-                        setTeamWalletMode(
-                          event.target.value as typeof teamWalletMode,
-                        )
-                      }
-                    >
-                      <option value="ROUND_ROBIN">Round Robin (default)</option>
-                      <option value="RANDOM">Random</option>
-                      <option value="PRIORITY">Priority</option>
-                    </select>
-                    <p className="mt-2 text-xs leading-5 text-kos-muted">
-                      {teamWalletPreview.availableWallets} eligible wallet
-                      {teamWalletPreview.availableWallets === 1
-                        ? " is"
-                        : "s are"}{" "}
-                      currently available. Community addresses and
-                      already-reserved wallets are excluded.
-                    </p>
-                    {teamWalletPreview.availableWallets <
-                    teamWalletPreview.remainingWalletsNeeded ? (
-                      <p className="mt-2 text-sm text-amber-300">
-                        Add or enable more compatible wallets before filling
-                        this raffle.
+                  <div className="mt-5 space-y-5">
+                    <div>
+                      <label className="kos-label" htmlFor="team-wallet-count">
+                        Team wallets to add
+                      </label>
+                      <div className="grid grid-cols-[3rem_minmax(5rem,1fr)_3rem] gap-2 sm:max-w-xs">
+                        <button
+                          type="button"
+                          className="kos-btn justify-center px-0 text-xl"
+                          aria-label="Remove one team wallet"
+                          disabled={
+                            teamWalletPreviewLoading || teamWalletCount <= 1
+                          }
+                          onClick={() =>
+                            updateTeamWalletCount(teamWalletCount - 1)
+                          }
+                        >
+                          −
+                        </button>
+                        <input
+                          id="team-wallet-count"
+                          type="number"
+                          className="kos-input text-center text-lg font-semibold"
+                          min={teamWalletPreview.maxSelectable ? 1 : 0}
+                          max={teamWalletPreview.maxSelectable}
+                          disabled={teamWalletPreview.maxSelectable === 0}
+                          value={teamWalletCount}
+                          onChange={(event) =>
+                            updateTeamWalletCount(Number(event.target.value))
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="kos-btn justify-center px-0 text-xl"
+                          aria-label="Add one team wallet"
+                          disabled={
+                            teamWalletPreviewLoading ||
+                            teamWalletCount >= teamWalletPreview.maxSelectable
+                          }
+                          onClick={() =>
+                            updateTeamWalletCount(teamWalletCount + 1)
+                          }
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="kos-label" htmlFor="team-wallet-mode">
+                        Selection mode
+                      </label>
+                      <select
+                        id="team-wallet-mode"
+                        className="kos-input"
+                        value={teamWalletMode}
+                        onChange={(event) => {
+                          setTeamWalletMode(
+                            event.target.value as typeof teamWalletMode,
+                          );
+                          setTeamWalletError(null);
+                        }}
+                      >
+                        <option value="ROUND_ROBIN">
+                          Round Robin (default)
+                        </option>
+                        <option value="RANDOM">Random</option>
+                        <option value="PRIORITY">Priority</option>
+                      </select>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <div className="font-medium">
+                            {teamWalletPreview.availableWallets} eligible wallet
+                            {teamWalletPreview.availableWallets === 1
+                              ? ""
+                              : "s"}{" "}
+                            available
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-kos-muted">
+                            Compatible, valid team-pool wallets from every
+                            member; community duplicates, disabled wallets,
+                            active raffle reservations, and wallets already used
+                            here are excluded.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="kos-btn shrink-0 justify-center"
+                          disabled={
+                            teamWalletPreviewLoading || teamWalletCount === 0
+                          }
+                          onClick={() =>
+                            void loadTeamWalletPreview(
+                              teamWalletCount,
+                              teamWalletMode,
+                            )
+                          }
+                        >
+                          {teamWalletPreviewLoading
+                            ? "Generating…"
+                            : teamWalletPreviewIsCurrent
+                              ? "Regenerate selection"
+                              : "Preview selection"}
+                        </button>
+                      </div>
+                      {teamWalletPreview.maxSelectable <
+                      teamWalletPreview.remainingWalletsNeeded ? (
+                        <p className="mt-3 text-sm text-amber-300">
+                          Only {teamWalletPreview.maxSelectable} eligible team
+                          wallet
+                          {teamWalletPreview.maxSelectable === 1
+                            ? " is"
+                            : "s are"}{" "}
+                          currently available, so that is the maximum for this
+                          fill.
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <TeamWalletSummary
+                        label="Team Wallets to Add"
+                        value={teamWalletCount}
+                      />
+                      <TeamWalletSummary
+                        label="Available"
+                        value={teamWalletPreview.availableWallets}
+                      />
+                      <TeamWalletSummary
+                        label="Selection Mode"
+                        value={teamWalletModeLabel(teamWalletMode)}
+                      />
+                    </div>
+
+                    {teamWalletError ? (
+                      <p className="rounded-2xl border border-red-400/20 bg-red-500/[0.08] px-4 py-3 text-sm text-red-200">
+                        {teamWalletError}
                       </p>
                     ) : null}
+
+                    <div>
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-semibold">
+                          Selected Wallets
+                        </h3>
+                        <span className="text-xs text-kos-muted">
+                          Selected: {teamWalletCount} /{" "}
+                          {teamWalletPreview.remainingWalletsNeeded} remaining
+                        </span>
+                      </div>
+                      {!teamWalletPreviewIsCurrent ? (
+                        <div className="mt-2 rounded-2xl border border-dashed border-white/[0.12] p-4 text-sm text-kos-muted">
+                          Preview the updated count and selection mode before
+                          confirming.
+                        </div>
+                      ) : (
+                        <div className="mt-2 max-h-64 space-y-1.5 overflow-y-auto pr-1">
+                          {teamWalletPreview.selectedWallets.map((wallet) => (
+                            <div
+                              key={wallet.id}
+                              className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-black/10 px-3 py-2.5 text-sm"
+                            >
+                              <span
+                                className="min-w-0 truncate font-mono text-xs"
+                                title={wallet.address}
+                              >
+                                {shortWalletAddress(wallet.address)}
+                              </span>
+                              <span className="shrink-0 text-right text-xs text-kos-muted">
+                                {wallet.ownerName}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <p className="mt-5 text-sm leading-6 text-kos-muted">
@@ -356,15 +577,15 @@ export function RaffleActions({
                       className="kos-btn-primary"
                       disabled={
                         busy !== null ||
-                        teamWalletPreview.remainingWalletsNeeded === 0 ||
-                        teamWalletPreview.availableWallets <
-                          teamWalletPreview.remainingWalletsNeeded
+                        teamWalletPreviewLoading ||
+                        teamWalletCount === 0 ||
+                        !teamWalletPreviewIsCurrent
                       }
                       onClick={confirmTeamWalletFill}
                     >
                       {busy === "team-wallets"
                         ? "Reserving…"
-                        : `Confirm & reserve ${teamWalletPreview.remainingWalletsNeeded}`}
+                        : `Confirm & Reserve ${teamWalletCount}`}
                     </button>
                   ) : (
                     <button
@@ -414,4 +635,38 @@ function TeamWalletMetric({
       <div className="mt-1 text-2xl font-semibold">{value}</div>
     </div>
   );
+}
+
+function TeamWalletSummary({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-white/[0.08] bg-black/10 p-3">
+      <div className="text-[9px] uppercase tracking-[0.13em] text-kos-muted">
+        {label}
+      </div>
+      <div
+        className="mt-1 truncate text-sm font-semibold"
+        title={String(value)}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function teamWalletModeLabel(mode: TeamWalletMode): string {
+  if (mode === "ROUND_ROBIN") return "Round Robin";
+  if (mode === "RANDOM") return "Random";
+  return "Priority";
+}
+
+function shortWalletAddress(address: string): string {
+  return address.length > 18
+    ? `${address.slice(0, 8)}…${address.slice(-8)}`
+    : address;
 }

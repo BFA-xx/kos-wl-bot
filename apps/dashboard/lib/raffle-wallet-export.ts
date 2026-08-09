@@ -15,6 +15,7 @@ export interface RaffleWalletExportRow {
   chain: WalletChain;
   address: string;
   source: "Community" | "Team Pool";
+  teamMember: string | null;
   recordedAt: Date | null;
   addressHash: string;
 }
@@ -70,6 +71,7 @@ export async function communityRaffleWalletRows(
       chain: source.chain,
       address: validation.normalized,
       source: "Community",
+      teamMember: null,
       recordedAt:
         source === winner.wallet && winner.wallet?.submittedAt
           ? winner.wallet.submittedAt
@@ -118,6 +120,7 @@ export async function raffleWalletExportRows(
       chain,
       address: validation.normalized,
       source: "Team Pool",
+      teamMember: usage.wallet.owner.globalName ?? usage.wallet.owner.username,
       recordedAt: usage.reservedAt,
       addressHash: usage.wallet.addressHash,
     });

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { logAudit, requireOrgAccess, withAccess } from "@/lib/access";
-import { canManageAllTeamWallets } from "@/lib/team-wallet-server";
+import {
+  ACTIVE_RAFFLE_STATUSES,
+  canManageAllTeamWallets,
+} from "@/lib/team-wallet-server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,7 +16,22 @@ async function accessibleWallet(orgId: string, walletId: string) {
       deletedAt: null,
       pool: { organizationId: orgId },
     },
-    select: { id: true, ownerId: true, status: true, poolId: true },
+    select: {
+      id: true,
+      ownerId: true,
+      status: true,
+      poolId: true,
+      _count: {
+        select: {
+          usages: {
+            where: {
+              status: "RESERVED",
+              raffle: { status: { in: [...ACTIVE_RAFFLE_STATUSES] } },
+            },
+          },
+        },
+      },
+    },
   });
 }
 
@@ -29,9 +47,9 @@ export const PATCH = withAccess(async (request, { params }) => {
       { status: 403 },
     );
   }
-  if (wallet.status === "RESERVED") {
+  if (wallet._count.usages > 0) {
     return NextResponse.json(
-      { error: "Reserved wallets must be released from the cancelled raffle." },
+      { error: "Wallets reserved by an active raffle cannot be changed." },
       { status: 409 },
     );
   }
@@ -67,9 +85,11 @@ export const DELETE = withAccess(async (_request, { params }) => {
       { status: 403 },
     );
   }
-  if (wallet.status === "RESERVED") {
+  if (wallet._count.usages > 0) {
     return NextResponse.json(
-      { error: "Release this wallet from its raffle before deleting it." },
+      {
+        error: "Release this wallet from its active raffle before deleting it.",
+      },
       { status: 409 },
     );
   }
