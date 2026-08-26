@@ -10,11 +10,14 @@ const SESSION_COOKIE = "kos_session";
  */
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const isDiscordMemberFeed =
+    /^\/api\/[^/]+\/integrations\/discord-members$/u.test(pathname);
 
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/r/") ||
     pathname.startsWith("/api/auth") ||
+    isDiscordMemberFeed ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico" ||
     pathname === "/icon.png" ||
@@ -26,7 +29,10 @@ export async function middleware(req: NextRequest) {
   const secret = process.env.DASHBOARD_SESSION_TOKEN;
   if (!secret) return NextResponse.next(); // auth disabled
 
-  const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value, secret);
+  const session = await verifySession(
+    req.cookies.get(SESSION_COOKIE)?.value,
+    secret,
+  );
   if (session) return NextResponse.next();
 
   if (pathname.startsWith("/api/")) {
