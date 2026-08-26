@@ -18,6 +18,7 @@ import {
 export function startInternalApi(
   client: Client,
   schedulerHealth: () => unknown = () => null,
+  memberSyncHealth: () => unknown = () => null,
 ): Server | undefined {
   if (!config.INTERNAL_API_PORT) return undefined;
   if (!config.INTERNAL_API_TOKEN) {
@@ -29,7 +30,7 @@ export function startInternalApi(
   const token = config.INTERNAL_API_TOKEN;
 
   const server = createServer((req, res) => {
-    void handle(req, res, client, token, schedulerHealth);
+    void handle(req, res, client, token, schedulerHealth, memberSyncHealth);
   });
 
   server.listen(config.INTERNAL_API_PORT, config.INTERNAL_API_HOST, () => {
@@ -47,6 +48,7 @@ async function handle(
   client: Client,
   token: string,
   schedulerHealth: () => unknown,
+  memberSyncHealth: () => unknown,
 ): Promise<void> {
   const json = (status: number, body: unknown) => {
     res.writeHead(status, { "content-type": "application/json" });
@@ -62,6 +64,7 @@ async function handle(
         ready: client.isReady(),
         guilds: client.guilds.cache.size,
         scheduler: schedulerHealth(),
+        memberSync: memberSyncHealth(),
       });
     }
 

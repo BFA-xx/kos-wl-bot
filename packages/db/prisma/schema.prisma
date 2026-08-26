@@ -116,6 +116,7 @@ model Guild {
   verificationRedemptions VerificationRedemption[]
   verificationLogs        VerificationLog[]
   memberVerifications     MemberVerification[]
+  discordMembers          DiscordGuildMember[]
 
   @@map("guilds")
 }
@@ -164,12 +165,41 @@ model User {
   teamWalletPoolSeats  TeamWalletPoolMember[] @relation("TeamWalletPoolMemberUser")
   teamWalletFills      RaffleTeamWalletFill[] @relation("TeamWalletFillCreator")
   releasedTeamWallets  TeamWalletUsage[]      @relation("TeamWalletUsageReleaser")
+  discordGuilds        DiscordGuildMember[]
 
   /// Last time the user opened their notification feed (announcement unread
   /// counts are computed against this instead of materializing rows).
   notificationsSeenAt DateTime?
 
   @@map("users")
+}
+
+/// Durable snapshot of a non-bot Discord member in a guild. Discord remains
+/// the source of truth for membership; this table gives external KOS surfaces
+/// a stable, guild-scoped view without requiring direct Gateway access.
+model DiscordGuildMember {
+  guildId     String
+  userId      String
+  username    String
+  globalName  String?
+  nickname    String?
+  displayName String
+  avatarUrl   String?
+  joinedAt    DateTime?
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  leftAt      DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([guildId, userId])
+  @@index([guildId, isActive, username])
+  @@index([userId])
+  @@map("discord_guild_members")
 }
 
 /// A user's self-registered wallet for a chain, reusable across raffles.

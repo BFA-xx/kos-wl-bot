@@ -14,11 +14,13 @@ import {
   handleVerificationChannelCreate,
   handleVerificationMemberJoin,
 } from "./gateway/verificationEvents.js";
+import { GuildMemberSyncService } from "./services/guildMemberSyncService.js";
 
 async function main() {
   const client = createClient();
   globalThis.kosClient = client;
   let scheduler: Scheduler | undefined;
+  let guildMemberSync: GuildMemberSyncService | undefined;
   let internalApi: Server | undefined;
 
   client.once(Events.ClientReady, async (c) => {
@@ -34,7 +36,14 @@ async function main() {
     scheduler = new Scheduler(c);
     scheduler.start();
 
-    internalApi = startInternalApi(c, () => scheduler?.health() ?? null);
+    guildMemberSync = new GuildMemberSyncService(c);
+    guildMemberSync.start();
+
+    internalApi = startInternalApi(
+      c,
+      () => scheduler?.health() ?? null,
+      () => guildMemberSync?.health() ?? null,
+    );
 
     // Do not hold readiness behind one slow database write per guild. The
     // bounded sync keeps guild metadata current while the scheduler and health
@@ -71,6 +80,47 @@ async function main() {
 
   client.on(Events.GuildMemberAdd, (member) => {
     void handleVerificationMemberJoin(member);
+    void guildMemberSync
+      ?.memberJoinedOrUpdated(member)
+      .catch((err) =>
+        logger.error(
+          { err, guildId: member.guild.id, userId: member.id },
+          "Discord member join snapshot failed",
+        ),
+      );
+  });
+
+  client.on(Events.GuildMemberUpdate, (_previous, member) => {
+    void guildMemberSync
+      ?.memberJoinedOrUpdated(member)
+      .catch((err) =>
+        logger.error(
+          { err, guildId: member.guild.id, userId: member.id },
+          "Discord member update snapshot failed",
+        ),
+      );
+  });
+
+  client.on(Events.GuildMemberRemove, (member) => {
+    void guildMemberSync
+      ?.memberLeft(member)
+      .catch((err) =>
+        logger.error(
+          { err, guildId: member.guild.id, userId: member.id },
+          "Discord member departure snapshot failed",
+        ),
+      );
+  });
+
+  client.on(Events.UserUpdate, (_previous, user) => {
+    void guildMemberSync
+      ?.userUpdated(user)
+      .catch((err) =>
+        logger.error(
+          { err, userId: user.id },
+          "Discord user identity snapshot failed",
+        ),
+      );
   });
 
   client.on(Events.ChannelCreate, (channel) => {
@@ -92,6 +142,7 @@ async function main() {
     logger.info({ signal }, "shutting down");
     clearInterval(limiterSweep);
     scheduler?.stop();
+    guildMemberSync?.stop();
     internalApi?.close();
     await client.destroy();
     await prisma.$disconnect();
