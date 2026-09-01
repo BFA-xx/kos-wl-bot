@@ -73,7 +73,13 @@ export async function POST(
             flag as (typeof TELEGRAM_FEATURE_FLAGS)[number],
           ),
         )
-      : ["ONBOARDING", "AUTO_ANNOUNCEMENTS", "MEMBERSHIP_CHECKS"];
+      : [
+          "ONBOARDING",
+          "RAFFLES",
+          "ANNOUNCEMENTS",
+          "AUTO_ANNOUNCEMENTS",
+          "MEMBERSHIP_CHECKS",
+        ];
     const community = await prisma.telegramCommunity.create({
       data: {
         organizationId: org.id,

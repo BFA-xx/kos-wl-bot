@@ -575,8 +575,18 @@ slash-command definition must then be registered.
 Telegram is an interaction adapter over the existing raffle domain. The
 public Next.js webhook validates Telegram's secret header, deduplicates update
 IDs, links Telegram identities through expiring one-time capabilities, and
-handles authorized publication and entry callbacks. `User.id` remains the
-Discord-backed KOS identity; Telegram identities live in `ConnectedAccount`.
+handles authorized publication and entry callbacks. `KosIdentity` is the
+provider-neutral identity root and `IdentityAccount` stores stable provider
+IDs. Its optional `legacyUserId` bridge preserves every existing
+Discord-backed `User`, raffle, points, and wallet relation while KOS products
+move toward the shared identity. `ConnectedAccount` remains the compatibility
+link for current dashboard and raffle authorization.
+
+The Telegram runtime is modular under `apps/dashboard/lib/telegram`: identity,
+navigation, community, formatting, logging, and rate limiting are separated
+from raffle callbacks. Production uses the webhook; a guarded local polling
+runner uses the same grammY handlers. Update receipts prevent replay and a
+database-backed per-user window applies across serverless instances.
 
 `TelegramCommunity` is organization-owned and points at one connected backing
 guild. `TelegramRafflePublication` stores only Telegram presentation state for
@@ -593,9 +603,10 @@ are not mirrored. Community raffle defaults control membership-at-entry,
 membership-at-draw, reminder delivery, and winner visibility.
 
 Communities with `ONBOARDING` receive a welcome only when a human account
-actually transitions into membership. The welcome links to the KOS profile and
-the private bot account-link flow. Connecting a wallet remains optional unless
-an individual raffle requires one.
+actually transitions into membership. The welcome mentions that person through
+their immutable Telegram user ID, then links to the private KOS identity flow.
+Usernames are display metadata only. Connecting a wallet remains optional
+unless an individual raffle requires one.
 
 Scheduled Telegram side effects use `IntegrationDelivery`. Vercel queues
 events and the single EC2 scheduler claims, retries, and delivers them. Draws

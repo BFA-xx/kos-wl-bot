@@ -9,6 +9,11 @@ const fetcher = (url: string) => fetch(url).then((response) => response.json());
 const FLAGS = [
   ["QUICK_RAFFLES", "Quick raffles"],
   ["ONBOARDING", "Onboarding"],
+  ["RAFFLES", "Raffles"],
+  ["POINTS", "Points"],
+  ["REFERRALS", "Referrals"],
+  ["MODERATION", "Moderation"],
+  ["ANNOUNCEMENTS", "Announcements"],
   ["AUTO_ANNOUNCEMENTS", "Auto announcements"],
   ["MEMBERSHIP_CHECKS", "Membership checks"],
 ] as const;
@@ -42,6 +47,8 @@ export function TelegramCommunityManager() {
   const [guildId, setGuildId] = useState("");
   const [flags, setFlags] = useState<string[]>([
     "ONBOARDING",
+    "RAFFLES",
+    "ANNOUNCEMENTS",
     "AUTO_ANNOUNCEMENTS",
     "MEMBERSHIP_CHECKS",
   ]);

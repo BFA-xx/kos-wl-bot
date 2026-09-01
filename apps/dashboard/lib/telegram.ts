@@ -10,6 +10,11 @@ import {
 export const TELEGRAM_FEATURE_FLAGS = [
   "QUICK_RAFFLES",
   "ONBOARDING",
+  "RAFFLES",
+  "POINTS",
+  "REFERRALS",
+  "MODERATION",
+  "ANNOUNCEMENTS",
   "AUTO_ANNOUNCEMENTS",
   "MEMBERSHIP_CHECKS",
 ] as const;
@@ -21,10 +26,13 @@ export function telegramConfig(): {
 } {
   const clean = (value: string | undefined) => value?.trim() || null;
   return {
-    botToken: clean(process.env.TELEGRAM_BOT_TOKEN),
+    botToken:
+      clean(process.env.TELEGRAM_BOT_TOKEN) ?? clean(process.env.BOT_TOKEN),
     botUsername:
       clean(process.env.TELEGRAM_BOT_USERNAME)?.replace(/^@/u, "") ?? null,
-    webhookSecret: clean(process.env.TELEGRAM_WEBHOOK_SECRET),
+    webhookSecret:
+      clean(process.env.TELEGRAM_WEBHOOK_SECRET) ??
+      clean(process.env.WEBHOOK_SECRET),
   };
 }
 

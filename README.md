@@ -96,7 +96,13 @@ pnpm deploy:commands
 # 4. Run
 pnpm dev:bot           # the Discord bot
 pnpm dev:dashboard     # the dashboard at http://localhost:3001
+# Optional local Telegram polling (uses the same modular grammY handlers):
+TELEGRAM_LOCAL_POLLING=true pnpm --filter @kos/dashboard dev:telegram
 ```
+
+The production Telegram bot uses the authenticated webhook. Local polling is
+explicitly development-only; when `WEBHOOK_URL` and `WEBHOOK_SECRET` are set,
+the polling runner restores the webhook during graceful shutdown.
 
 The dashboard reads its env from `apps/dashboard/.env.local` (Next.js
 convention). For local dev, copy or symlink:

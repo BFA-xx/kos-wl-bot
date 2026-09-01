@@ -3,6 +3,7 @@ import type { Update } from "grammy/types";
 import { prisma } from "@/lib/db";
 import { handleTelegramUpdate } from "@/lib/telegram-bot";
 import { secureStringEqual, telegramConfig } from "@/lib/telegram";
+import { telegramLog } from "@/lib/telegram/log";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,6 +30,7 @@ async function claimUpdate(updateId: number): Promise<boolean> {
 }
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   const { botToken, webhookSecret } = telegramConfig();
   if (!botToken || !webhookSecret) {
     return NextResponse.json(
@@ -58,6 +60,11 @@ export async function POST(request: Request) {
       },
       data: { status: "PROCESSED", processedAt: new Date(), error: null },
     });
+    telegramLog("info", "webhook_update_processed", {
+      requestId: `tg:${update.update_id}`,
+      updateId: update.update_id,
+      durationMs: Date.now() - startedAt,
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message =
@@ -68,7 +75,8 @@ export async function POST(request: Request) {
       },
       data: { status: "FAILED", error: message },
     });
-    console.error("Telegram webhook update failed", {
+    telegramLog("error", "webhook_update_failed", {
+      requestId: `tg:${update.update_id}`,
       updateId: update.update_id,
       error: message,
     });

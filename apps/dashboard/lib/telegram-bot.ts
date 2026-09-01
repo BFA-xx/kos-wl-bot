@@ -8,122 +8,19 @@ import {
   recordWebEntry,
 } from "@/lib/raffle-entry";
 import { publishRaffleToTelegram } from "@/lib/telegram-publication";
-import {
-  didTelegramMemberJoin,
-  telegramActorHasPermission,
-  telegramConfig,
-} from "@/lib/telegram";
-import {
-  hashIntegrationToken,
-  isTelegramAdmin,
-  telegramDisplayName,
-} from "@kos/db";
+import { telegramActorHasPermission, telegramConfig } from "@/lib/telegram";
+import { isTelegramAdmin, telegramDisplayName } from "@kos/db";
+import { registerTelegramCommunityHandlers } from "@/lib/telegram/community";
+import { dashboardOrigin, displayTelegramError } from "@/lib/telegram/format";
+import { telegramLog } from "@/lib/telegram/log";
+import { registerTelegramNavigation } from "@/lib/telegram/navigation";
+import { telegramRateLimitMiddleware } from "@/lib/telegram/rate-limit";
 
 let cachedBot: Bot | null = null;
 let botInit: Promise<unknown> | null = null;
 
-function dashboardOrigin(): string {
-  const value = process.env.DASHBOARD_URL?.trim();
-  if (!value) return "https://raffle.koslabs.app";
-  try {
-    return new URL(value).origin;
-  } catch {
-    return "https://raffle.koslabs.app";
-  }
-}
-
-function displayError(reasons: string[]): string {
-  return (reasons[0] ?? "Requirements are not complete.").slice(0, 180);
-}
-
 async function answer(ctx: Context, text: string): Promise<void> {
   await ctx.answerCallbackQuery({ text: text.slice(0, 190), show_alert: true });
-}
-
-async function linkTelegramAccount(
-  ctx: Context,
-  secret: string,
-): Promise<void> {
-  if (!ctx.from || ctx.chat?.type !== "private") return;
-  const from = ctx.from;
-  const now = new Date();
-  const tokenHash = hashIntegrationToken(secret);
-  const telegramUserId = String(from.id);
-  const displayName = telegramDisplayName(from);
-
-  const outcome = await prisma.$transaction(async (tx) => {
-    const token = await tx.integrationActionToken.findUnique({
-      where: { tokenHash },
-    });
-    if (
-      !token ||
-      token.action !== "TELEGRAM_LINK" ||
-      !token.userId ||
-      token.expiresAt <= now ||
-      token.consumedAt
-    ) {
-      return "expired" as const;
-    }
-    const claimed = await tx.integrationActionToken.updateMany({
-      where: { id: token.id, consumedAt: null, expiresAt: { gt: now } },
-      data: { consumedAt: now },
-    });
-    if (claimed.count === 0) return "expired" as const;
-    const taken = await tx.connectedAccount.findUnique({
-      where: {
-        provider_externalId: {
-          provider: "TELEGRAM",
-          externalId: telegramUserId,
-        },
-      },
-      select: { userId: true },
-    });
-    if (taken && taken.userId !== token.userId) return "taken" as const;
-    await tx.connectedAccount.upsert({
-      where: {
-        userId_provider: { userId: token.userId, provider: "TELEGRAM" },
-      },
-      create: {
-        userId: token.userId,
-        provider: "TELEGRAM",
-        externalId: telegramUserId,
-        handle: from.username ?? null,
-        displayName,
-        verifiedAt: now,
-        lastSeenAt: now,
-        metadata: { source: "telegram_deep_link" },
-      },
-      update: {
-        externalId: telegramUserId,
-        handle: from.username ?? null,
-        displayName,
-        verifiedAt: now,
-        lastSeenAt: now,
-      },
-    });
-    return "linked" as const;
-  });
-
-  if (outcome === "expired") {
-    await ctx.reply(
-      "This KOS linking request has expired. Start a new one from your KOS profile.",
-    );
-  } else if (outcome === "taken") {
-    await ctx.reply(
-      "This Telegram account is already linked to another KOS account.",
-    );
-  } else {
-    await ctx.reply(
-      "Onboarding complete. Telegram is connected to KOS, and you can now enter eligible raffles. Connect a wallet only when a raffle requires one.",
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "Open KOS profile", url: `${dashboardOrigin()}/me` }],
-          ],
-        },
-      },
-    );
-  }
 }
 
 async function publishFromTelegram(ctx: Context, rawId: string): Promise<void> {
@@ -212,59 +109,6 @@ async function publishFromTelegram(ctx: Context, rawId: string): Promise<void> {
   await ctx.reply(`Raffle #${raffleId} is queued for Telegram publication.`);
 }
 
-async function welcomeTelegramMember(ctx: Context): Promise<void> {
-  const update = ctx.update.chat_member;
-  if (
-    !update ||
-    !["group", "supergroup"].includes(update.chat.type) ||
-    update.new_chat_member.user.is_bot ||
-    !didTelegramMemberJoin(update.old_chat_member, update.new_chat_member)
-  ) {
-    return;
-  }
-  const community = await prisma.telegramCommunity.findFirst({
-    where: {
-      telegramChatId: String(update.chat.id),
-      status: "ACTIVE",
-      featureFlags: { has: "ONBOARDING" },
-    },
-    select: { id: true, communityName: true },
-  });
-  if (!community) return;
-  const memberName = telegramDisplayName(update.new_chat_member.user).slice(
-    0,
-    80,
-  );
-  await ctx.api.sendMessage(
-    update.chat.id,
-    [
-      `Welcome ${memberName} to ${community.communityName}.`,
-      "",
-      "Complete your KOS profile and connect Telegram to unlock community raffles.",
-      "A wallet is only required when a specific raffle asks for one.",
-    ].join("\n"),
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "Complete KOS profile",
-              url: `${dashboardOrigin()}/me`,
-            },
-          ],
-          [
-            {
-              text: "Start KOS Raffles bot",
-              url: `https://t.me/${ctx.me.username}?start=welcome_${community.id}`,
-            },
-          ],
-        ],
-      },
-      link_preview_options: { is_disabled: true },
-    },
-  );
-}
-
 async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
   if (!ctx.from || !ctx.callbackQuery?.message) return;
   const token = await prisma.integrationActionToken.findUnique({
@@ -335,7 +179,7 @@ async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
   if (!report.canEnter) {
     await answer(
       ctx,
-      displayError(report.gates.flatMap((gate) => gate.reason ?? [])),
+      displayTelegramError(report.gates.flatMap((gate) => gate.reason ?? [])),
     );
     return;
   }
@@ -364,36 +208,11 @@ async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
   );
 }
 
-function buildBot(token: string): Bot {
+export function buildTelegramBot(token: string): Bot {
   const bot = new Bot(token);
-  bot.command("start", async (ctx) => {
-    const payload = ctx.match?.trim() ?? "";
-    if (payload.startsWith("link_")) {
-      await linkTelegramAccount(ctx, payload.slice(5));
-      return;
-    }
-    await ctx.reply(
-      "KOS Raffles is ready. Connect Telegram from your KOS profile to enter raffles.",
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "Open KOS profile", url: `${dashboardOrigin()}/me` }],
-          ],
-        },
-      },
-    );
-  });
-  bot.command("chatid", async (ctx) => {
-    if (!ctx.chat || ctx.chat.type === "private") {
-      await ctx.reply(
-        "Use this command inside the Telegram group you want to connect.",
-      );
-      return;
-    }
-    await ctx.reply(
-      `Telegram chat ID: ${ctx.chat.id}\nAdd it under your KOS organization Settings.`,
-    );
-  });
+  bot.use(telegramRateLimitMiddleware);
+  registerTelegramNavigation(bot);
+  registerTelegramCommunityHandlers(bot);
   bot.command("raffle", async (ctx) => {
     const match = (ctx.match ?? "").trim().match(/^publish\s+(\d+)$/iu);
     if (!match) {
@@ -402,9 +221,21 @@ function buildBot(token: string): Bot {
     }
     await publishFromTelegram(ctx, match[1]);
   });
-  bot.on("chat_member", welcomeTelegramMember);
   bot.callbackQuery(/^a:([A-Za-z0-9_-]+)$/u, async (ctx) => {
     await enterFromTelegram(ctx, ctx.match[1]);
+  });
+  bot.catch((error) => {
+    telegramLog("error", "handler_failed", {
+      requestId: `tg:${error.ctx.update.update_id}`,
+      updateId: error.ctx.update.update_id,
+      telegramUserId: error.ctx.from ? String(error.ctx.from.id) : null,
+      chatId: error.ctx.chat ? String(error.ctx.chat.id) : null,
+      error:
+        error.error instanceof Error
+          ? error.error.message.slice(0, 500)
+          : "Unknown error",
+    });
+    throw error.error;
   });
   return bot;
 }
@@ -413,7 +244,7 @@ export async function handleTelegramUpdate(update: Update): Promise<void> {
   const { botToken } = telegramConfig();
   if (!botToken) throw new Error("Telegram bot is not configured");
   if (!cachedBot) {
-    cachedBot = buildBot(botToken);
+    cachedBot = buildTelegramBot(botToken);
     botInit = cachedBot.init();
   }
   await botInit;

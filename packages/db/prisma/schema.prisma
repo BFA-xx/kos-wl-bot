@@ -167,6 +167,7 @@ model User {
   teamWalletFills      RaffleTeamWalletFill[] @relation("TeamWalletFillCreator")
   releasedTeamWallets  TeamWalletUsage[]      @relation("TeamWalletUsageReleaser")
   discordGuilds        DiscordGuildMember[]
+  kosIdentity          KosIdentity?
 
   /// Last time the user opened their notification feed (announcement unread
   /// counts are computed against this instead of materializing rows).
@@ -1361,6 +1362,68 @@ model ConnectedAccount {
   @@map("connected_accounts")
 }
 
+enum KosIdentityStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum KosOnboardingStatus {
+  STARTED
+  PROFILE_COMPLETE
+  COMPLETED
+}
+
+enum IdentityProvider {
+  TELEGRAM
+  DISCORD
+  X
+  WEBSITE
+  MINTOOOR
+}
+
+/// Provider-neutral KOS identity. `legacyUserId` bridges the existing
+/// Discord-backed product account without changing raffle ownership.
+model KosIdentity {
+  id               String              @id @default(cuid())
+  legacyUserId     String?             @unique
+  displayName      String
+  status           KosIdentityStatus   @default(ACTIVE)
+  onboardingStatus KosOnboardingStatus @default(STARTED)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  legacyUser User?             @relation(fields: [legacyUserId], references: [id], onDelete: SetNull)
+  accounts   IdentityAccount[]
+
+  @@index([status, createdAt])
+  @@map("kos_identities")
+}
+
+/// Stable provider identities attached to one KOS identity. Provider user IDs,
+/// never usernames, are the uniqueness and trust boundary.
+model IdentityAccount {
+  id          String           @id @default(cuid())
+  identityId  String
+  provider    IdentityProvider
+  externalId  String
+  username    String?
+  displayName String?
+  firstName   String?
+  lastName    String?
+  verifiedAt  DateTime?
+  lastSeenAt  DateTime?
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  identity KosIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalId])
+  @@unique([identityId, provider])
+  @@index([identityId])
+  @@map("identity_accounts")
+}
+
 enum TelegramCommunityStatus {
   ACTIVE
   DISABLED
@@ -1499,6 +1562,22 @@ model TelegramUpdateReceipt {
   @@unique([botKey, updateId])
   @@index([status, receivedAt])
   @@map("telegram_update_receipts")
+}
+
+/// Database-backed command/callback limiter so serverless instances share the
+/// same abuse boundary.
+model TelegramRateLimitBucket {
+  id             String   @id @default(cuid())
+  telegramUserId String
+  scope          String
+  windowStart    DateTime
+  count          Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([telegramUserId, scope, windowStart])
+  @@index([windowStart])
+  @@map("telegram_rate_limit_buckets")
 }
 
 /// Opaque, expiring Telegram deep-link or callback capability.
