@@ -570,6 +570,31 @@ clears KOS's old `ViewChannel` overwrite. Both migrations must be applied
 before the bot and dashboard are deployed, and the changed global
 slash-command definition must then be registered.
 
+## Telegram integration
+
+Telegram is an interaction adapter over the existing raffle domain. The
+public Next.js webhook validates Telegram's secret header, deduplicates update
+IDs, links Telegram identities through expiring one-time capabilities, and
+handles authorized publication and entry callbacks. `User.id` remains the
+Discord-backed KOS identity; Telegram identities live in `ConnectedAccount`.
+
+`TelegramCommunity` is organization-owned and points at one connected backing
+guild. `TelegramRafflePublication` stores only Telegram presentation state for
+an authoritative `Raffle`. Explicit provider rules live in
+`RaffleEligibilityRule`; publishing alone does not change raffle eligibility.
+Discord, web, and Telegram entry share the same transactional participant
+mutation, while each adapter retains its own live provider checks and response
+formatting.
+
+Scheduled Telegram side effects use `IntegrationDelivery`. Vercel queues
+events and the single EC2 scheduler claims, retries, and delivers them. Draws
+with a `DRAW`/`BOTH` Telegram membership rule recheck membership before seed
+generation; an unavailable provider defers the draw rather than silently
+disqualifying entrants. The integration is disabled unless
+`TELEGRAM_BOT_TOKEN` is present. The webhook additionally requires
+`TELEGRAM_WEBHOOK_SECRET`; `TELEGRAM_BOT_USERNAME` avoids a `getMe` lookup when
+building account-link deep links.
+
 ## Deployment
 
 - Dashboard: Vercel, rooted at `apps/dashboard`; pushes to `main` trigger

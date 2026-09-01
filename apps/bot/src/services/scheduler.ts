@@ -5,6 +5,7 @@ import {
   CampaignStatus,
   LogCategory,
   RaffleStatus,
+  enqueueTelegramRaffleEvent,
 } from "@kos/db";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
@@ -24,6 +25,7 @@ import { processCollaborationAutomations } from "./collaborationService.js";
 import { backfillProofArtifacts } from "./proofService.js";
 import { processRaidLifecycle } from "./raidService.js";
 import { processVerificationControlRequests } from "./verificationControlService.js";
+import { processTelegramDeliveries } from "./telegramService.js";
 
 /**
  * Sweep-based scheduler. A single interval drives all raffle state machines,
@@ -125,7 +127,7 @@ export class Scheduler {
         where: { status: RaffleStatus.UPCOMING, startAt: { lte: now } },
         orderBy: [{ startAt: "asc" }, { id: "asc" }],
         take: config.SCHEDULER_BATCH_SIZE,
-        select: { id: true, guildId: true },
+        select: { id: true, guildId: true, startAt: true },
       });
       this.warnIfBatchIsFull("raffles waiting to open", toOpen.length);
       for (const r of toOpen) {
@@ -140,6 +142,16 @@ export class Scheduler {
           action: "RAFFLE_OPEN",
           message: `Raffle #${r.id} is now LIVE`,
         });
+        await enqueueTelegramRaffleEvent(prisma, {
+          raffleId: r.id,
+          event: "RAFFLE_STARTING",
+          marker: r.startAt.toISOString(),
+        }).catch((err) =>
+          logger.warn(
+            { err, raffleId: r.id },
+            "Telegram start event queue failed",
+          ),
+        );
         // Re-post so the ping fires and the LIVE post is clean (see class doc).
         await repostRaffleMessage(this.client, r.id).catch(() => undefined);
         logger.info({ raffleId: r.id }, "raffle opened");
@@ -159,6 +171,9 @@ export class Scheduler {
           logger.error({ err, raffleId: r.id }, "auto close/draw failed"),
         );
       }
+      await processTelegramDeliveries(now, config.SCHEDULER_BATCH_SIZE).catch(
+        (err) => logger.error({ err }, "Telegram delivery sweep failed"),
+      );
       this.lastTickOk = true;
     } catch (err) {
       this.lastTickOk = false;

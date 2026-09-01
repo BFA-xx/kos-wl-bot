@@ -25,4 +25,15 @@ describe("dashboard middleware integration boundaries", () => {
 
     expect(response.status).toBe(401);
   });
+
+  it("passes the Telegram webhook to its secret-checked route", async () => {
+    const response = await middleware(
+      new NextRequest(
+        "https://raffle.koslabs.app/api/integrations/telegram/webhook",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
 });

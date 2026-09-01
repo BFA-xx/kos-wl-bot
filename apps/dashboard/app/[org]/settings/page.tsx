@@ -6,6 +6,7 @@ import { ServersManager } from "@/components/ServersManager";
 import { RoleWeightsManager } from "@/components/RoleWeightsManager";
 import { RaffleChannelDefaults } from "@/components/RaffleChannelDefaults";
 import { VerificationManager } from "@/components/VerificationManager";
+import { TelegramCommunityManager } from "@/components/TelegramCommunityManager";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,7 +28,7 @@ export default async function SettingsPage({
     <>
       <PageTitle
         title="Settings"
-        subtitle="Branding, connected Discord servers, verification, and channel defaults."
+        subtitle="Branding, connected communities, verification, and raffle defaults."
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -52,6 +53,11 @@ export default async function SettingsPage({
         <Card className="lg:col-span-2">
           <SectionTitle>Default channels</SectionTitle>
           <RaffleChannelDefaults />
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <SectionTitle>Telegram communities</SectionTitle>
+          <TelegramCommunityManager />
         </Card>
 
         <Card className="lg:col-span-2">

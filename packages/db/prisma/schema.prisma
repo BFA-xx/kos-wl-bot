@@ -117,6 +117,7 @@ model Guild {
   verificationLogs        VerificationLog[]
   memberVerifications     MemberVerification[]
   discordMembers          DiscordGuildMember[]
+  telegramCommunities     TelegramCommunity[]
 
   @@map("guilds")
 }
@@ -290,18 +291,21 @@ model Raffle {
   endedAt         DateTime?
   drawnAt         DateTime?
 
-  guild             Guild                  @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  eligibleRoles     RaffleRole[]
-  participants      Participant[]
-  winners           Winner[]
-  proof             Proof?
-  bannerAsset       RaffleBannerAsset?
-  logs              Log[]
-  RaffleTask        RaffleTask[]
-  campaignRaffles   CampaignRaffle[]
-  collaborationLink CollaborationRaffle?
-  teamWalletFills   RaffleTeamWalletFill[]
-  teamWalletUsages  TeamWalletUsage[]
+  guild                 Guild                       @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  eligibleRoles         RaffleRole[]
+  participants          Participant[]
+  winners               Winner[]
+  proof                 Proof?
+  bannerAsset           RaffleBannerAsset?
+  logs                  Log[]
+  RaffleTask            RaffleTask[]
+  campaignRaffles       CampaignRaffle[]
+  collaborationLink     CollaborationRaffle?
+  teamWalletFills       RaffleTeamWalletFill[]
+  teamWalletUsages      TeamWalletUsage[]
+  telegramPublications  TelegramRafflePublication[]
+  eligibilityRules      RaffleEligibilityRule[]
+  integrationDeliveries IntegrationDelivery[]
 
   @@index([guildId, status])
   @@index([status, endAt])
@@ -771,6 +775,7 @@ model Organization {
   collaborationTags         CollaborationTag[]
   collaborationSavedFilters CollaborationSavedFilter[]
   teamWalletPools           TeamWalletPool[]
+  telegramCommunities       TelegramCommunity[]
 
   @@index([ownerId])
   @@map("organizations")
@@ -1333,7 +1338,13 @@ model ConnectedAccount {
   /// Provider-side stable id (e.g. X numeric user id).
   externalId     String
   /// Display handle at link time (without the @).
-  handle         String
+  handle         String?
+  /// Provider display name, which may exist even when no public handle does.
+  displayName    String?
+  /// When KOS last proved control of this provider identity.
+  verifiedAt     DateTime?
+  /// Last provider interaction observed by KOS.
+  lastSeenAt     DateTime?
   /// OAuth tokens, encrypted at rest (AES-256-GCM, WALLET_ENCRYPTION_KEY).
   accessToken    String?
   refreshToken   String?
@@ -1348,6 +1359,194 @@ model ConnectedAccount {
   @@unique([userId, provider])
   @@index([userId])
   @@map("connected_accounts")
+}
+
+enum TelegramCommunityStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum TelegramWinnerVisibility {
+  PUBLIC
+  ANONYMOUS
+  ADMIN_ONLY
+}
+
+enum RaffleEligibilityProvider {
+  TELEGRAM
+  KOS
+}
+
+enum RaffleEligibilityType {
+  TELEGRAM_CHAT_MEMBER
+  TELEGRAM_CHAT_STATUS
+  KOS_ACCOUNT_LINKED
+  INVITE_ONLY
+}
+
+enum RaffleEligibilityCheckAt {
+  ENTRY
+  DRAW
+  BOTH
+}
+
+enum TelegramUpdateStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+}
+
+enum IntegrationActionType {
+  TELEGRAM_LINK
+  TELEGRAM_ENTER
+}
+
+enum IntegrationDeliveryStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  FAILED
+}
+
+enum IntegrationDeliveryEvent {
+  RAFFLE_CREATED
+  RAFFLE_STARTING
+  RAFFLE_ENDING_SOON
+  RAFFLE_COMPLETED
+  WINNER_SELECTED
+  RAFFLE_CANCELLED
+}
+
+/// One Telegram group/channel explicitly authorized by a KOS organization.
+model TelegramCommunity {
+  id                    String                  @id @default(cuid())
+  organizationId        String
+  backingGuildId        String
+  telegramChatId        String                  @unique
+  communityName         String
+  status                TelegramCommunityStatus @default(ACTIVE)
+  featureFlags          String[]                @default([])
+  permissions           String[]                @default([])
+  defaultRaffleSettings Json?
+  botVerifiedAt         DateTime?
+  createdById           String
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  organization Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  backingGuild Guild                       @relation(fields: [backingGuildId], references: [id], onDelete: Restrict)
+  publications TelegramRafflePublication[]
+  deliveries   IntegrationDelivery[]
+
+  @@index([organizationId, status])
+  @@index([backingGuildId])
+  @@map("telegram_communities")
+}
+
+/// A Telegram presentation of an existing authoritative KOS raffle.
+model TelegramRafflePublication {
+  id                String                   @id @default(cuid())
+  raffleId          Int
+  communityId       String
+  telegramMessageId String?
+  winnerVisibility  TelegramWinnerVisibility @default(PUBLIC)
+  autoAnnouncements Boolean                  @default(true)
+  createdById       String
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  raffle           Raffle                  @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  community        TelegramCommunity       @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  eligibilityRules RaffleEligibilityRule[]
+  entryActionToken IntegrationActionToken? @relation("TelegramPublicationEntryToken")
+  deliveries       IntegrationDelivery[]
+
+  @@unique([raffleId, communityId])
+  @@index([communityId, createdAt])
+  @@map("telegram_raffle_publications")
+}
+
+/// Provider-specific entry/draw gates attached to a KOS raffle.
+model RaffleEligibilityRule {
+  id            String                    @id @default(cuid())
+  raffleId      Int
+  publicationId String?
+  provider      RaffleEligibilityProvider
+  type          RaffleEligibilityType
+  config        Json?
+  checkAt       RaffleEligibilityCheckAt  @default(ENTRY)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  raffle      Raffle                     @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  publication TelegramRafflePublication? @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@unique([publicationId, type])
+  @@index([raffleId, provider, checkAt])
+  @@map("raffle_eligibility_rules")
+}
+
+/// Durable webhook idempotency marker; raw Telegram updates are not retained.
+model TelegramUpdateReceipt {
+  id          String               @id @default(cuid())
+  botKey      String               @default("main")
+  updateId    Int
+  status      TelegramUpdateStatus @default(RECEIVED)
+  receivedAt  DateTime             @default(now())
+  processedAt DateTime?
+  error       String?
+
+  @@unique([botKey, updateId])
+  @@index([status, receivedAt])
+  @@map("telegram_update_receipts")
+}
+
+/// Opaque, expiring Telegram deep-link or callback capability.
+model IntegrationActionToken {
+  id            String                @id @default(cuid())
+  tokenHash     String?               @unique
+  action        IntegrationActionType
+  userId        String?
+  publicationId String?               @unique
+  payload       Json?
+  singleUse     Boolean               @default(true)
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime              @default(now())
+
+  publication TelegramRafflePublication? @relation("TelegramPublicationEntryToken", fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@index([action, expiresAt])
+  @@index([userId, action])
+  @@map("integration_action_tokens")
+}
+
+/// Retryable cross-platform event delivery claimed by the long-running worker.
+model IntegrationDelivery {
+  id            String                    @id @default(cuid())
+  event         IntegrationDeliveryEvent
+  status        IntegrationDeliveryStatus @default(PENDING)
+  communityId   String
+  publicationId String?
+  raffleId      Int?
+  dedupeKey     String                    @unique
+  payload       Json?
+  notBefore     DateTime                  @default(now())
+  attempts      Int                       @default(0)
+  lockedAt      DateTime?
+  deliveredAt   DateTime?
+  lastError     String?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  community   TelegramCommunity          @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  publication TelegramRafflePublication? @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  raffle      Raffle?                    @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+
+  @@index([status, notBefore])
+  @@index([communityId, createdAt])
+  @@index([raffleId, event])
+  @@map("integration_deliveries")
 }
 
 // ---------------------------------------------------------------------------

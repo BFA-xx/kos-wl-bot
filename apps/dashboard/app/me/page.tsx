@@ -2,8 +2,9 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
-import { PageTitle, Card, SectionTitle, StatCard } from "@/components/ui";
+import { PageTitle, SectionTitle, StatCard } from "@/components/ui";
 import { XConnectCard } from "@/components/XConnectCard";
+import { TelegramConnectCard } from "@/components/TelegramConnectCard";
 import { fmtDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +14,12 @@ export default async function MeProfilePage() {
   const user = await getSessionUser();
   if (!user) redirect("/login?next=/me");
 
-  const [x, entryCount, winCount, orgCount] = await Promise.all([
+  const [x, telegram, entryCount, winCount, orgCount] = await Promise.all([
     prisma.connectedAccount.findUnique({
       where: { userId_provider: { userId: user.id, provider: "X" } },
+    }),
+    prisma.connectedAccount.findUnique({
+      where: { userId_provider: { userId: user.id, provider: "TELEGRAM" } },
     }),
     prisma.participant.count({ where: { userId: user.id } }),
     prisma.winner.count({ where: { userId: user.id, replaced: false } }),
@@ -88,7 +92,7 @@ export default async function MeProfilePage() {
           linked={
             x
               ? {
-                  handle: x.handle,
+                  handle: x.handle ?? x.displayName ?? "connected account",
                   avatar: meta.avatar ?? null,
                   since: fmtDate(x.createdAt),
                 }
@@ -96,21 +100,17 @@ export default async function MeProfilePage() {
           }
         />
 
-        {/* Reserved for future providers. */}
-        <Card className="opacity-50">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold">Telegram</div>
-              <div className="text-sm text-kos-muted">Coming soon</div>
-            </div>
-            <button
-              disabled
-              className="kos-btn cursor-not-allowed text-xs opacity-60"
-            >
-              Soon
-            </button>
-          </div>
-        </Card>
+        <TelegramConnectCard
+          linked={
+            telegram
+              ? {
+                  handle: telegram.handle,
+                  displayName: telegram.displayName,
+                  since: fmtDate(telegram.createdAt),
+                }
+              : null
+          }
+        />
       </div>
     </>
   );

@@ -31,3 +31,5 @@ export * from "@prisma/client";
 export { Prisma } from "@prisma/client";
 export * from "./campaigns.js";
 export * from "./raids.js";
+export * from "./raffles.js";
+export * from "./telegram.js";

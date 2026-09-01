@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/db";
 import type { Raffle, RaffleRole, User } from "@prisma/client";
-import { syncCampaignsForRaffle } from "@kos/db";
+import {
+  evaluateTelegramEligibility,
+  recordRaffleParticipant,
+  syncCampaignsForRaffle,
+} from "@kos/db";
 import { notifyPointsChannel } from "@/lib/points";
 import {
   getLegacyRaffleTasks,
@@ -54,7 +58,10 @@ export async function fetchGuildMember(
   guildId: string,
   userId: string,
 ): Promise<RestMember | "not_member" | "unavailable"> {
-  const botToken = process.env.DISCORD_BOT_TOKEN || process.env.BOT_TOKEN;
+  const botToken =
+    process.env.DISCORD_BOT_TOKEN ||
+    process.env.BOT_TOKEN ||
+    process.env.DISCORD_TOKEN;
   if (!botToken) return "unavailable";
   const res = await fetch(
     `https://discord.com/api/guilds/${guildId}/members/${userId}`,
@@ -290,6 +297,23 @@ export async function evaluateWebGates(
     }
   }
 
+  const telegram = await evaluateTelegramEligibility(prisma, {
+    raffleId: raffle.id,
+    userId: user.id,
+    checkAt: "ENTRY",
+    botToken: process.env.TELEGRAM_BOT_TOKEN,
+  });
+  if (telegram.status !== "eligible") {
+    gates.push({
+      key: "telegram",
+      label: "Telegram eligibility",
+      ok: false,
+      reason:
+        telegram.reasons[0] ?? "Telegram eligibility could not be verified.",
+      url: "/me",
+    });
+  }
+
   return {
     gates,
     canEnter: gates.every((g) => g.ok) && !discordOnly,
@@ -302,32 +326,20 @@ export async function recordWebEntry(
   user: User,
   raffle: RaffleWithRoles,
   member: RestMember,
+  source: "website" | "Telegram" = "website",
 ): Promise<number | null> {
   const weight = await entryWeightForRoles(raffle, member.roles);
-  const entryCount = await prisma.$transaction(async (tx) => {
-    const inserted = await tx.participant.createMany({
-      data: [
-        {
-          raffleId: raffle.id,
-          userId: user.id,
-          username: user.username,
-          accountCreatedAt: snowflakeDate(user.id),
-          joinedGuildAt: member.joined_at ? new Date(member.joined_at) : null,
-          weight,
-        },
-      ],
-      skipDuplicates: true,
-    });
-    if (inserted.count === 0) return null;
-    const updated = await tx.raffle.update({
-      where: { id: raffle.id },
-      data: { entryCount: { increment: 1 }, editRequestedAt: new Date() },
-      select: { entryCount: true },
-    });
-    return updated.entryCount;
+  const recorded = await recordRaffleParticipant(prisma, {
+    raffleId: raffle.id,
+    userId: user.id,
+    username: user.username,
+    accountCreatedAt: snowflakeDate(user.id),
+    joinedGuildAt: member.joined_at ? new Date(member.joined_at) : null,
+    weight,
+    requestMessageRefresh: true,
   });
-
-  if (entryCount === null) return null;
+  if (!recorded.changed || recorded.entryCount === null) return null;
+  const entryCount = recorded.entryCount;
 
   await prisma.log
     .create({
@@ -337,7 +349,7 @@ export async function recordWebEntry(
         actorId: user.id,
         category: "ENTRY",
         action: "ENTRY_ADD",
-        message: `${user.username} entered raffle #${raffle.id} via the website`,
+        message: `${user.username} entered raffle #${raffle.id} via ${source === "Telegram" ? "Telegram" : "the website"}`,
       },
     })
     .catch(() => undefined);

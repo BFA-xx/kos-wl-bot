@@ -17,6 +17,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/login") ||
     pathname.startsWith("/r/") ||
     pathname.startsWith("/api/auth") ||
+    pathname === "/api/integrations/telegram/webhook" ||
     isDiscordMemberFeed ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico" ||

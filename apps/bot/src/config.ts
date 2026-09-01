@@ -26,6 +26,12 @@ const optionalUrl = z.preprocess(
   z.string().url().optional(),
 );
 
+const optionalString = (schema: z.ZodString) =>
+  z.preprocess(
+    (value) => (value === "" || value === undefined ? undefined : value),
+    schema.optional(),
+  );
+
 /**
  * Centralised, validated runtime configuration.
  *
@@ -68,6 +74,12 @@ const schema = z.object({
 
   /** Stable public raffle origin. Must not be a temporary deployment URL. */
   PUBLIC_RAFFLE_ORIGIN: z.string().url().default("https://raffle.koslabs.app"),
+
+  /** Telegram is feature-disabled when no token is configured. */
+  TELEGRAM_BOT_TOKEN: optionalString(z.string().min(20)),
+  TELEGRAM_BOT_USERNAME: optionalString(
+    z.string().regex(/^[A-Za-z0-9_]{5,32}$/u),
+  ),
 
   /**
    * 32-byte hex key (64 hex chars) enabling AES-256-GCM encryption of wallet

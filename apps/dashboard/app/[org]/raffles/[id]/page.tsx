@@ -8,6 +8,7 @@ import { RaffleActions } from "@/components/RaffleActions";
 import { RaffleEditButton } from "@/components/RaffleEditButton";
 import { RaffleQuickActions } from "@/components/RaffleQuickActions";
 import { ParticipantsLive } from "@/components/ParticipantsLive";
+import { TelegramPublicationManager } from "@/components/TelegramPublicationManager";
 import { fmtDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -362,6 +363,12 @@ export default async function RaffleDetailPage({
           )}
         </div>
       </div>
+
+      <TelegramPublicationManager
+        orgSlug={params.org}
+        raffleId={raffle.id}
+        canPublish={canEdit}
+      />
 
       <div className="mt-4">
         <ParticipantsLive raffleId={raffle.id} />

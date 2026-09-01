@@ -1,5 +1,11 @@
 import { type Client } from "discord.js";
-import { prisma, LogCategory, RaffleStatus } from "@kos/db";
+import {
+  prisma,
+  LogCategory,
+  RaffleStatus,
+  enqueueTelegramRaffleEvent,
+  evaluateTelegramEligibility,
+} from "@kos/db";
 import {
   verifiableSample,
   verifiableWeightedSample,
@@ -21,6 +27,7 @@ import { generateAndDeliverProof } from "./proofService.js";
 import { logger } from "../logger.js";
 import { publicRafflePath } from "../utils/raffleShare.js";
 import { syncCollaborationForRaffle } from "./collaborationService.js";
+import { config } from "../config.js";
 
 interface DrawnWinner {
   userId: string;
@@ -53,9 +60,31 @@ export async function closeAndDraw(
     where: { raffleId },
     select: { id: true, userId: true, username: true, weight: true },
   });
+  const hasTelegramDrawRules =
+    (await prisma.raffleEligibilityRule.count({
+      where: {
+        raffleId,
+        provider: { in: ["TELEGRAM", "KOS"] },
+        checkAt: { in: ["DRAW", "BOTH"] },
+      },
+    })) > 0;
   const pool: DrawnWinner[] = [];
   for (const p of participants) {
     if (await isBlacklisted(raffle.guildId, p.userId)) continue;
+    if (hasTelegramDrawRules) {
+      const telegram = await evaluateTelegramEligibility(prisma, {
+        raffleId,
+        userId: p.userId,
+        checkAt: "DRAW",
+        botToken: config.TELEGRAM_BOT_TOKEN,
+      });
+      if (telegram.status === "unavailable") {
+        throw new Error(
+          `Telegram draw eligibility unavailable for raffle #${raffleId}`,
+        );
+      }
+      if (telegram.status === "ineligible") continue;
+    }
     pool.push({
       userId: p.userId,
       username: p.username,
@@ -78,13 +107,14 @@ export async function closeAndDraw(
   const endedAt =
     raffle.endAt.getTime() < Date.now() ? raffle.endAt : new Date();
 
+  const drawnAt = new Date();
   const claimed = await prisma.$transaction(async (tx) => {
     const transition = await tx.raffle.updateMany({
       where: { id: raffleId, status: raffle.status },
       data: {
         status: RaffleStatus.ENDED,
         endedAt,
-        drawnAt: new Date(),
+        drawnAt,
         drawSeed: seed,
         drawSeedHash: hash,
       },
@@ -125,6 +155,22 @@ export async function closeAndDraw(
       totalWeight: pool.reduce((sum, p) => sum + Math.max(1, p.weight), 0),
     },
   });
+
+  const eventMarker = drawnAt.toISOString();
+  await enqueueTelegramRaffleEvent(prisma, {
+    raffleId,
+    event: "RAFFLE_COMPLETED",
+    marker: eventMarker,
+  }).catch((err) =>
+    logger.warn({ err, raffleId }, "Telegram completion event queue failed"),
+  );
+  await enqueueTelegramRaffleEvent(prisma, {
+    raffleId,
+    event: "WINNER_SELECTED",
+    marker: eventMarker,
+  }).catch((err) =>
+    logger.warn({ err, raffleId }, "Telegram winner event queue failed"),
+  );
 
   // Web-parity notifications: winners get a WIN, other entrants a RESULT.
   await notifyRaffleResults(

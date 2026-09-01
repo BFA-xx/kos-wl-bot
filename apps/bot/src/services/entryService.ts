@@ -5,6 +5,9 @@ import {
   RaffleStatus,
   type WalletChain,
   syncCampaignsForRaffle,
+  recordRaffleParticipant,
+  removeRaffleParticipant,
+  evaluateTelegramEligibility,
 } from "@kos/db";
 import { createHash } from "node:crypto";
 import {
@@ -14,6 +17,7 @@ import {
 import { upsertUser } from "./userService.js";
 import { audit } from "./auditService.js";
 import { logger } from "../logger.js";
+import { config } from "../config.js";
 import {
   awardTaskPoints,
   notifyPointsChannel,
@@ -83,6 +87,19 @@ export async function enterRaffle(
     return { status: "ineligible", reasons: eligibility.reasons };
   }
 
+  const telegramEligibility = await evaluateTelegramEligibility(prisma, {
+    raffleId,
+    userId: member.id,
+    checkAt: "ENTRY",
+    botToken: config.TELEGRAM_BOT_TOKEN,
+  });
+  if (telegramEligibility.status !== "eligible") {
+    return {
+      status: "ineligible",
+      reasons: telegramEligibility.reasons,
+    };
+  }
+
   // Hard wallet gate: must have a registered wallet for one of the chains.
   if (raffle.requireWallet && raffle.walletChains.length > 0) {
     const have = await prisma.walletProfile.count({
@@ -110,35 +127,24 @@ export async function enterRaffle(
 
   try {
     const weight = await entryWeightForMember(raffle, member);
-    const entryCount = await prisma.$transaction(async (tx) => {
-      const inserted = await tx.participant.createMany({
-        data: [
-          {
-            raffleId,
-            userId: member.id,
-            username: member.user.username,
-            accountCreatedAt: new Date(member.user.createdTimestamp),
-            joinedGuildAt: member.joinedTimestamp
-              ? new Date(member.joinedTimestamp)
-              : null,
-            flagged: eligibility.flags.length > 0,
-            flagReason: eligibility.flags.length
-              ? eligibility.flags.join(", ")
-              : null,
-            weight,
-          },
-        ],
-        skipDuplicates: true,
-      });
-      if (inserted.count === 0) return null;
-      const updated = await tx.raffle.update({
-        where: { id: raffleId },
-        data: { entryCount: { increment: 1 } },
-        select: { entryCount: true },
-      });
-      return updated.entryCount;
+    const recorded = await recordRaffleParticipant(prisma, {
+      raffleId,
+      userId: member.id,
+      username: member.user.username,
+      accountCreatedAt: new Date(member.user.createdTimestamp),
+      joinedGuildAt: member.joinedTimestamp
+        ? new Date(member.joinedTimestamp)
+        : null,
+      flagged: eligibility.flags.length > 0,
+      flagReason: eligibility.flags.length
+        ? eligibility.flags.join(", ")
+        : null,
+      weight,
     });
-    if (entryCount === null) return { status: "duplicate" };
+    if (!recorded.changed || recorded.entryCount === null) {
+      return { status: "duplicate" };
+    }
+    const entryCount = recorded.entryCount;
 
     await audit({
       guildId: raffle.guildId,
@@ -194,23 +200,14 @@ export async function leaveRaffle(
   if (raffle.status !== RaffleStatus.LIVE) return { status: "closed" };
 
   try {
-    const entryCount = await prisma.$transaction(async (tx) => {
-      const existing = await tx.participant.findUnique({
-        where: { raffleId_userId: { raffleId, userId: member.id } },
-        select: { id: true },
-      });
-      if (!existing) return null;
-
-      await tx.participant.delete({ where: { id: existing.id } });
-      const updated = await tx.raffle.update({
-        where: { id: raffleId },
-        data: { entryCount: { decrement: 1 } },
-        select: { entryCount: true },
-      });
-      return updated.entryCount;
+    const removed = await removeRaffleParticipant(prisma, {
+      raffleId,
+      userId: member.id,
     });
-
-    if (entryCount === null) return { status: "not_entered" };
+    if (!removed.changed || removed.entryCount === null) {
+      return { status: "not_entered" };
+    }
+    const entryCount = removed.entryCount;
 
     await audit({
       guildId: raffle.guildId,

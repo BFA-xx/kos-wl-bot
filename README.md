@@ -80,6 +80,8 @@ pnpm install
 # 1. Configure
 cp .env.example .env
 #   set DISCORD_TOKEN, DISCORD_CLIENT_ID, DATABASE_URL, WALLET_ENCRYPTION_KEY…
+#   optional Telegram: TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME,
+#   TELEGRAM_WEBHOOK_SECRET
 #   generate secrets:
 #     openssl rand -hex 32   # WALLET_ENCRYPTION_KEY / DASHBOARD_SESSION_TOKEN
 #     openssl rand -hex 24   # INTERNAL_API_TOKEN
