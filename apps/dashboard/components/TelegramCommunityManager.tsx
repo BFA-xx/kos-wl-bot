@@ -41,6 +41,7 @@ export function TelegramCommunityManager() {
   const [name, setName] = useState("");
   const [guildId, setGuildId] = useState("");
   const [flags, setFlags] = useState<string[]>([
+    "ONBOARDING",
     "AUTO_ANNOUNCEMENTS",
     "MEMBERSHIP_CHECKS",
   ]);
@@ -90,7 +91,10 @@ export function TelegramCommunityManager() {
     }
   }
 
-  async function setStatus(community: Community) {
+  async function updateCommunity(
+    community: Community,
+    patch: { status?: Community["status"]; featureFlags?: string[] },
+  ) {
     setBusy(community.id);
     setMessage("");
     const response = await fetch(
@@ -99,8 +103,8 @@ export function TelegramCommunityManager() {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          status: community.status === "ACTIVE" ? "DISABLED" : "ACTIVE",
-          featureFlags: community.featureFlags,
+          status: patch.status ?? community.status,
+          featureFlags: patch.featureFlags ?? community.featureFlags,
         }),
       },
     );
@@ -108,10 +112,24 @@ export function TelegramCommunityManager() {
     setBusy("");
     setMessage(
       response.ok
-        ? "Community status updated."
+        ? "Community settings updated."
         : (body.error ?? "Update failed."),
     );
     if (response.ok) await mutate();
+  }
+
+  async function setStatus(community: Community) {
+    await updateCommunity(community, {
+      status: community.status === "ACTIVE" ? "DISABLED" : "ACTIVE",
+    });
+  }
+
+  async function toggleCommunityFlag(community: Community, flag: string) {
+    await updateCommunity(community, {
+      featureFlags: community.featureFlags.includes(flag)
+        ? community.featureFlags.filter((item) => item !== flag)
+        : [...community.featureFlags, flag],
+    });
   }
 
   return (
@@ -140,6 +158,26 @@ export function TelegramCommunityManager() {
                   <span>{community._count.publications} publications</span>
                   <span>{community.featureFlags.length} features</span>
                 </div>
+                {canEdit ? (
+                  <div className="mt-2 grid gap-1.5 min-[440px]:grid-cols-2">
+                    {FLAGS.map(([flag, label]) => (
+                      <label
+                        key={flag}
+                        className="flex items-center gap-2 text-xs text-kos-muted"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={community.featureFlags.includes(flag)}
+                          disabled={Boolean(busy)}
+                          onChange={() =>
+                            void toggleCommunityFlag(community, flag)
+                          }
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <span
                 className={`kos-badge ${

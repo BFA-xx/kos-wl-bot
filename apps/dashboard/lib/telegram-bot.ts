@@ -8,7 +8,11 @@ import {
   recordWebEntry,
 } from "@/lib/raffle-entry";
 import { publishRaffleToTelegram } from "@/lib/telegram-publication";
-import { telegramActorHasPermission, telegramConfig } from "@/lib/telegram";
+import {
+  didTelegramMemberJoin,
+  telegramActorHasPermission,
+  telegramConfig,
+} from "@/lib/telegram";
 import {
   hashIntegrationToken,
   isTelegramAdmin,
@@ -110,7 +114,7 @@ async function linkTelegramAccount(
     );
   } else {
     await ctx.reply(
-      "Telegram connected to KOS. You can now enter eligible raffles here.",
+      "Onboarding complete. Telegram is connected to KOS, and you can now enter eligible raffles. Connect a wallet only when a raffle requires one.",
       {
         reply_markup: {
           inline_keyboard: [
@@ -206,6 +210,59 @@ async function publishFromTelegram(ctx: Context, rawId: string): Promise<void> {
     },
   });
   await ctx.reply(`Raffle #${raffleId} is queued for Telegram publication.`);
+}
+
+async function welcomeTelegramMember(ctx: Context): Promise<void> {
+  const update = ctx.update.chat_member;
+  if (
+    !update ||
+    !["group", "supergroup"].includes(update.chat.type) ||
+    update.new_chat_member.user.is_bot ||
+    !didTelegramMemberJoin(update.old_chat_member, update.new_chat_member)
+  ) {
+    return;
+  }
+  const community = await prisma.telegramCommunity.findFirst({
+    where: {
+      telegramChatId: String(update.chat.id),
+      status: "ACTIVE",
+      featureFlags: { has: "ONBOARDING" },
+    },
+    select: { id: true, communityName: true },
+  });
+  if (!community) return;
+  const memberName = telegramDisplayName(update.new_chat_member.user).slice(
+    0,
+    80,
+  );
+  await ctx.api.sendMessage(
+    update.chat.id,
+    [
+      `Welcome ${memberName} to ${community.communityName}.`,
+      "",
+      "Complete your KOS profile and connect Telegram to unlock community raffles.",
+      "A wallet is only required when a specific raffle asks for one.",
+    ].join("\n"),
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "Complete KOS profile",
+              url: `${dashboardOrigin()}/me`,
+            },
+          ],
+          [
+            {
+              text: "Start KOS Raffles bot",
+              url: `https://t.me/${ctx.me.username}?start=welcome_${community.id}`,
+            },
+          ],
+        ],
+      },
+      link_preview_options: { is_disabled: true },
+    },
+  );
 }
 
 async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
@@ -345,6 +402,7 @@ function buildBot(token: string): Bot {
     }
     await publishFromTelegram(ctx, match[1]);
   });
+  bot.on("chat_member", welcomeTelegramMember);
   bot.callbackQuery(/^a:([A-Za-z0-9_-]+)$/u, async (ctx) => {
     await enterFromTelegram(ctx, ctx.match[1]);
   });

@@ -43,6 +43,27 @@ export function normalizeTelegramChatId(value: unknown): string | null {
   return /^-?\d{1,20}$/u.test(chatId) ? chatId : null;
 }
 
+interface TelegramMembershipState {
+  status: string;
+  is_member?: boolean;
+}
+
+function hasTelegramMembership(member: TelegramMembershipState): boolean {
+  return (
+    member.status === "creator" ||
+    member.status === "administrator" ||
+    member.status === "member" ||
+    (member.status === "restricted" && member.is_member === true)
+  );
+}
+
+export function didTelegramMemberJoin(
+  previous: TelegramMembershipState,
+  current: TelegramMembershipState,
+): boolean {
+  return !hasTelegramMembership(previous) && hasTelegramMembership(current);
+}
+
 export async function verifyTelegramCommunity(chatId: string): Promise<{
   ok: boolean;
   name?: string;

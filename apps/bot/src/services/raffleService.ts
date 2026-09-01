@@ -12,6 +12,7 @@ import {
   RoleMatchMode,
   WalletChain,
   Prisma,
+  autoPublishRaffleToTelegram,
 } from "@kos/db";
 import {
   buildRaffleEmbed,
@@ -195,6 +196,21 @@ export async function publishRaffleMessage(
         "published raffle Collab Hub auto-link failed",
       ),
     );
+    await autoPublishRaffleToTelegram(prisma, raffleId)
+      .then((published) => {
+        if (published > 0) {
+          logger.info(
+            { raffleId, telegramCommunities: published },
+            "raffle queued for automatic Telegram publication",
+          );
+        }
+      })
+      .catch((error) =>
+        logger.warn(
+          { error, raffleId },
+          "automatic Telegram raffle publication failed",
+        ),
+      );
     return { ok: true };
   } catch (err) {
     const e = err as {

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   type IntegrationDeliveryEvent,
   type Prisma,
@@ -38,6 +38,13 @@ export interface TelegramEligibilityResult {
   reasons: string[];
 }
 
+export interface TelegramRaffleDefaults {
+  membershipRequired: boolean;
+  remainUntilEnd: boolean;
+  winnerVisibility: "PUBLIC" | "ANONYMOUS" | "ADMIN_ONLY";
+  autoAnnouncements: boolean;
+}
+
 export function hashIntegrationToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
@@ -57,6 +64,24 @@ export function isTelegramMember(member: TelegramChatMember): boolean {
 
 export function isTelegramAdmin(member: TelegramChatMember): boolean {
   return member.status === "creator" || member.status === "administrator";
+}
+
+export function telegramRaffleDefaults(value: unknown): TelegramRaffleDefaults {
+  const settings =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const winnerVisibility = ["PUBLIC", "ANONYMOUS", "ADMIN_ONLY"].includes(
+    String(settings.winnerVisibility),
+  )
+    ? (settings.winnerVisibility as TelegramRaffleDefaults["winnerVisibility"])
+    : "PUBLIC";
+  return {
+    membershipRequired: settings.membershipRequired === true,
+    remainUntilEnd: settings.remainUntilEnd === true,
+    winnerVisibility,
+    autoAnnouncements: settings.autoAnnouncements !== false,
+  };
 }
 
 export async function callTelegramApi<T>(
@@ -207,6 +232,118 @@ export async function evaluateTelegramEligibility(
   return reasons.length
     ? { status: "ineligible", reasons: [...new Set(reasons)] }
     : { status: "eligible", reasons: [] };
+}
+
+/**
+ * Create each configured Telegram mirror once after the authoritative Discord
+ * raffle post succeeds. Reposts are safe: existing publications are skipped.
+ */
+export async function autoPublishRaffleToTelegram(
+  db: PrismaClient,
+  raffleId: number,
+): Promise<number> {
+  const raffle = await db.raffle.findUnique({
+    where: { id: raffleId },
+    select: {
+      id: true,
+      guildId: true,
+      createdById: true,
+      status: true,
+      endAt: true,
+    },
+  });
+  if (!raffle || (raffle.status !== "LIVE" && raffle.status !== "UPCOMING")) {
+    return 0;
+  }
+
+  const communities = await db.telegramCommunity.findMany({
+    where: {
+      backingGuildId: raffle.guildId,
+      status: "ACTIVE",
+      featureFlags: { has: "AUTO_ANNOUNCEMENTS" },
+      publications: { none: { raffleId: raffle.id } },
+    },
+    select: {
+      id: true,
+      telegramChatId: true,
+      communityName: true,
+      defaultRaffleSettings: true,
+    },
+  });
+
+  let published = 0;
+  for (const community of communities) {
+    const defaults = telegramRaffleDefaults(community.defaultRaffleSettings);
+    const publicationId = randomUUID();
+    const created = await db.$transaction(async (tx) => {
+      const claimed = await tx.telegramRafflePublication.createMany({
+        data: [
+          {
+            id: publicationId,
+            raffleId: raffle.id,
+            communityId: community.id,
+            createdById: raffle.createdById,
+            autoAnnouncements: defaults.autoAnnouncements,
+            winnerVisibility: defaults.winnerVisibility,
+          },
+        ],
+        skipDuplicates: true,
+      });
+      if (claimed.count === 0) return false;
+
+      await tx.integrationActionToken.create({
+        data: {
+          action: "TELEGRAM_ENTER",
+          publicationId,
+          singleUse: false,
+          expiresAt: new Date(raffle.endAt.getTime() + 86_400_000),
+        },
+      });
+      if (defaults.membershipRequired) {
+        await tx.raffleEligibilityRule.create({
+          data: {
+            raffleId: raffle.id,
+            publicationId,
+            provider: "TELEGRAM",
+            type: "TELEGRAM_CHAT_MEMBER",
+            checkAt: defaults.remainUntilEnd ? "BOTH" : "ENTRY",
+            config: {
+              chatId: community.telegramChatId,
+              chatName: community.communityName,
+            },
+          },
+        });
+      }
+
+      const deliveries: Prisma.IntegrationDeliveryCreateManyInput[] = [
+        {
+          event: "RAFFLE_CREATED",
+          communityId: community.id,
+          publicationId,
+          raffleId: raffle.id,
+          dedupeKey: `telegram:RAFFLE_CREATED:${publicationId}:auto`,
+        },
+      ];
+      const reminderAt = new Date(raffle.endAt.getTime() - 10 * 60_000);
+      if (defaults.autoAnnouncements && reminderAt.getTime() > Date.now()) {
+        deliveries.push({
+          event: "RAFFLE_ENDING_SOON",
+          communityId: community.id,
+          publicationId,
+          raffleId: raffle.id,
+          dedupeKey: `telegram:RAFFLE_ENDING_SOON:${publicationId}:auto`,
+          notBefore: reminderAt,
+        });
+      }
+      await tx.integrationDelivery.createMany({
+        data: deliveries,
+        skipDuplicates: true,
+      });
+      return true;
+    });
+    if (created) published += 1;
+  }
+  return published;
 }
 
 /** Queue one lifecycle event for every active Telegram publication. */

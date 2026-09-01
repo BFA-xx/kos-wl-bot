@@ -5,6 +5,20 @@ Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
 Audited production application commit: `9da40e1`
 
+## Telegram automation follow-up (2026-09-01)
+
+- A successful authoritative Discord raffle post now idempotently creates and
+  queues a Telegram publication for every active connected community with
+  `AUTO_ANNOUNCEMENTS`. Drafts, cancelled raffles, failed Discord posts, and
+  existing Telegram publications are skipped.
+- Telegram community Settings expose live feature toggles. New connections
+  default to onboarding, automatic announcements, and membership checks.
+- A `chat_member` transition into an authorized community with `ONBOARDING`
+  welcomes human members with KOS profile and private bot links. Telegram link
+  completion explains that a wallet is needed only when a raffle requires it.
+- The production KOS community can enable this follow-up without a migration;
+  it reuses the Telegram foundation tables and durable EC2 delivery worker.
+
 ## Telegram integration release (2026-09-01)
 
 - Commit `9da40e1` adds the Telegram raffle foundation: secure one-time account
@@ -38,8 +52,8 @@ Audited production application commit: `9da40e1`
   register the production webhook with Telegram using the Vercel secret and
   allow `message`, `callback_query`, and `chat_member` updates.
 - This release covers the first production slice, not the full Telegram
-  roadmap. Quick raffle creation, onboarding automation, a Mini App, and later
-  growth features remain future phases.
+  roadmap. Quick raffle creation, a Mini App, and later growth features remain
+  future phases; onboarding automation is covered by the follow-up above.
 
 ## Current state
 

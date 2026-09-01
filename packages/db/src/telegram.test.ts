@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { PrismaClient } from "@prisma/client";
 import {
+  autoPublishRaffleToTelegram,
   hashIntegrationToken,
   isTelegramAdmin,
   isTelegramMember,
   telegramDisplayName,
+  telegramRaffleDefaults,
 } from "./telegram.js";
 
 test("hashes opaque integration capabilities deterministically", () => {
@@ -40,4 +43,101 @@ test("builds display names without requiring a public username", () => {
     "Ada Lovelace",
   );
   assert.equal(telegramDisplayName({ id: 1, first_name: "Ada" }), "Ada");
+});
+
+test("normalizes Telegram raffle defaults conservatively", () => {
+  assert.deepEqual(telegramRaffleDefaults(null), {
+    membershipRequired: false,
+    remainUntilEnd: false,
+    winnerVisibility: "PUBLIC",
+    autoAnnouncements: true,
+  });
+  assert.deepEqual(
+    telegramRaffleDefaults({
+      membershipRequired: true,
+      remainUntilEnd: true,
+      winnerVisibility: "ADMIN_ONLY",
+      autoAnnouncements: false,
+    }),
+    {
+      membershipRequired: true,
+      remainUntilEnd: true,
+      winnerVisibility: "ADMIN_ONLY",
+      autoAnnouncements: false,
+    },
+  );
+});
+
+test("auto-publishes a posted raffle with membership and reminder defaults", async () => {
+  const calls: {
+    publication?: Record<string, unknown>;
+    action?: Record<string, unknown>;
+    rule?: Record<string, unknown>;
+    deliveries?: Record<string, unknown>[];
+  } = {};
+  const tx = {
+    telegramRafflePublication: {
+      createMany: async (input: { data: Record<string, unknown>[] }) => {
+        calls.publication = input.data[0];
+        return { count: 1 };
+      },
+    },
+    integrationActionToken: {
+      create: async (input: { data: Record<string, unknown> }) => {
+        calls.action = input.data;
+        return input.data;
+      },
+    },
+    raffleEligibilityRule: {
+      create: async (input: { data: Record<string, unknown> }) => {
+        calls.rule = input.data;
+        return input.data;
+      },
+    },
+    integrationDelivery: {
+      createMany: async (input: { data: Record<string, unknown>[] }) => {
+        calls.deliveries = input.data;
+        return { count: input.data.length };
+      },
+    },
+  };
+  const db = {
+    raffle: {
+      findUnique: async () => ({
+        id: 42,
+        guildId: "guild-1",
+        createdById: "user-1",
+        status: "LIVE",
+        endAt: new Date(Date.now() + 30 * 60_000),
+      }),
+    },
+    telegramCommunity: {
+      findMany: async () => [
+        {
+          id: "community-1",
+          telegramChatId: "-1001",
+          communityName: "KOS",
+          defaultRaffleSettings: {
+            membershipRequired: true,
+            remainUntilEnd: true,
+            winnerVisibility: "ANONYMOUS",
+            autoAnnouncements: true,
+          },
+        },
+      ],
+    },
+    $transaction: async (callback: (client: typeof tx) => unknown) =>
+      callback(tx),
+  } as unknown as PrismaClient;
+
+  assert.equal(await autoPublishRaffleToTelegram(db, 42), 1);
+  assert.equal(calls.publication?.raffleId, 42);
+  assert.equal(calls.publication?.winnerVisibility, "ANONYMOUS");
+  assert.equal(calls.action?.action, "TELEGRAM_ENTER");
+  assert.equal(calls.rule?.checkAt, "BOTH");
+  assert.equal(calls.deliveries?.length, 2);
+  assert.deepEqual(
+    calls.deliveries?.map((delivery) => delivery.event),
+    ["RAFFLE_CREATED", "RAFFLE_ENDING_SOON"],
+  );
 });

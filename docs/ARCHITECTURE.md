@@ -586,6 +586,17 @@ Discord, web, and Telegram entry share the same transactional participant
 mutation, while each adapter retains its own live provider checks and response
 formatting.
 
+After the authoritative Discord post succeeds, the bot idempotently creates a
+Telegram publication for each active community with `AUTO_ANNOUNCEMENTS` and
+queues its initial delivery. Draft, cancelled, and failed Discord publications
+are not mirrored. Community raffle defaults control membership-at-entry,
+membership-at-draw, reminder delivery, and winner visibility.
+
+Communities with `ONBOARDING` receive a welcome only when a human account
+actually transitions into membership. The welcome links to the KOS profile and
+the private bot account-link flow. Connecting a wallet remains optional unless
+an individual raffle requires one.
+
 Scheduled Telegram side effects use `IntegrationDelivery`. Vercel queues
 events and the single EC2 scheduler claims, retries, and delivers them. Draws
 with a `DRAW`/`BOTH` Telegram membership rule recheck membership before seed
