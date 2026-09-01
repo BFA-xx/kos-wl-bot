@@ -1,9 +1,45 @@
 # Engineering Handoff
 
-Last updated: 2026-08-08
+Last updated: 2026-09-01
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited production application commit: `39b49e9`
+Audited production application commit: `9da40e1`
+
+## Telegram integration release (2026-09-01)
+
+- Commit `9da40e1` adds the Telegram raffle foundation: secure one-time account
+  linking, organization community registration, existing-raffle publication,
+  callback entry, explicit membership eligibility rules, durable webhook
+  receipts, and retryable lifecycle deliveries.
+- Entry and participant counters now use one shared transaction for Discord,
+  web, and Telegram. Winner selection rechecks draw-time Telegram rules and
+  stops safely when the provider cannot be verified.
+- Additive migration `20260901120000_telegram_integration_foundation` was
+  applied before either runtime changed. A protected custom-format production
+  backup was validated first at
+  `~/.codex/backups/kos-raf/2026-09-01-telegram/pre-telegram-integration.dump`.
+  Existing counts remained 250 users, 168 raffles, and 34 connected accounts;
+  all new Telegram tables were empty after release.
+- Local verification passed: Prisma validation, root typecheck, 151 tests (14
+  database, 28 bot, 109 dashboard), the production dashboard build, targeted
+  Telegram tests, and `git diff --check`. The GitHub `Typecheck, test, and
+  build` workflow also succeeded for `9da40e1`.
+- Both Vercel statuses succeeded for `9da40e1`:
+  `Vercel - kos-wl-bot-dashboard` and
+  `Vercel - kos-wl-bot-dashboard-3a8x`. Production canaries returned `307` for
+  signed-out dashboard pages, `401` for the unauthenticated Telegram community
+  API, and `503 telegram_not_configured` for the public webhook.
+- `./scripts/deploy-ec2.sh` passed all 28 bot tests, rebuilt the database client
+  and bot, registered nine global commands, restarted PM2, and returned
+  `ready: true` with three guilds and successful scheduler/member-sync health.
+- Telegram remains intentionally inactive until protected production values
+  are supplied. Vercel needs `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, and
+  `TELEGRAM_WEBHOOK_SECRET`; EC2 needs the bot token and username. Afterward,
+  register the production webhook with Telegram using the Vercel secret and
+  allow `message`, `callback_query`, and `chat_member` updates.
+- This release covers the first production slice, not the full Telegram
+  roadmap. Quick raffle creation, onboarding automation, a Mini App, and later
+  growth features remain future phases.
 
 ## Current state
 
