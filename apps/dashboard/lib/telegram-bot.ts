@@ -140,7 +140,9 @@ async function publishFromTelegram(ctx: Context, rawId: string): Promise<void> {
     where: { telegramChatId: String(ctx.chat.id) },
   });
   if (!community || community.status !== "ACTIVE") {
-    await ctx.reply("This Telegram community is not authorized in KOS.");
+    await ctx.reply(
+      `This Telegram community is not authorized in KOS.\n\nChat ID: ${ctx.chat.id}\nAdd it under your KOS organization Settings.`,
+    );
     return;
   }
   const member = await ctx.api
@@ -322,6 +324,17 @@ function buildBot(token: string): Bot {
           ],
         },
       },
+    );
+  });
+  bot.command("chatid", async (ctx) => {
+    if (!ctx.chat || ctx.chat.type === "private") {
+      await ctx.reply(
+        "Use this command inside the Telegram group you want to connect.",
+      );
+      return;
+    }
+    await ctx.reply(
+      `Telegram chat ID: ${ctx.chat.id}\nAdd it under your KOS organization Settings.`,
     );
   });
   bot.command("raffle", async (ctx) => {
