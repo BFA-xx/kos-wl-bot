@@ -1,9 +1,50 @@
 # Engineering Handoff
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited production application commit: `9da40e1`
+Audited production application commit: `e8f4732`
+
+## KOS Telegram bot Phase 1 (2026-09-02)
+
+- Commit `e8f4732` establishes the central KOS Telegram bot foundation without
+  importing Mintooor logic or duplicating KOS Raffle. grammY handlers are split
+  into identity, navigation, community, formatting, logging, and rate-limit
+  modules; production keeps the secure webhook and local development gains a
+  guarded polling runner.
+- `KosIdentity` and `IdentityAccount` provide an immutable-ID, provider-neutral
+  identity root with a nullable bridge to the existing Discord-backed `User`.
+  Telegram `/start` can now create an identity before product-account linking;
+  existing raffle, wallet, points, and organization relations are unchanged.
+- `/start`, `/menu`, `/profile`, and `/admin` add private inline navigation and
+  validated deep links. Authorized join welcomes tag the entering member by
+  Telegram user ID even when no username exists. KOS community configuration
+  now exposes the broader Phase 1 feature-flag vocabulary.
+- Additive migration `20260901213000_kos_identity_phase1` was applied with no
+  rollback marker after validating a restricted PostgreSQL 18 custom backup at
+  `~/.codex/backups/kos-raf/2026-09-02-kos-telegram-phase1/pre-kos-telegram-phase1.dump`
+  (93,456,588 bytes, 547 entries, SHA-256
+  `3b9d5b51ef7284a3f69cbcb023bd324d2b089233a69408593d5127a73467a85b`).
+  Existing counts remained 259 users, 41 connected accounts, one Telegram
+  community, and one Telegram raffle publication; all three new tables were
+  empty immediately after migration.
+- Local verification passed Prisma validation, database build/typecheck and 16
+  tests, bot build/typecheck and 28 tests, dashboard typecheck/build and 117
+  tests, targeted identity/deep-link tests, and `git diff --check`. GitHub's
+  `Typecheck, test, and build` check and both Vercel projects succeeded.
+- The EC2 deploy rebuilt the shared database client, passed all 28 bot tests,
+  registered nine Discord commands, restarted PM2, and returned `ready: true`
+  with a successful scheduler tick. Telegram reports zero pending webhook
+  updates, no webhook error, and KOS Bot remains an administrator of the KOS
+  group.
+- Telegram display metadata now identifies **KOS Bot**. The global command menu
+  contains `start`, `menu`, `profile`, `admin`, `chatid`, and `raffle`. The KOS
+  community enables onboarding, raffles, announcements, automatic raffle
+  delivery, and membership checks.
+- Live route canaries returned `401` for an unsigned Telegram webhook and the
+  unauthenticated community API, plus `307` for signed-out Settings. No fake
+  Telegram identity, member join, or production raffle was created; the next
+  real `/start` and human join are the final user-visible acceptance checks.
 
 ## Telegram automation follow-up (2026-09-01)
 
@@ -37,7 +78,7 @@ Audited production application commit: `9da40e1`
 - Local verification passed: Prisma validation, root typecheck, 151 tests (14
   database, 28 bot, 109 dashboard), the production dashboard build, targeted
   Telegram tests, and `git diff --check`. The GitHub `Typecheck, test, and
-  build` workflow also succeeded for `9da40e1`.
+build` workflow also succeeded for `9da40e1`.
 - Both Vercel statuses succeeded for `9da40e1`:
   `Vercel - kos-wl-bot-dashboard` and
   `Vercel - kos-wl-bot-dashboard-3a8x`. Production canaries returned `307` for
