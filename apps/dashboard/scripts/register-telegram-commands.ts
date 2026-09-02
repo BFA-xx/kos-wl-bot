@@ -46,8 +46,15 @@ async function setCommands(
   if (!result.ok) throw new Error(result.description ?? "setMyCommands failed");
 }
 
-await setCommands(privateCommands, { type: "all_private_chats" });
-await setCommands(groupAdminCommands, { type: "all_chat_administrators" });
-console.log(
-  `Registered ${privateCommands.length} private and ${groupAdminCommands.length} group-admin KOS Bot commands.`,
-);
+async function main(): Promise<void> {
+  await setCommands(privateCommands, { type: "all_private_chats" });
+  await setCommands(groupAdminCommands, { type: "all_chat_administrators" });
+  console.log(
+    `Registered ${privateCommands.length} private and ${groupAdminCommands.length} group-admin KOS Bot commands.`,
+  );
+}
+
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : "Command registration failed");
+  process.exitCode = 1;
+});
