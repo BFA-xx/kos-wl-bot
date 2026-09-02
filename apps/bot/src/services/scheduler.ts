@@ -100,10 +100,24 @@ export class Scheduler {
     const tickMs = config.SCHEDULER_TICK_SECONDS * 1000;
     const idleMs = config.SCHEDULER_IDLE_SECONDS * 1000;
 
+    const presenceMs = config.DASHBOARD_PRESENCE_SECONDS * 1000;
+
     let delay = idleMs;
     try {
-      const dueAt = await this.nextBoundaryAt();
-      if (dueAt) delay = Math.min(idleMs, dueAt.getTime() - Date.now());
+      const [dueAt, activeAt] = await Promise.all([
+        this.nextBoundaryAt(),
+        this.dashboardActiveAt(),
+      ]);
+      // Somebody is on the dashboard. Their SWR polling is holding the compute
+      // awake regardless, so sweeping at the normal cadence is free here, and
+      // it is the only window in which dashboard-written requests appear.
+      const operatorPresent =
+        activeAt !== null && Date.now() - activeAt.getTime() < presenceMs;
+      if (operatorPresent) {
+        delay = tickMs;
+      } else if (dueAt) {
+        delay = Math.min(idleMs, dueAt.getTime() - Date.now());
+      }
     } catch (err) {
       // A lookup failure must never stall the loop — fall back to the cap.
       logger.warn({ err }, "next-boundary lookup failed; sleeping for the cap");
@@ -119,6 +133,18 @@ export class Scheduler {
 
     this.nextTickAt = new Date(Date.now() + delay).toISOString();
     this.transitionTimer = setTimeout(() => void this.runLoop(), delay);
+  }
+
+  /**
+   * When the dashboard last served a request, or null if it never has. Written
+   * by the dashboard's shared org guard — see apps/dashboard/lib/presence.ts.
+   */
+  private async dashboardActiveAt(): Promise<Date | null> {
+    const row = await prisma.systemStatus.findUnique({
+      where: { key: "dashboard-active" },
+      select: { updatedAt: true },
+    });
+    return row?.updatedAt ?? null;
   }
 
   /**

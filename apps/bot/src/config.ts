@@ -75,6 +75,15 @@ const schema = z.object({
    */
   SCHEDULER_IDLE_SECONDS: z.coerce.number().int().positive().default(900),
 
+  /**
+   * How long after the last dashboard request we keep sweeping at the fast
+   * cadence. An open dashboard already polls the database every few seconds,
+   * so the compute is awake anyway and sweeping quickly costs nothing — it
+   * just means a publish/reroll/edit lands in seconds instead of waiting out
+   * SCHEDULER_IDLE_SECONDS.
+   */
+  DASHBOARD_PRESENCE_SECONDS: z.coerce.number().int().positive().default(120),
+
   /** Maximum records processed per scheduler operation and tick. */
   SCHEDULER_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(25),
 
