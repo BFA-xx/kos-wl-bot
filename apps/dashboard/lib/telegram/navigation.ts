@@ -19,7 +19,10 @@ import {
 } from "@/lib/telegram/points";
 import { ensureReferralCode, recordReferral } from "@/lib/telegram/referrals";
 import { showTelegramRaffle } from "@/lib/telegram/raffles";
-import { attachTelegramCommunityIdentity } from "@/lib/telegram/community";
+import {
+  attachTelegramCommunityIdentity,
+  discoverTelegramCommunityAccess,
+} from "@/lib/telegram/community";
 
 function mainMenuKeyboard(): InlineKeyboard {
   const origin = dashboardOrigin();
@@ -239,7 +242,9 @@ async function showInvite(ctx: Context): Promise<void> {
     where: { identityId: identity.id, approvalStatus: "APPROVED" },
   });
   if (!approved) {
-    await ctx.reply("Your KOS community access must be approved before you can create invites.");
+    await ctx.reply(
+      "Your KOS community access must be approved before you can create invites.",
+    );
     return;
   }
   const code = await ensureReferralCode(identity.id);
@@ -266,6 +271,7 @@ async function showAccessStatus(ctx: Context, edit = false): Promise<void> {
     return;
   }
   const identity = await ensureTelegramIdentity(ctx.from);
+  await discoverTelegramCommunityAccess(ctx, identity.id);
   const memberships = await prisma.telegramCommunityMember.findMany({
     where: { identityId: identity.id },
     include: { community: { select: { communityName: true } } },
@@ -275,6 +281,11 @@ async function showAccessStatus(ctx: Context, edit = false): Promise<void> {
     (member) =>
       `${escapeTelegramHtml(member.community.communityName)}: ${member.approvalStatus}`,
   );
+  const keyboard = new InlineKeyboard();
+  if (identity.onboardingStatus !== "COMPLETED") {
+    keyboard.text("Complete onboarding", "onboarding:complete").row();
+  }
+  keyboard.text("Back", "nav:menu");
   await render(
     ctx,
     [
@@ -284,10 +295,10 @@ async function showAccessStatus(ctx: Context, edit = false): Promise<void> {
       ...(lines.length
         ? lines
         : [
-            "No community access request yet. Start KOS Bot from a connected community welcome link.",
+            "No connected KOS community membership was found for this Telegram account.",
           ]),
     ].join("\n"),
-    new InlineKeyboard().text("Back", "nav:menu"),
+    keyboard,
     edit,
   );
 }
@@ -484,10 +495,14 @@ export function registerTelegramNavigation(bot: Bot): void {
   bot.callbackQuery("onboarding:complete", async (ctx) => {
     if (!ctx.from || ctx.chat?.type !== "private") return;
     const outcome = await completeTelegramOnboarding(ctx.from);
+    const pendingApprovals = await discoverTelegramCommunityAccess(
+      ctx,
+      outcome.identityId,
+    );
     await ctx.answerCallbackQuery({
-      text: outcome.pendingApprovals
+      text: pendingApprovals
         ? "Onboarding complete. Your KOS team approval is pending."
-        : "Onboarding complete. Join a connected KOS community to request access.",
+        : "Onboarding complete. Join the connected KOS Telegram community to request access.",
       show_alert: true,
     });
     await showMenu(ctx, true);

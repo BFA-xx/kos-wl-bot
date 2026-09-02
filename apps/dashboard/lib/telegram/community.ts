@@ -140,6 +140,59 @@ export async function attachTelegramCommunityIdentity(input: {
   });
 }
 
+function isActiveTelegramMembership(
+  membership: Awaited<ReturnType<Context["api"]["getChatMember"]>>,
+): boolean {
+  return (
+    membership.status === "creator" ||
+    membership.status === "administrator" ||
+    membership.status === "member" ||
+    (membership.status === "restricted" && membership.is_member)
+  );
+}
+
+export async function discoverTelegramCommunityAccess(
+  ctx: Context,
+  identityId: string,
+): Promise<number> {
+  if (!ctx.from || ctx.chat?.type !== "private") return 0;
+  const telegramUserId = String(ctx.from.id);
+  const communities = await prisma.telegramCommunity.findMany({
+    where: { status: "ACTIVE", featureFlags: { has: "ONBOARDING" } },
+    select: {
+      id: true,
+      telegramChatId: true,
+      members: {
+        where: { telegramUserId },
+        select: { status: true },
+        take: 1,
+      },
+    },
+    take: 20,
+  });
+
+  for (const community of communities) {
+    let active = community.members[0]?.status === "ACTIVE";
+    if (!active) {
+      const membership = await ctx.api
+        .getChatMember(community.telegramChatId, ctx.from.id)
+        .catch(() => null);
+      active = Boolean(membership && isActiveTelegramMembership(membership));
+    }
+    if (active) {
+      await attachTelegramCommunityIdentity({
+        communityId: community.id,
+        telegramUserId,
+        identityId,
+      });
+    }
+  }
+
+  return prisma.telegramCommunityMember.count({
+    where: { identityId, status: "ACTIVE", approvalStatus: "PENDING" },
+  });
+}
+
 export function registerTelegramCommunityHandlers(bot: Bot): void {
   bot.command("chatid", showTelegramChatId);
   bot.on("chat_member", welcomeTelegramMember);
