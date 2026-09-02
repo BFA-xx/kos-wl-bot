@@ -157,6 +157,11 @@ export async function discoverTelegramCommunityAccess(
 ): Promise<number> {
   if (!ctx.from || ctx.chat?.type !== "private") return 0;
   const telegramUserId = String(ctx.from.id);
+  const identity = await prisma.kosIdentity.findUnique({
+    where: { id: identityId },
+    select: { onboardingStatus: true },
+  });
+  if (!identity) return 0;
   const communities = await prisma.telegramCommunity.findMany({
     where: { status: "ACTIVE", featureFlags: { has: "ONBOARDING" } },
     select: {
@@ -188,8 +193,36 @@ export async function discoverTelegramCommunityAccess(
     }
   }
 
+  const existingApplications = await prisma.telegramCommunityMember.count({
+    where: { identityId },
+  });
+  if (
+    existingApplications === 0 &&
+    identity.onboardingStatus === "COMPLETED" &&
+    communities.length === 1
+  ) {
+    const community = communities[0];
+    await prisma.telegramCommunityMember.upsert({
+      where: {
+        communityId_telegramUserId: {
+          communityId: community.id,
+          telegramUserId,
+        },
+      },
+      create: {
+        communityId: community.id,
+        telegramUserId,
+        identityId,
+        status: "LEFT",
+        approvalStatus: "PENDING",
+        leftAt: new Date(),
+      },
+      update: { identityId, lastSeenAt: new Date() },
+    });
+  }
+
   return prisma.telegramCommunityMember.count({
-    where: { identityId, status: "ACTIVE", approvalStatus: "PENDING" },
+    where: { identityId, approvalStatus: "PENDING" },
   });
 }
 

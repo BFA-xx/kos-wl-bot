@@ -259,7 +259,6 @@ async function showApprovalQueue(ctx: Context, edit = false): Promise<void> {
   const pending = await prisma.telegramCommunityMember.findMany({
     where: {
       communityId: access.community.id,
-      status: "ACTIVE",
       approvalStatus: "PENDING",
       identityId: { not: null },
     },
@@ -275,8 +274,12 @@ async function showApprovalQueue(ctx: Context, edit = false): Promise<void> {
       0,
       30,
     );
+    const membershipSuffix = member.status === "ACTIVE" ? "" : " (invite)";
     keyboard
-      .text(`Approve ${label}`, `approval:approve:${member.id}`)
+      .text(
+        `Approve ${label}${membershipSuffix}`,
+        `approval:approve:${member.id}`,
+      )
       .text("Reject", `approval:reject:${member.id}`)
       .row();
   }
@@ -345,6 +348,16 @@ async function reviewApproval(
     decision === "approve"
       ? await activateApprovedOnboarding(member.identity.id)
       : 0;
+  const invite =
+    decision === "approve" && member.status !== "ACTIVE"
+      ? await ctx.api
+          .createChatInviteLink(access.community.telegramChatId, {
+            name: `KOS approval ${member.telegramUserId}`.slice(0, 32),
+            expire_date: Math.floor(Date.now() / 1000) + 86_400,
+            member_limit: 1,
+          })
+          .catch(() => null)
+      : null;
   await prisma.auditLog.create({
     data: {
       organizationId: access.community.organizationId,
@@ -355,6 +368,7 @@ async function reviewApproval(
       metadata: {
         communityId: access.community.id,
         telegramUserId: member.telegramUserId,
+        groupInviteIssued: Boolean(invite),
       },
     },
   });
@@ -362,8 +376,16 @@ async function reviewApproval(
     .sendMessage(
       member.telegramUserId,
       decision === "approve"
-        ? `Your access to ${access.community.communityName} was approved.${points ? ` You received ${points} KOS points.` : ""}`
+        ? `Your access to ${access.community.communityName} was approved.${points ? ` You received ${points} KOS points.` : ""}${invite ? " Use the private button below to join the Telegram community." : ""}`
         : `Your access request for ${access.community.communityName} was not approved.`,
+      invite
+        ? {
+            reply_markup: new InlineKeyboard().url(
+              `Join ${access.community.communityName}`.slice(0, 60),
+              invite.invite_link,
+            ),
+          }
+        : undefined,
     )
     .catch(() => undefined);
   await ctx.answerCallbackQuery({
