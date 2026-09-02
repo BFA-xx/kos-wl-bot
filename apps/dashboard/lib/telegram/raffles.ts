@@ -2,7 +2,10 @@ import { type Bot, type Context, InlineKeyboard } from "grammy";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/permissions";
-import { requireTelegramCommunityPermission } from "@/lib/telegram/access";
+import {
+  requirePrivateTelegramCommunityPermission,
+  requireTelegramCommunityPermission,
+} from "@/lib/telegram/access";
 import { dashboardOrigin, escapeTelegramHtml } from "@/lib/telegram/format";
 import { ensureTelegramIdentity } from "@/lib/telegram/identity";
 
@@ -179,17 +182,19 @@ async function startQuickRaffle(ctx: Context): Promise<void> {
     "QUICK_RAFFLES",
   );
   if (!access || !ctx.from || !ctx.chat) return;
+  await ctx.deleteMessage().catch(() => undefined);
+  const privateChatId = String(ctx.from.id);
   await prisma.telegramConversation.upsert({
     where: {
       telegramChatId_telegramUserId_kind: {
-        telegramChatId: String(ctx.chat.id),
+        telegramChatId: privateChatId,
         telegramUserId: String(ctx.from.id),
         kind: "QUICK_RAFFLE",
       },
     },
     create: {
       communityId: access.community.id,
-      telegramChatId: String(ctx.chat.id),
+      telegramChatId: privateChatId,
       telegramUserId: String(ctx.from.id),
       kind: "QUICK_RAFFLE",
       step: "TITLE",
@@ -203,14 +208,30 @@ async function startQuickRaffle(ctx: Context): Promise<void> {
       expiresAt: new Date(Date.now() + 15 * 60_000),
     },
   });
-  await ctx.reply(
-    "Quick raffle: send the prize or raffle title (120 characters maximum).",
-    { reply_markup: forceReply },
-  );
+  const sent = await ctx.api
+    .sendMessage(
+      ctx.from.id,
+      `Quick raffle for ${access.community.communityName}: send the prize or raffle title (120 characters maximum).`,
+      { reply_markup: forceReply },
+    )
+    .catch(() => null);
+  if (!sent) {
+    await prisma.telegramConversation.deleteMany({
+      where: {
+        telegramChatId: privateChatId,
+        telegramUserId: String(ctx.from.id),
+        kind: "QUICK_RAFFLE",
+      },
+    });
+  }
 }
 
 async function cancelQuickRaffle(ctx: Context): Promise<void> {
   if (!ctx.from || !ctx.chat) return;
+  if (!privateOnly(ctx)) {
+    await ctx.deleteMessage().catch(() => undefined);
+    return;
+  }
   await prisma.telegramConversation.deleteMany({
     where: {
       telegramChatId: String(ctx.chat.id),
@@ -225,6 +246,7 @@ async function handleQuickRaffleText(ctx: Context): Promise<void> {
   if (
     !ctx.from ||
     !ctx.chat ||
+    !privateOnly(ctx) ||
     !ctx.message?.text ||
     ctx.message.text.startsWith("/")
   )
@@ -317,7 +339,7 @@ async function chooseQuickRequirement(
   ctx: Context,
   requireWallet: boolean,
 ): Promise<void> {
-  if (!ctx.from || !ctx.chat) return;
+  if (!ctx.from || !ctx.chat || !privateOnly(ctx)) return;
   const conversation = await prisma.telegramConversation.findUnique({
     where: {
       telegramChatId_telegramUserId_kind: {
@@ -364,13 +386,7 @@ async function chooseQuickRequirement(
 }
 
 async function confirmQuickRaffle(ctx: Context): Promise<void> {
-  if (!ctx.from || !ctx.chat) return;
-  const access = await requireTelegramCommunityPermission(
-    ctx,
-    PERMISSIONS.RAFFLE_CREATE,
-    "QUICK_RAFFLES",
-  );
-  if (!access) return;
+  if (!ctx.from || !ctx.chat || !privateOnly(ctx)) return;
   const conversation = await prisma.telegramConversation.findUnique({
     where: {
       telegramChatId_telegramUserId_kind: {
@@ -389,6 +405,18 @@ async function confirmQuickRaffle(ctx: Context): Promise<void> {
       text: "This setup expired.",
       show_alert: true,
     });
+    return;
+  }
+  const access = await requirePrivateTelegramCommunityPermission(
+    ctx,
+    conversation.communityId,
+    PERMISSIONS.RAFFLE_CREATE,
+    "QUICK_RAFFLES",
+  );
+  if (!access) {
+    await ctx
+      .answerCallbackQuery({ text: "Not authorized." })
+      .catch(() => undefined);
     return;
   }
   const payload = conversation.payload as QuickRafflePayload;
@@ -447,7 +475,10 @@ async function confirmQuickRaffle(ctx: Context): Promise<void> {
         action: "TELEGRAM_QUICK_RAFFLE_CREATE",
         targetType: "raffle",
         targetId: String(created.id),
-        metadata: { telegramChatId: String(ctx.chat!.id), durationMinutes },
+        metadata: {
+          telegramChatId: access.community.telegramChatId,
+          durationMinutes,
+        },
       },
     });
     return created;

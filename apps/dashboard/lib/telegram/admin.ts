@@ -2,7 +2,10 @@ import { type Bot, type Context, InlineKeyboard } from "grammy";
 import type { KosModerationActionType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { PERMISSIONS, type Permission } from "@/lib/permissions";
-import { requireTelegramCommunityPermission } from "@/lib/telegram/access";
+import {
+  requirePrivateTelegramCommunityPermission,
+  requireTelegramCommunityPermission,
+} from "@/lib/telegram/access";
 import {
   dashboardOrigin,
   escapeTelegramHtml,
@@ -249,16 +252,10 @@ async function stats(ctx: Context): Promise<void> {
   );
 }
 
-async function showApprovalQueue(ctx: Context, edit = false): Promise<void> {
-  const access = await requireTelegramCommunityPermission(
-    ctx,
-    PERMISSIONS.MEMBER_MANAGE,
-    "ONBOARDING",
-  );
-  if (!access) return;
+async function buildApprovalQueue(communityId: string) {
   const pending = await prisma.telegramCommunityMember.findMany({
     where: {
-      communityId: access.community.id,
+      communityId,
       approvalStatus: "PENDING",
       identityId: { not: null },
     },
@@ -283,10 +280,26 @@ async function showApprovalQueue(ctx: Context, edit = false): Promise<void> {
       .text("Reject", `approval:reject:${member.id}`)
       .row();
   }
-  if (pending.length) keyboard.text("Refresh", "approval:list");
+  if (pending.length) keyboard.text("Refresh", `approval:list:${communityId}`);
   const text = pending.length
     ? `Pending KOS access requests: ${pending.length}${pending.length === 10 ? "+" : ""}`
     : "There are no pending KOS access requests.";
+  return { keyboard, text };
+}
+
+async function showPrivateApprovalQueue(
+  ctx: Context,
+  communityId: string,
+  edit = false,
+): Promise<void> {
+  const access = await requirePrivateTelegramCommunityPermission(
+    ctx,
+    communityId,
+    PERMISSIONS.MEMBER_MANAGE,
+    "ONBOARDING",
+  );
+  if (!access) return;
+  const { keyboard, text } = await buildApprovalQueue(access.community.id);
   if (edit && ctx.callbackQuery?.message) {
     await ctx
       .editMessageText(text, { reply_markup: keyboard })
@@ -296,17 +309,49 @@ async function showApprovalQueue(ctx: Context, edit = false): Promise<void> {
   await ctx.reply(text, { reply_markup: keyboard });
 }
 
-async function reviewApproval(
-  ctx: Context,
-  decision: "approve" | "reject",
-  memberId: string,
-): Promise<void> {
+async function openPrivateApprovalQueue(ctx: Context): Promise<void> {
   const access = await requireTelegramCommunityPermission(
     ctx,
     PERMISSIONS.MEMBER_MANAGE,
     "ONBOARDING",
   );
   if (!access || !ctx.from) return;
+  await ctx.deleteMessage().catch(() => undefined);
+  const { keyboard, text } = await buildApprovalQueue(access.community.id);
+  await ctx.api
+    .sendMessage(ctx.from.id, text, { reply_markup: keyboard })
+    .catch(() => undefined);
+}
+
+async function reviewApproval(
+  ctx: Context,
+  decision: "approve" | "reject",
+  memberId: string,
+): Promise<void> {
+  if (!ctx.from) return;
+  const target = await prisma.telegramCommunityMember.findUnique({
+    where: { id: memberId },
+    select: { communityId: true },
+  });
+  if (!target) {
+    await ctx.answerCallbackQuery({
+      text: "This request is no longer pending.",
+      show_alert: true,
+    });
+    return;
+  }
+  const access = await requirePrivateTelegramCommunityPermission(
+    ctx,
+    target.communityId,
+    PERMISSIONS.MEMBER_MANAGE,
+    "ONBOARDING",
+  );
+  if (!access) {
+    await ctx
+      .answerCallbackQuery({ text: "Not authorized." })
+      .catch(() => undefined);
+    return;
+  }
   const member = await prisma.telegramCommunityMember.findFirst({
     where: { id: memberId, communityId: access.community.id },
     include: { identity: { select: { id: true, onboardingStatus: true } } },
@@ -316,7 +361,7 @@ async function reviewApproval(
       text: "This request is no longer pending.",
       show_alert: true,
     });
-    await showApprovalQueue(ctx, true);
+    await showPrivateApprovalQueue(ctx, access.community.id, true);
     return;
   }
   if (
@@ -391,7 +436,7 @@ async function reviewApproval(
   await ctx.answerCallbackQuery({
     text: `Access ${decision === "approve" ? "approved" : "rejected"}.`,
   });
-  await showApprovalQueue(ctx, true);
+  await showPrivateApprovalQueue(ctx, access.community.id, true);
 }
 
 async function announce(ctx: Context): Promise<void> {
@@ -538,17 +583,20 @@ async function settings(ctx: Context): Promise<void> {
     ctx,
     PERMISSIONS.SETTINGS_EDIT,
   );
-  if (!access) return;
+  if (!access || !ctx.from) return;
+  await ctx.deleteMessage().catch(() => undefined);
   const organization = await prisma.organization.findUniqueOrThrow({
     where: { id: access.community.organizationId },
     select: { slug: true },
   });
-  await ctx.reply("Open KOS organization settings.", {
-    reply_markup: new InlineKeyboard().url(
-      "KOS settings",
-      `${dashboardOrigin()}/${organization.slug}/settings`,
-    ),
-  });
+  await ctx.api
+    .sendMessage(ctx.from.id, "Open KOS organization settings.", {
+      reply_markup: new InlineKeyboard().url(
+        "KOS settings",
+        `${dashboardOrigin()}/${organization.slug}/settings`,
+      ),
+    })
+    .catch(() => undefined);
 }
 
 export function registerTelegramAdminHandlers(bot: Bot): void {
@@ -561,10 +609,14 @@ export function registerTelegramAdminHandlers(bot: Bot): void {
   bot.command("givepoints", givePoints);
   bot.command("user", inspectUser);
   bot.command("settings", settings);
-  bot.command("approvals", (ctx) => showApprovalQueue(ctx));
+  bot.command("approvals", openPrivateApprovalQueue);
   bot.callbackQuery("approval:list", async (ctx) => {
     await ctx.answerCallbackQuery();
-    await showApprovalQueue(ctx, true);
+    await openPrivateApprovalQueue(ctx);
+  });
+  bot.callbackQuery(/^approval:list:([a-z0-9]{20,36})$/u, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showPrivateApprovalQueue(ctx, ctx.match[1], true);
   });
   bot.callbackQuery(/^approval:(approve|reject):([a-z0-9]{20,36})$/u, (ctx) =>
     reviewApproval(ctx, ctx.match[1] as "approve" | "reject", ctx.match[2]),

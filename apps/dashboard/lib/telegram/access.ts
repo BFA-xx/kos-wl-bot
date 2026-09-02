@@ -5,11 +5,41 @@ import { prisma } from "@/lib/db";
 import { telegramActorHasPermission } from "@/lib/telegram";
 import { isTelegramAdmin } from "@kos/db";
 
+type TelegramCommunityAccess = {
+  community: TelegramCommunity;
+  userId: string;
+};
+
+async function authorizeTelegramCommunityAdmin(
+  ctx: Context,
+  community: TelegramCommunity,
+  permission: Permission,
+): Promise<TelegramCommunityAccess | null> {
+  if (!ctx.from) return null;
+  const member = await ctx.api
+    .getChatMember(community.telegramChatId, ctx.from.id)
+    .catch(() => null);
+  if (!member || !isTelegramAdmin(member)) {
+    await ctx.reply("Only a current Telegram administrator can do that.");
+    return null;
+  }
+  const access = await telegramActorHasPermission({
+    telegramUserId: String(ctx.from.id),
+    organizationId: community.organizationId,
+    permission,
+  });
+  if (!access.ok) {
+    await ctx.reply(access.reason);
+    return null;
+  }
+  return { community, userId: access.userId };
+}
+
 export async function requireTelegramCommunityPermission(
   ctx: Context,
   permission: Permission,
   featureFlag?: string,
-): Promise<{ community: TelegramCommunity; userId: string } | null> {
+): Promise<TelegramCommunityAccess | null> {
   if (
     !ctx.from ||
     !ctx.chat ||
@@ -31,21 +61,30 @@ export async function requireTelegramCommunityPermission(
     await ctx.reply("This feature is not enabled for this KOS community.");
     return null;
   }
-  const member = await ctx.api
-    .getChatMember(ctx.chat.id, ctx.from.id)
-    .catch(() => null);
-  if (!member || !isTelegramAdmin(member)) {
-    await ctx.reply("Only a current Telegram administrator can do that.");
+  return authorizeTelegramCommunityAdmin(ctx, community, permission);
+}
+
+export async function requirePrivateTelegramCommunityPermission(
+  ctx: Context,
+  communityId: string,
+  permission: Permission,
+  featureFlag?: string,
+): Promise<TelegramCommunityAccess | null> {
+  if (!ctx.from) return null;
+  if (ctx.chat?.type !== "private") {
+    await ctx.reply("Open KOS Bot privately to use this admin control.");
     return null;
   }
-  const access = await telegramActorHasPermission({
-    telegramUserId: String(ctx.from.id),
-    organizationId: community.organizationId,
-    permission,
+  const community = await prisma.telegramCommunity.findUnique({
+    where: { id: communityId },
   });
-  if (!access.ok) {
-    await ctx.reply(access.reason);
+  if (
+    !community ||
+    community.status !== "ACTIVE" ||
+    (featureFlag && !community.featureFlags.includes(featureFlag))
+  ) {
+    await ctx.reply("This feature is not enabled for this KOS community.");
     return null;
   }
-  return { community, userId: access.userId };
+  return authorizeTelegramCommunityAdmin(ctx, community, permission);
 }
