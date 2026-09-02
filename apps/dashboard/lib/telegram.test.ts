@@ -11,6 +11,7 @@ import {
   telegramUserMention,
 } from "@/lib/telegram/format";
 import { telegramRateWindowStart } from "@/lib/telegram/rate-limit";
+import { parseTelegramModerationDuration } from "@/lib/telegram/admin";
 
 describe("Telegram integration guards", () => {
   afterEach(() => vi.unstubAllEnvs());
@@ -79,5 +80,13 @@ describe("Telegram integration guards", () => {
     expect(
       didTelegramMemberJoin({ status: "member" }, { status: "administrator" }),
     ).toBe(false);
+  });
+
+  it("accepts bounded Telegram moderation durations", () => {
+    expect(parseTelegramModerationDuration("10m")).toBe(600);
+    expect(parseTelegramModerationDuration("2h")).toBe(7200);
+    expect(parseTelegramModerationDuration("3d")).toBe(259200);
+    expect(parseTelegramModerationDuration("forever")).toBeNull();
+    expect(parseTelegramModerationDuration("9999d")).toBeNull();
   });
 });

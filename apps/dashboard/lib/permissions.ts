@@ -33,6 +33,9 @@ export const PERMISSIONS = {
   REPORT_VIEW: "report:view",
   REPORT_EXPORT: "report:export",
   MEMBER_MANAGE: "member:manage",
+  TELEGRAM_MODERATE: "telegram:moderate",
+  TELEGRAM_ANNOUNCE: "telegram:announce",
+  POINTS_AWARD: "points:award",
   BRANDING_EDIT: "branding:edit",
   SETTINGS_EDIT: "settings:edit",
   BILLING_MANAGE: "billing:manage",
@@ -73,6 +76,9 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "report:view": "View reports",
   "report:export": "Export reports",
   "member:manage": "Manage members",
+  "telegram:moderate": "Moderate Telegram communities",
+  "telegram:announce": "Post Telegram announcements",
+  "points:award": "Award KOS points",
   "branding:edit": "Edit branding",
   "settings:edit": "Edit settings",
   "billing:manage": "Manage billing",
@@ -134,6 +140,14 @@ export const PERMISSION_GROUPS: { label: string; permissions: Permission[] }[] =
       ],
     },
     {
+      label: "Telegram",
+      permissions: [
+        PERMISSIONS.TELEGRAM_MODERATE,
+        PERMISSIONS.TELEGRAM_ANNOUNCE,
+        PERMISSIONS.POINTS_AWARD,
+      ],
+    },
+    {
       label: "Organization",
       permissions: [
         PERMISSIONS.MEMBER_MANAGE,
@@ -178,6 +192,8 @@ export const BUILTIN_ROLES: { name: string; permissions: Permission[] }[] = [
       P.REPORT_EXPORT,
       P.COLLAB_VIEW,
       P.COLLAB_EDIT,
+      P.TELEGRAM_MODERATE,
+      P.TELEGRAM_ANNOUNCE,
     ],
   },
   {

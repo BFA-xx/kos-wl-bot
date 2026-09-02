@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { hashIntegrationToken, telegramDisplayName } from "@kos/db";
 import { prisma } from "@/lib/db";
 import { dashboardOrigin } from "@/lib/telegram/format";
+import { ensureReferralCode } from "@/lib/telegram/referrals";
 
 export interface TelegramIdentitySummary {
   id: string;
@@ -144,9 +145,11 @@ export async function ensureTelegramIdentity(
     },
     select: { userId: true },
   });
-  return prisma.$transaction((tx) =>
+  const identity = await prisma.$transaction((tx) =>
     syncTelegramIdentity(tx, user, connected?.userId ?? null),
   );
+  await ensureReferralCode(identity.id);
+  return identity;
 }
 
 export async function linkTelegramAccount(

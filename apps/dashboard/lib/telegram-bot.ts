@@ -15,6 +15,11 @@ import { dashboardOrigin, displayTelegramError } from "@/lib/telegram/format";
 import { telegramLog } from "@/lib/telegram/log";
 import { registerTelegramNavigation } from "@/lib/telegram/navigation";
 import { telegramRateLimitMiddleware } from "@/lib/telegram/rate-limit";
+import { registerTelegramNotificationHandlers } from "@/lib/telegram/notifications";
+import { registerTelegramAdminHandlers } from "@/lib/telegram/admin";
+import { registerTelegramRaffleHandlers } from "@/lib/telegram/raffles";
+import { ensureTelegramIdentity } from "@/lib/telegram/identity";
+import { awardKosPoints } from "@/lib/telegram/points";
 
 let cachedBot: Bot | null = null;
 let botInit: Promise<unknown> | null = null;
@@ -123,16 +128,93 @@ async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
     },
   });
   const publication = token?.publication;
+  const callbackChat = ctx.callbackQuery.message.chat;
+  const isPrivateCallback = callbackChat.type === "private";
   if (
     !token ||
     token.action !== "TELEGRAM_ENTER" ||
     token.expiresAt <= new Date() ||
     !publication ||
     publication.community.status !== "ACTIVE" ||
-    String(ctx.callbackQuery.message.chat.id) !==
-      publication.community.telegramChatId
+    (!isPrivateCallback &&
+      String(callbackChat.id) !== publication.community.telegramChatId)
   ) {
     await answer(ctx, "This raffle button is no longer active.");
+    return;
+  }
+  const identity = await ensureTelegramIdentity(ctx.from);
+  let communityMember = await prisma.telegramCommunityMember.findUnique({
+    where: {
+      communityId_telegramUserId: {
+        communityId: publication.community.id,
+        telegramUserId: String(ctx.from.id),
+      },
+    },
+  });
+  if (!communityMember) {
+    const telegramMembership = await ctx.api
+      .getChatMember(publication.community.telegramChatId, ctx.from.id)
+      .catch(() => null);
+    const active =
+      telegramMembership &&
+      (telegramMembership.status === "creator" ||
+        telegramMembership.status === "administrator" ||
+        telegramMembership.status === "member" ||
+        (telegramMembership.status === "restricted" &&
+          telegramMembership.is_member));
+    if (active) {
+      communityMember = await prisma.telegramCommunityMember.create({
+        data: {
+          communityId: publication.community.id,
+          telegramUserId: String(ctx.from.id),
+          identityId: identity.id,
+          status: "ACTIVE",
+          approvalStatus: "PENDING",
+        },
+      });
+    }
+  } else if (communityMember.status !== "ACTIVE") {
+    const telegramMembership = await ctx.api
+      .getChatMember(publication.community.telegramChatId, ctx.from.id)
+      .catch(() => null);
+    const active =
+      telegramMembership &&
+      (telegramMembership.status === "creator" ||
+        telegramMembership.status === "administrator" ||
+        telegramMembership.status === "member" ||
+        (telegramMembership.status === "restricted" &&
+          telegramMembership.is_member));
+    if (active) {
+      communityMember = await prisma.telegramCommunityMember.update({
+        where: { id: communityMember.id },
+        data: {
+          identityId: identity.id,
+          status: "ACTIVE",
+          leftAt: null,
+          lastSeenAt: new Date(),
+        },
+      });
+    }
+  } else if (!communityMember.identityId) {
+    communityMember = await prisma.telegramCommunityMember.update({
+      where: { id: communityMember.id },
+      data: { identityId: identity.id, lastSeenAt: new Date() },
+    });
+  }
+  if (!communityMember || communityMember.status !== "ACTIVE") {
+    await answer(
+      ctx,
+      "Join this Telegram community before entering its raffle.",
+    );
+    return;
+  }
+  if (communityMember.approvalStatus !== "APPROVED") {
+    await answer(
+      ctx,
+      communityMember.approvalStatus === "REJECTED"
+        ? "Your KOS community access request was not approved."
+        : "Your KOS community access request is waiting for team approval.",
+    );
     return;
   }
   const account = await prisma.connectedAccount.findUnique({
@@ -200,6 +282,15 @@ async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
     discordMember,
     "Telegram",
   );
+  if (entryCount !== null) {
+    await awardKosPoints({
+      identityId: identity.id,
+      event: "RAFFLE_ENTERED",
+      reason: `Entered KOS raffle #${publication.raffle.id}`,
+      source: "kos_raffle",
+      referenceId: String(publication.raffle.id),
+    });
+  }
   await answer(
     ctx,
     entryCount === null
@@ -213,6 +304,8 @@ export function buildTelegramBot(token: string): Bot {
   bot.use(telegramRateLimitMiddleware);
   registerTelegramNavigation(bot);
   registerTelegramCommunityHandlers(bot);
+  registerTelegramNotificationHandlers(bot);
+  registerTelegramAdminHandlers(bot);
   bot.command("raffle", async (ctx) => {
     const match = (ctx.match ?? "").trim().match(/^publish\s+(\d+)$/iu);
     if (!match) {
@@ -224,6 +317,7 @@ export function buildTelegramBot(token: string): Bot {
   bot.callbackQuery(/^a:([A-Za-z0-9_-]+)$/u, async (ctx) => {
     await enterFromTelegram(ctx, ctx.match[1]);
   });
+  registerTelegramRaffleHandlers(bot);
   bot.catch((error) => {
     telegramLog("error", "handler_failed", {
       requestId: `tg:${error.ctx.update.update_id}`,

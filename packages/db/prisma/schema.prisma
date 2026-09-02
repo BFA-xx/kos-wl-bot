@@ -1386,14 +1386,20 @@ enum IdentityProvider {
 model KosIdentity {
   id               String              @id @default(cuid())
   legacyUserId     String?             @unique
+  referralCode     String?             @unique
   displayName      String
   status           KosIdentityStatus   @default(ACTIVE)
   onboardingStatus KosOnboardingStatus @default(STARTED)
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
-  legacyUser User?             @relation(fields: [legacyUserId], references: [id], onDelete: SetNull)
-  accounts   IdentityAccount[]
+  legacyUser             User?                      @relation(fields: [legacyUserId], references: [id], onDelete: SetNull)
+  accounts               IdentityAccount[]
+  pointTransactions      KosPointTransaction[]
+  referralsMade          KosReferral[]              @relation("KosReferralReferrer")
+  referralReceived       KosReferral?               @relation("KosReferralReferred")
+  telegramMemberships    TelegramCommunityMember[]
+  notificationPreference KosNotificationPreference?
 
   @@index([status, createdAt])
   @@map("kos_identities")
@@ -1480,6 +1486,45 @@ enum IntegrationDeliveryEvent {
   RAFFLE_CANCELLED
 }
 
+enum KosPointEvent {
+  USER_JOINED
+  ONBOARDING_COMPLETED
+  RAFFLE_ENTERED
+  RAFFLE_WON
+  REFERRAL_COMPLETED
+  COMMUNITY_EVENT
+  ADMIN_REWARD
+}
+
+enum KosReferralStatus {
+  PENDING
+  COMPLETED
+  REJECTED
+}
+
+enum TelegramCommunityMemberStatus {
+  ACTIVE
+  LEFT
+  BANNED
+}
+
+enum KosCommunityApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TelegramConversationKind {
+  QUICK_RAFFLE
+}
+
+enum KosModerationActionType {
+  WARN
+  MUTE
+  BAN
+  UNBAN
+}
+
 /// One Telegram group/channel explicitly authorized by a KOS organization.
 model TelegramCommunity {
   id                    String                  @id @default(cuid())
@@ -1496,10 +1541,13 @@ model TelegramCommunity {
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
 
-  organization Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  backingGuild Guild                       @relation(fields: [backingGuildId], references: [id], onDelete: Restrict)
-  publications TelegramRafflePublication[]
-  deliveries   IntegrationDelivery[]
+  organization      Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  backingGuild      Guild                       @relation(fields: [backingGuildId], references: [id], onDelete: Restrict)
+  publications      TelegramRafflePublication[]
+  deliveries        IntegrationDelivery[]
+  members           TelegramCommunityMember[]
+  conversations     TelegramConversation[]
+  moderationActions KosModerationAction[]
 
   @@index([organizationId, status])
   @@index([backingGuildId])
@@ -1575,9 +1623,144 @@ model TelegramRateLimitBucket {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  @@unique([telegramUserId, scope, windowStart])
+  @@unique([telegramUserId, scope, windowStart], map: "telegram_rate_limit_buckets_telegramUserId_scope_windowStart_ke")
   @@index([windowStart])
   @@map("telegram_rate_limit_buckets")
+}
+
+/// Configurable rewards. Bot code resolves point amounts from this table.
+model KosRewardDefinition {
+  event     KosPointEvent @id
+  points    Int
+  enabled   Boolean       @default(true)
+  updatedAt DateTime      @updatedAt
+
+  @@map("kos_reward_definitions")
+}
+
+/// Append-only global KOS points ledger with source-level idempotency.
+model KosPointTransaction {
+  id          String        @id @default(cuid())
+  identityId  String
+  event       KosPointEvent
+  amount      Int
+  reason      String
+  source      String
+  referenceId String
+  createdAt   DateTime      @default(now())
+
+  identity KosIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@unique([identityId, event, source, referenceId])
+  @@index([identityId, createdAt])
+  @@index([event, createdAt])
+  @@map("kos_point_transactions")
+}
+
+/// Configurable KOS level thresholds.
+model KosLevel {
+  level     Int      @id
+  name      String
+  minPoints Int      @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("kos_levels")
+}
+
+/// One durable referral per referred identity. Completion occurs at onboarding.
+model KosReferral {
+  id                 String            @id @default(cuid())
+  referrerIdentityId String
+  referredIdentityId String            @unique
+  status             KosReferralStatus @default(PENDING)
+  createdAt          DateTime          @default(now())
+  completedAt        DateTime?
+
+  referrer KosIdentity @relation("KosReferralReferrer", fields: [referrerIdentityId], references: [id], onDelete: Cascade)
+  referred KosIdentity @relation("KosReferralReferred", fields: [referredIdentityId], references: [id], onDelete: Cascade)
+
+  @@index([referrerIdentityId, status])
+  @@map("kos_referrals")
+}
+
+/// Telegram membership is tracked separately from provider identity.
+model TelegramCommunityMember {
+  id             String                        @id @default(cuid())
+  communityId    String
+  telegramUserId String
+  identityId     String?
+  status         TelegramCommunityMemberStatus @default(ACTIVE)
+  approvalStatus KosCommunityApprovalStatus    @default(PENDING)
+  requestedAt    DateTime                      @default(now())
+  reviewedAt     DateTime?
+  reviewedById   String?
+  joinedAt       DateTime                      @default(now())
+  leftAt         DateTime?
+  lastSeenAt     DateTime                      @default(now())
+  createdAt      DateTime                      @default(now())
+  updatedAt      DateTime                      @updatedAt
+
+  community TelegramCommunity @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  identity  KosIdentity?      @relation(fields: [identityId], references: [id], onDelete: SetNull)
+
+  @@unique([communityId, telegramUserId])
+  @@index([identityId])
+  @@index([communityId, status])
+  @@index([communityId, approvalStatus, requestedAt], map: "telegram_community_members_communityId_approvalStatus_requested")
+  @@map("telegram_community_members")
+}
+
+/// Durable private state for multi-step Telegram workflows.
+model TelegramConversation {
+  id             String                   @id @default(cuid())
+  communityId    String
+  telegramChatId String
+  telegramUserId String
+  kind           TelegramConversationKind
+  step           String
+  payload        Json
+  expiresAt      DateTime
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  community TelegramCommunity @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@unique([telegramChatId, telegramUserId, kind])
+  @@index([expiresAt])
+  @@map("telegram_conversations")
+}
+
+model KosNotificationPreference {
+  identityId      String   @id
+  announcements   Boolean  @default(true)
+  raffleReminders Boolean  @default(true)
+  winners         Boolean  @default(true)
+  points          Boolean  @default(true)
+  community       Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  identity KosIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@map("kos_notification_preferences")
+}
+
+model KosModerationAction {
+  id                   String                  @id @default(cuid())
+  communityId          String
+  actorTelegramUserId  String
+  targetTelegramUserId String
+  type                 KosModerationActionType
+  reason               String?
+  durationSeconds      Int?
+  createdAt            DateTime                @default(now())
+
+  community TelegramCommunity @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@index([communityId, targetTelegramUserId, createdAt], map: "kos_moderation_actions_communityId_targetTelegramUserId_created")
+  @@index([communityId, actorTelegramUserId, createdAt], map: "kos_moderation_actions_communityId_actorTelegramUserId_createdA")
+  @@map("kos_moderation_actions")
 }
 
 /// Opaque, expiring Telegram deep-link or callback capability.

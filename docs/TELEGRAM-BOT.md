@@ -21,6 +21,14 @@ Telegram modules live under `apps/dashboard/lib/telegram`:
 - `navigation.ts`: `/start`, `/menu`, `/profile`, `/admin`, deep links, and
   inline navigation.
 - `community.ts`: group connection help and tagged new-member welcomes.
+- `onboarding.ts`: completion and approval-activated onboarding rewards.
+- `raffles.ts`: raffle discovery, entry history, and durable quick-raffle flow.
+- `points.ts`: configurable, idempotent KOS points and leaderboards.
+- `referrals.ts`: validated referral creation and completion.
+- `admin.ts`: approval queue, moderation, announcements, and admin tools.
+- `notifications.ts`: private notification preferences.
+- `access.ts`: combined Telegram-admin and KOS-permission checks.
+- `integrations.ts`: optional ecosystem event contracts; no Mintooor logic.
 - `rate-limit.ts`: shared database-backed command/callback throttling.
 - `format.ts`: safe HTML and strict deep-link parsing.
 - `log.ts`: structured, secret-free Telegram logs.
@@ -36,15 +44,40 @@ keeps all current KOS Raffle, points, wallet, and organization relations intact.
 When a Telegram account is linked from the KOS profile, the identity bridge is
 completed transactionally.
 
+## Onboarding Approval
+
+Anyone may start KOS Bot and create a provider-neutral KOS identity. Community
+access is not automatic. Starting from a connected community welcome records a
+pending application, and completing onboarding makes it reviewable. A current
+Telegram administrator with the KOS `member:manage` permission reviews it with
+`/approvals` and explicit Approve/Reject buttons.
+
+Approval is scoped to the KOS community. Until it is approved, the member may
+use the private bot but cannot enter that community's raffles or receive admin
+point awards. Onboarding and referral rewards activate idempotently only after
+approval.
+
 ## Commands
 
 - `/start`: create or open a KOS identity; accepts validated deep links.
 - `/menu`: open private navigation.
 - `/profile`: show a private, wallet-safe profile summary.
+- `/status`: show onboarding and community approval state.
+- `/raffles`: browse active KOS Raffle publications.
+- `/entries`: show the connected account's recent entries.
+- `/points`: show global KOS points, level, and progress.
+- `/leaderboard [week|month|all]`: show time-scoped rankings.
+- `/invite`: create a personal KOS onboarding referral.
+- `/notifications`: manage private notification preferences.
 - `/admin`: show authorized KOS community settings.
 - `/chatid`: show a Telegram group ID for organization setup.
 - `/raffle publish <id>`: protected manual publication fallback. New hosted
   raffles publish automatically when configured.
+- `/approvals`: review pending KOS community access requests.
+- `/quickraffle`: create a validated KOS Raffle through a durable group flow.
+- `/stats`, `/announce`, `/givepoints`, `/user`, `/settings`: protected KOS
+  community administration.
+- `/warn`, `/mute`, `/ban`, `/unban`: Telegram moderation with KOS audit rows.
 
 ## Configuration
 
@@ -82,10 +115,13 @@ set `WEBHOOK_URL` and `WEBHOOK_SECRET` so graceful shutdown restores it.
    `chat_member`.
 6. Verify webhook protection, bot administrator status, update backlog, and
    EC2 scheduler health without creating production raffle data.
+7. Register private and group-admin command menus with
+   `pnpm --filter @kos/dashboard telegram:commands`.
 
 ## Phase Boundaries
 
-Phase 1 covers the bot foundation, KOS identity bootstrap, private menu and
-profile summary, community configuration, tagged welcomes, permissions,
-logging, and rate limiting. Onboarding rewards, full leaderboard/referrals,
-quick-raffle conversations, and moderation commands remain later phases.
+The integrated MVP now includes the Phase 1 foundation plus Phase 2 onboarding
+and approval, Phase 3 KOS Raffle access and quick creation, Phase 4 global
+points/levels/referrals, Phase 5 moderation/admin/preferences, and Phase 6
+provider-neutral ecosystem event contracts. KOS Raffle remains authoritative;
+Mintooor is an optional interface only and is not imported into this bot.

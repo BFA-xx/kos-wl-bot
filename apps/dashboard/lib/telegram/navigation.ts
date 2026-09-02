@@ -11,15 +11,29 @@ import {
   ensureTelegramIdentity,
   linkTelegramAccount,
 } from "@/lib/telegram/identity";
+import { completeTelegramOnboarding } from "@/lib/telegram/onboarding";
+import {
+  getKosLeaderboard,
+  getKosPointsSummary,
+  type LeaderboardPeriod,
+} from "@/lib/telegram/points";
+import { ensureReferralCode, recordReferral } from "@/lib/telegram/referrals";
+import { showTelegramRaffle } from "@/lib/telegram/raffles";
+import { attachTelegramCommunityIdentity } from "@/lib/telegram/community";
 
 function mainMenuKeyboard(): InlineKeyboard {
   const origin = dashboardOrigin();
   return new InlineKeyboard()
     .text("My Profile", "nav:profile")
-    .url("Raffles", `${origin}/me/raffles`)
+    .text("Raffles", "raffles:list")
     .row()
-    .url("Points", `${origin}/me/points`)
-    .url("Settings", `${origin}/me`);
+    .text("Points", "nav:points")
+    .text("Notifications", "nav:notifications")
+    .row()
+    .text("Access status", "nav:status")
+    .text("Invite", "nav:invite")
+    .row()
+    .url("KOS Settings", `${origin}/me`);
 }
 
 async function render(
@@ -70,7 +84,10 @@ async function showGettingStarted(
   edit = false,
 ): Promise<void> {
   const keyboard = new InlineKeyboard()
-    .url("Complete KOS profile", `${dashboardOrigin()}/me`)
+    .text("Complete onboarding", "onboarding:complete")
+    .row()
+    .url("Connect KOS profile", `${dashboardOrigin()}/me`)
+    .url("Add wallet", `${dashboardOrigin()}/me/wallets`)
     .row()
     .text("Open menu", "nav:menu");
   await render(
@@ -79,7 +96,8 @@ async function showGettingStarted(
       `<b>${communityName ? `Welcome to ${escapeTelegramHtml(communityName)}` : "Welcome to KOS"}</b>`,
       "",
       "Your Telegram identity is verified and your KOS identity is ready.",
-      "Complete your profile to connect existing KOS products. A wallet is optional unless a raffle requires one.",
+      "Finish onboarding now, then a KOS team admin will review your community access request.",
+      "Connecting an existing KOS profile and wallet remains optional unless a raffle requires it.",
     ].join("\n"),
     keyboard,
     edit,
@@ -107,23 +125,21 @@ async function showProfile(ctx: Context, edit = false): Promise<void> {
     return;
   }
   const identity = await ensureTelegramIdentity(ctx.from);
-  const stats = identity.legacyUserId
-    ? await Promise.all([
-        prisma.pointsLedger.aggregate({
-          where: { userId: identity.legacyUserId },
-          _sum: { delta: true },
-        }),
-        prisma.participant.count({
-          where: { userId: identity.legacyUserId },
-        }),
-        prisma.winner.count({
-          where: { userId: identity.legacyUserId, replaced: false },
-        }),
-      ])
-    : null;
-  const points = stats?.[0]._sum.delta ?? 0;
-  const entered = stats?.[1] ?? 0;
-  const wins = stats?.[2] ?? 0;
+  const [kosPoints, stats] = await Promise.all([
+    getKosPointsSummary(identity.id),
+    identity.legacyUserId
+      ? Promise.all([
+          prisma.participant.count({
+            where: { userId: identity.legacyUserId },
+          }),
+          prisma.winner.count({
+            where: { userId: identity.legacyUserId, replaced: false },
+          }),
+        ])
+      : null,
+  ]);
+  const entered = stats?.[0] ?? 0;
+  const wins = stats?.[1] ?? 0;
   const keyboard = new InlineKeyboard()
     .url("Open full profile", `${dashboardOrigin()}/me`)
     .row()
@@ -137,10 +153,141 @@ async function showProfile(ctx: Context, edit = false): Promise<void> {
       `KOS ID: <code>${identity.id}</code>`,
       `Profile: ${identity.legacyUserId ? "Connected" : "Telegram identity only"}`,
       "",
-      `<b>Points</b>: ${points.toLocaleString("en-US")}`,
+      `<b>KOS Points</b>: ${kosPoints.points.toLocaleString("en-US")}`,
+      `<b>Level</b>: ${kosPoints.level ? `${kosPoints.level.level} - ${escapeTelegramHtml(kosPoints.level.name)}` : "Unranked"}`,
       `<b>Raffles</b>: ${entered} entered, ${wins} won`,
     ].join("\n"),
     keyboard,
+    edit,
+  );
+}
+
+async function showPoints(ctx: Context, edit = false): Promise<void> {
+  if (!ctx.from || ctx.chat?.type !== "private") {
+    await ctx.reply("Use /points in a private chat with KOS Bot.");
+    return;
+  }
+  const identity = await ensureTelegramIdentity(ctx.from);
+  const summary = await getKosPointsSummary(identity.id);
+  const progress = summary.nextLevel
+    ? `${Math.max(0, summary.nextLevel.minPoints - summary.points)} points to ${summary.nextLevel.name}`
+    : "Highest configured level reached";
+  const keyboard = new InlineKeyboard()
+    .text("Weekly leaderboard", "leaderboard:week")
+    .row()
+    .text("Monthly leaderboard", "leaderboard:month")
+    .text("All time", "leaderboard:all")
+    .row()
+    .text("Back", "nav:menu");
+  await render(
+    ctx,
+    [
+      "<b>KOS POINTS</b>",
+      "",
+      `Balance: <b>${summary.points.toLocaleString("en-US")}</b>`,
+      `Level: ${summary.level ? `${summary.level.level} - ${escapeTelegramHtml(summary.level.name)}` : "Unranked"}`,
+      progress,
+    ].join("\n"),
+    keyboard,
+    edit,
+  );
+}
+
+async function showLeaderboard(
+  ctx: Context,
+  period: LeaderboardPeriod,
+  edit = false,
+): Promise<void> {
+  if (!ctx.from || ctx.chat?.type !== "private") {
+    await ctx.reply("Use /leaderboard in a private chat with KOS Bot.");
+    return;
+  }
+  const identity = await ensureTelegramIdentity(ctx.from);
+  const board = await getKosLeaderboard(period, identity.id);
+  const lines = board.leaders.map(
+    (entry, index) =>
+      `${index + 1}. ${escapeTelegramHtml(entry.displayName)} - ${entry.points.toLocaleString("en-US")}`,
+  );
+  await render(
+    ctx,
+    [
+      `<b>KOS LEADERBOARD - ${period.toUpperCase()}</b>`,
+      "",
+      ...(lines.length ? lines : ["No point activity in this period yet."]),
+      "",
+      board.requesterRank
+        ? `Your rank: #${board.requesterRank} (${board.requesterPoints.toLocaleString("en-US")})`
+        : "Your rank: not ranked in this period",
+    ].join("\n"),
+    new InlineKeyboard()
+      .text("Week", "leaderboard:week")
+      .text("Month", "leaderboard:month")
+      .text("All", "leaderboard:all")
+      .row()
+      .text("Back", "nav:points"),
+    edit,
+  );
+}
+
+async function showInvite(ctx: Context): Promise<void> {
+  if (!ctx.from || ctx.chat?.type !== "private") {
+    await ctx.reply("Use /invite in a private chat with KOS Bot.");
+    return;
+  }
+  const identity = await ensureTelegramIdentity(ctx.from);
+  const approved = await prisma.telegramCommunityMember.count({
+    where: { identityId: identity.id, approvalStatus: "APPROVED" },
+  });
+  if (!approved) {
+    await ctx.reply("Your KOS community access must be approved before you can create invites.");
+    return;
+  }
+  const code = await ensureReferralCode(identity.id);
+  const url = `https://t.me/${ctx.me.username}?start=invite_${code}`;
+  await ctx.reply(
+    [
+      "Invite someone to KOS with your personal link:",
+      url,
+      "",
+      "The referral completes only after the new member finishes onboarding.",
+    ].join("\n"),
+    {
+      reply_markup: new InlineKeyboard().url(
+        "Share invite",
+        `https://t.me/share/url?url=${encodeURIComponent(url)}`,
+      ),
+    },
+  );
+}
+
+async function showAccessStatus(ctx: Context, edit = false): Promise<void> {
+  if (!ctx.from || ctx.chat?.type !== "private") {
+    await ctx.reply("Use /status in a private chat with KOS Bot.");
+    return;
+  }
+  const identity = await ensureTelegramIdentity(ctx.from);
+  const memberships = await prisma.telegramCommunityMember.findMany({
+    where: { identityId: identity.id },
+    include: { community: { select: { communityName: true } } },
+    orderBy: { requestedAt: "desc" },
+  });
+  const lines = memberships.map(
+    (member) =>
+      `${escapeTelegramHtml(member.community.communityName)}: ${member.approvalStatus}`,
+  );
+  await render(
+    ctx,
+    [
+      "<b>KOS ACCESS</b>",
+      "",
+      `Onboarding: ${identity.onboardingStatus}`,
+      ...(lines.length
+        ? lines
+        : [
+            "No community access request yet. Start KOS Bot from a connected community welcome link.",
+          ]),
+    ].join("\n"),
+    new InlineKeyboard().text("Back", "nav:menu"),
     edit,
   );
 }
@@ -235,33 +382,18 @@ async function handleStart(ctx: Context): Promise<void> {
 
   const identity = await ensureTelegramIdentity(ctx.from);
   if (payload.kind === "raffle") {
-    const raffle = await prisma.raffle.findFirst({
-      where: { id: payload.raffleId, status: { not: "CANCELLED" } },
-      select: { id: true, title: true, status: true },
-    });
-    if (!raffle) {
-      await ctx.reply("That raffle is not available.");
-      return;
-    }
-    await render(
-      ctx,
-      [
-        "<b>KOS RAFFLE</b>",
-        "",
-        escapeTelegramHtml(raffle.title),
-        `Status: ${raffle.status}`,
-      ].join("\n"),
-      new InlineKeyboard().url(
-        "View raffle",
-        `${dashboardOrigin()}/r/${raffle.id}`,
-      ),
-    );
+    await showTelegramRaffle(ctx, payload.raffleId);
     return;
   }
   if (payload.kind === "invite") {
-    await ctx.reply(
-      "This invite format is valid, but referrals are not active yet. No reward has been recorded.",
-    );
+    const outcome = await recordReferral(identity.id, payload.code);
+    if (outcome === "invalid") await ctx.reply("That KOS invite is not valid.");
+    else if (outcome === "self")
+      await ctx.reply("You cannot use your own KOS invite.");
+    else if (outcome === "recorded")
+      await ctx.reply("Invite accepted. Complete onboarding to activate it.");
+    else await ctx.reply("Your KOS invite is already recorded.");
+    await showWelcome(ctx);
     return;
   }
   if (payload.kind === "welcome") {
@@ -271,11 +403,27 @@ async function handleStart(ctx: Context): Promise<void> {
         status: "ACTIVE",
         featureFlags: { has: "ONBOARDING" },
       },
-      select: { communityName: true },
+      select: { id: true, communityName: true, telegramChatId: true },
     });
     if (!community) {
       await ctx.reply("That KOS community link is no longer active.");
       return;
+    }
+    const membership = await ctx.api
+      .getChatMember(community.telegramChatId, ctx.from.id)
+      .catch(() => null);
+    const active =
+      membership &&
+      (membership.status === "creator" ||
+        membership.status === "administrator" ||
+        membership.status === "member" ||
+        (membership.status === "restricted" && membership.is_member));
+    if (active) {
+      await attachTelegramCommunityIdentity({
+        communityId: community.id,
+        telegramUserId: String(ctx.from.id),
+        identityId: identity.id,
+      });
     }
     await showWelcome(ctx, community.communityName);
     return;
@@ -295,6 +443,15 @@ export function registerTelegramNavigation(bot: Bot): void {
   bot.command("start", handleStart);
   bot.command("menu", (ctx) => showMenu(ctx));
   bot.command("profile", (ctx) => showProfile(ctx));
+  bot.command("points", (ctx) => showPoints(ctx));
+  bot.command("leaderboard", (ctx) => {
+    const raw = (ctx.match ?? "").trim().toLowerCase();
+    const period: LeaderboardPeriod =
+      raw === "month" ? "month" : raw === "all" ? "all" : "week";
+    return showLeaderboard(ctx, period);
+  });
+  bot.command("invite", showInvite);
+  bot.command("status", (ctx) => showAccessStatus(ctx));
   bot.command("admin", showAdmin);
   bot.callbackQuery("nav:menu", async (ctx) => {
     await ctx.answerCallbackQuery();
@@ -304,8 +461,35 @@ export function registerTelegramNavigation(bot: Bot): void {
     await ctx.answerCallbackQuery();
     await showProfile(ctx, true);
   });
+  bot.callbackQuery("nav:points", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showPoints(ctx, true);
+  });
+  bot.callbackQuery("nav:status", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showAccessStatus(ctx, true);
+  });
+  bot.callbackQuery("nav:invite", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showInvite(ctx);
+  });
+  bot.callbackQuery(/^leaderboard:(week|month|all)$/u, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showLeaderboard(ctx, ctx.match[1] as LeaderboardPeriod, true);
+  });
   bot.callbackQuery("onboarding:start", async (ctx) => {
     await ctx.answerCallbackQuery();
     await showGettingStarted(ctx, undefined, true);
+  });
+  bot.callbackQuery("onboarding:complete", async (ctx) => {
+    if (!ctx.from || ctx.chat?.type !== "private") return;
+    const outcome = await completeTelegramOnboarding(ctx.from);
+    await ctx.answerCallbackQuery({
+      text: outcome.pendingApprovals
+        ? "Onboarding complete. Your KOS team approval is pending."
+        : "Onboarding complete. Join a connected KOS community to request access.",
+      show_alert: true,
+    });
+    await showMenu(ctx, true);
   });
 }

@@ -130,6 +130,28 @@ export async function closeAndDraw(
           participantId: w.participantId,
         })),
       });
+      const reward = await tx.kosRewardDefinition.findUnique({
+        where: { event: "RAFFLE_WON" },
+      });
+      if (reward?.enabled) {
+        const identities = await tx.kosIdentity.findMany({
+          where: { legacyUserId: { in: drawn.map((winner) => winner.userId) } },
+          select: { id: true, legacyUserId: true },
+        });
+        if (identities.length) {
+          await tx.kosPointTransaction.createMany({
+            data: identities.map((identity) => ({
+              identityId: identity.id,
+              event: "RAFFLE_WON",
+              amount: reward.points,
+              reason: `Won KOS raffle #${raffleId}`,
+              source: "kos_raffle_winner",
+              referenceId: `${raffleId}:${identity.legacyUserId}`,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
     }
     return true;
   });
@@ -392,6 +414,30 @@ export async function rerollWinners(
           fromReroll: true,
         },
       });
+      const identity = await tx.kosIdentity.findUnique({
+        where: { legacyUserId: repl.userId },
+        select: { id: true },
+      });
+      const reward = identity
+        ? await tx.kosRewardDefinition.findUnique({
+            where: { event: "RAFFLE_WON" },
+          })
+        : null;
+      if (identity && reward?.enabled) {
+        await tx.kosPointTransaction.createMany({
+          data: [
+            {
+              identityId: identity.id,
+              event: "RAFFLE_WON",
+              amount: reward.points,
+              reason: `Won KOS raffle #${raffleId} by reroll`,
+              source: "kos_raffle_winner",
+              referenceId: `${raffleId}:${repl.userId}`,
+            },
+          ],
+          skipDuplicates: true,
+        });
+      }
       added.push({ userId: repl.userId, username: repl.username });
     }
     return { replaced, added };
