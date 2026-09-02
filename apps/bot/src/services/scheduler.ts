@@ -38,26 +38,127 @@ import { processTelegramDeliveries } from "./telegramService.js";
  */
 export class Scheduler {
   private transitionTimer?: NodeJS.Timeout;
+  private stopped = false;
   private running = false;
   private lastHeartbeat = 0;
   private lastCollaborationSweep = 0;
   private lastTickAt: string | null = null;
   private lastTickDurationMs: number | null = null;
   private lastTickOk: boolean | null = null;
+  private nextTickAt: string | null = null;
 
   constructor(private readonly client: Client) {}
 
   start(): void {
-    const transitionMs = config.SCHEDULER_TICK_SECONDS * 1000;
-    this.transitionTimer = setInterval(() => void this.tick(), transitionMs);
-    logger.info({ transitionMs }, "scheduler started (transition loop)");
+    this.stopped = false;
+    logger.info(
+      {
+        tickMs: config.SCHEDULER_TICK_SECONDS * 1000,
+        idleMs: config.SCHEDULER_IDLE_SECONDS * 1000,
+      },
+      "scheduler started (adaptive loop)",
+    );
 
     // Kick an immediate tick so restarts catch up instantly.
-    void this.tick();
+    void this.runLoop();
   }
 
   stop(): void {
-    if (this.transitionTimer) clearInterval(this.transitionTimer);
+    this.stopped = true;
+    if (this.transitionTimer) clearTimeout(this.transitionTimer);
+    this.transitionTimer = undefined;
+  }
+
+  /**
+   * Tick, then sleep until the next thing is genuinely due.
+   *
+   * The previous loop swept on a fixed 15s interval whether or not anything
+   * was pending, which meant ~11 queries every 15s forever. That kept a
+   * connection on the Postgres compute permanently, so it never scaled to
+   * zero — the idling, not the work, was the whole monthly bill. Timed
+   * transitions now wake on their own deadline (more precise than a 15s
+   * sweep, not less), and the sleep is capped by SCHEDULER_IDLE_SECONDS so
+   * dashboard-written requests are still picked up without a push channel.
+   *
+   * Still crash-safe: state is recomputed from the DB on every tick, exactly
+   * as before. Nothing is held in memory across a restart.
+   */
+  private async runLoop(): Promise<void> {
+    if (this.stopped) return;
+    try {
+      await this.tick();
+    } catch (err) {
+      // tick() already traps its own errors; this is belt-and-braces so an
+      // unexpected throw can never leave the bot with no timer queued.
+      logger.error({ err }, "scheduler tick threw outside its own handler");
+    } finally {
+      if (!this.stopped) await this.scheduleNextTick();
+    }
+  }
+
+  private async scheduleNextTick(): Promise<void> {
+    const tickMs = config.SCHEDULER_TICK_SECONDS * 1000;
+    const idleMs = config.SCHEDULER_IDLE_SECONDS * 1000;
+
+    let delay = idleMs;
+    try {
+      const dueAt = await this.nextBoundaryAt();
+      if (dueAt) delay = Math.min(idleMs, dueAt.getTime() - Date.now());
+    } catch (err) {
+      // A lookup failure must never stall the loop — fall back to the cap.
+      logger.warn({ err }, "next-boundary lookup failed; sleeping for the cap");
+    }
+    delay = Math.max(tickMs, delay);
+
+    // Release the connection so the compute can suspend while we wait. Prisma
+    // reconnects lazily, so Discord interactions arriving mid-sleep still work
+    // (they pay a cold start on the first query instead).
+    if (delay >= 60_000) {
+      await prisma.$disconnect().catch(() => undefined);
+    }
+
+    this.nextTickAt = new Date(Date.now() + delay).toISOString();
+    this.transitionTimer = setTimeout(() => void this.runLoop(), delay);
+  }
+
+  /**
+   * Earliest moment a *timed* transition falls due, or null when the only
+   * thing left to wait for is a dashboard request.
+   */
+  private async nextBoundaryAt(): Promise<Date | null> {
+    const [raffleOpen, raffleClose, campaignOpen, campaignEnd] =
+      await Promise.all([
+        prisma.raffle.findFirst({
+          where: { status: RaffleStatus.UPCOMING },
+          orderBy: { startAt: "asc" },
+          select: { startAt: true },
+        }),
+        prisma.raffle.findFirst({
+          where: { status: RaffleStatus.LIVE },
+          orderBy: { endAt: "asc" },
+          select: { endAt: true },
+        }),
+        prisma.campaign.findFirst({
+          where: { status: CampaignStatus.SCHEDULED, startAt: { not: null } },
+          orderBy: { startAt: "asc" },
+          select: { startAt: true },
+        }),
+        prisma.campaign.findFirst({
+          where: { status: CampaignStatus.LIVE, endAt: { not: null } },
+          orderBy: { endAt: "asc" },
+          select: { endAt: true },
+        }),
+      ]);
+
+    const due = [
+      raffleOpen?.startAt,
+      raffleClose?.endAt,
+      campaignOpen?.startAt,
+      campaignEnd?.endAt,
+    ].filter((d): d is Date => d instanceof Date);
+
+    if (due.length === 0) return null;
+    return due.reduce((a, b) => (a < b ? a : b));
   }
 
   health() {
@@ -66,6 +167,7 @@ export class Scheduler {
       lastTickAt: this.lastTickAt,
       lastTickDurationMs: this.lastTickDurationMs,
       lastTickOk: this.lastTickOk,
+      nextTickAt: this.nextTickAt,
     };
   }
 

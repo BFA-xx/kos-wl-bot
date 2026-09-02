@@ -18,23 +18,35 @@ export default async function AdminHealthPage() {
       prisma.walletProfile.count(),
     ]);
 
-  // The bot writes a heartbeat row every ~60s; treat it as online if we've
-  // heard from it in the last 3 minutes.
   const hb = await prisma.systemStatus.findUnique({
     where: { key: "bot-heartbeat" },
   });
-  const botOnline = Boolean(
-    hb && Date.now() - hb.updatedAt.getTime() < 3 * 60_000,
-  );
   const hbInfo = (() => {
     try {
       return hb?.value
-        ? (JSON.parse(hb.value) as { guilds?: number; user?: string })
+        ? (JSON.parse(hb.value) as {
+            guilds?: number;
+            user?: string;
+            scheduler?: { nextTickAt?: string | null };
+          })
         : null;
     } catch {
       return null;
     }
   })();
+
+  // The bot sleeps between ticks so the database compute can suspend, so a
+  // quiet heartbeat is normal rather than a fault. It publishes the deadline
+  // it intends to write by, so trust that (plus grace) instead of a fixed
+  // window. Older bot builds don't send it — fall back to the ~60s cadence.
+  const GRACE_MS = 3 * 60_000;
+  const nextTickAt = hbInfo?.scheduler?.nextTickAt
+    ? Date.parse(hbInfo.scheduler.nextTickAt)
+    : NaN;
+  const dueBy = Number.isNaN(nextTickAt)
+    ? (hb?.updatedAt.getTime() ?? 0) + 60_000
+    : nextTickAt;
+  const botOnline = Boolean(hb && Date.now() < dueBy + GRACE_MS);
   const botLabel = botOnline
     ? `online${hbInfo?.guilds != null ? ` · ${hbInfo.guilds} servers` : ""}`
     : hb
