@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/db";
 import { guardAdmin } from "@/lib/admin-guard";
+import {
+  xBudgetSnapshot,
+  xSweepConfigured,
+  xVerifyConfigured,
+  xVerifyMode,
+} from "@kos/db";
 import { PageTitle, StatCard, Card, SectionTitle } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +59,22 @@ export default async function AdminHealthPage() {
       ? `offline — last seen ${hb.updatedAt.toLocaleString()}`
       : "waiting for first heartbeat";
 
+  // X follow checks cost real money per member, so the ceiling has to be
+  // visible here — otherwise it trips silently and follows quietly drop back
+  // to attest with nobody the wiser.
+  const xBudget = await xBudgetSnapshot(prisma);
+  const xOn = xVerifyConfigured();
+  const xScope = xSweepConfigured()
+    ? "follows + likes/reposts"
+    : xVerifyMode() === "full"
+      ? "follows only — sweeps need X_BEARER_TOKEN"
+      : "follows only";
+  const xLabel = xOn
+    ? `${xScope} · ${xBudget.reads}/${xBudget.budget} reads used (≤ $${xBudget.spentUsd.toFixed(2)})`
+    : xVerifyMode() === "off"
+      ? "off — X tasks are link + attest"
+      : "not configured — set credentials and a read budget";
+
   return (
     <>
       <PageTitle
@@ -74,7 +96,19 @@ export default async function AdminHealthPage() {
         <div className="space-y-2 text-sm">
           <Service name="Database" ok label="connected" />
           <Service name="Discord bot" ok={botOnline} label={botLabel} />
+          <Service
+            name="X task verification"
+            ok={xOn && xBudget.remaining > 0}
+            label={xLabel}
+          />
         </div>
+        {xOn && xBudget.remaining === 0 && (
+          <p className="mt-3 text-xs text-amber-400">
+            This month&rsquo;s X read budget is spent. Follow, like and repost
+            tasks are falling back to link + attest until {xBudget.month} rolls
+            over, or until X_VERIFY_MONTHLY_READ_BUDGET is raised.
+          </p>
+        )}
         <p className="mt-4 text-xs text-kos-muted">
           Dashboard commands (post, edit, end, reroll) are delivered to the bot
           through the database — no direct network link is needed. The bot

@@ -4,19 +4,16 @@ import { createHash, randomBytes } from "node:crypto";
  * X (Twitter) OAuth 2.0 helpers — Authorization Code + PKCE.
  *
  * Linking an X account proves ownership and gives KOS the user's real handle;
- * every org can then run X tasks against that verified identity. Verification
- * depth is tier-aware (X_API_TIER): "free" = link + attest (no paid API);
- * higher tiers can add real follow/like checks later without a rebuild.
+ * every org can then run X tasks against that verified identity. The linked
+ * token is also what real follow verification authenticates as — see
+ * packages/db/src/x-verify.ts, which owns how deep verification goes
+ * (X_VERIFY_MODE).
  */
 
 export const X_SCOPES = ["users.read", "tweet.read", "follows.read", "offline.access"];
 
 export function xConfigured(): boolean {
   return Boolean(process.env.X_CLIENT_ID && process.env.X_CLIENT_SECRET);
-}
-
-export function xApiTier(): string {
-  return process.env.X_API_TIER ?? "free";
 }
 
 const b64url = (b: Buffer) =>

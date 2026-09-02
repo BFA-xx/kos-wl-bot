@@ -1,4 +1,10 @@
 import { prisma } from "@/lib/db";
+import {
+  verifyXEngagement,
+  verifyXFollow,
+  xSweepConfigured,
+  xVerifyConfigured,
+} from "@kos/db";
 import type { TaskDefinition, TaskType, CompletionStatus } from "@prisma/client";
 
 /**
@@ -8,10 +14,10 @@ import type { TaskDefinition, TaskType, CompletionStatus } from "@prisma/client"
  * verifier. Adding a provider = adding a case here; nothing else changes.
  * Raffles gate on it now; campaigns/points (S3) reuse it as-is.
  *
- * X tasks use "link + attest" on the free X API tier: the user must have a
- * linked X account (proves a real X identity via OAuth), then attests they did
- * the action. If a paid tier is configured later, real follow/like checks can
- * slot into xVerifier without touching callers.
+ * X tasks all require a linked X account (OAuth proves a real X identity).
+ * Follows, likes and reposts are then checked against the X API for real;
+ * comments still attest. See packages/db/src/x-verify.ts for the cost model
+ * and the sweep cap behind likes/reposts.
  */
 
 export interface TaskConfig {
@@ -96,7 +102,14 @@ export async function verifyTask(task: TaskDefinition, userId: string): Promise<
   }
 }
 
-/** X tasks: require a linked X account, then attest. */
+/**
+ * X tasks: require a linked X account, then check follows for real and attest
+ * the rest.
+ *
+ * Every inconclusive answer from X (budget spent, rate limited, outage, access
+ * level too low) falls through to attest rather than rejecting — a billing or
+ * API problem must never cost a member a task they actually did.
+ */
 async function xVerifier(type: TaskType, cfg: TaskConfig, userId: string): Promise<VerifyResult> {
   const linked = await prisma.connectedAccount.findUnique({
     where: { userId_provider: { userId, provider: "X" } },
@@ -109,6 +122,74 @@ async function xVerifier(type: TaskType, cfg: TaskConfig, userId: string): Promi
       action: "link_x",
     };
   }
+
+  if ((type === "X_LIKE" || type === "X_REPOST") && cfg.tweetUrl && xSweepConfigured()) {
+    const kind = type === "X_LIKE" ? "LIKE" : "REPOST";
+    const check = await verifyXEngagement(prisma, {
+      userId,
+      tweetUrl: cfg.tweetUrl,
+      kind,
+    });
+    const evidence = {
+      method: "x_api_engager_sweep",
+      xUserId: linked.externalId,
+      xHandle: linked.handle,
+      target: cfg.tweetUrl,
+      type,
+      outcome: check.outcome,
+      sweepComplete: check.complete ?? false,
+      at: new Date().toISOString(),
+    };
+
+    if (check.outcome === "engaged") return { status: "VERIFIED", evidence };
+    if (check.outcome === "not_engaged") {
+      return {
+        status: "PENDING",
+        reason:
+          type === "X_LIKE"
+            ? "We couldn't find your like on that post yet. Like it, then verify again."
+            : "We couldn't find your repost yet. Repost it (a quote post doesn't count), then verify again.",
+      };
+    }
+    // Anything else means the sweep couldn't prove a negative — attest.
+  }
+
+  if (type === "X_FOLLOW" && cfg.xHandle && xVerifyConfigured()) {
+    const check = await verifyXFollow(prisma, { userId, targetHandle: cfg.xHandle });
+    const target = cfg.xHandle.replace(/^@/, "");
+    const evidence = {
+      method: "x_api_connection_status",
+      xUserId: linked.externalId,
+      xHandle: linked.handle,
+      target,
+      type,
+      outcome: check.outcome,
+      at: new Date().toISOString(),
+    };
+
+    switch (check.outcome) {
+      case "following":
+        return { status: "VERIFIED", evidence };
+      case "follow_pending":
+        // Protected account: the request is sent, which is all the member can do.
+        return { status: "VERIFIED", evidence };
+      case "not_following":
+        return {
+          status: "PENDING",
+          reason: `You're not following @${target} yet. Follow, then verify again.`,
+        };
+      case "token_expired":
+        return {
+          status: "PENDING",
+          reason: "Your X connection expired. Reconnect X, then verify again.",
+          action: "link_x",
+        };
+      default:
+        // disabled / budget_exhausted / rate_limited / unavailable → attest.
+        break;
+    }
+  }
+
   return {
     status: "VERIFIED",
     evidence: {
