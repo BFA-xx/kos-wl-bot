@@ -157,6 +157,7 @@ Full command reference: [docs/COMMANDS.md](docs/COMMANDS.md).
 ## ✦ Documentation
 
 - [docs/DISCORD-SETUP.md](docs/DISCORD-SETUP.md) — create the app, intents, invite
+- [docs/X-SETUP.md](docs/X-SETUP.md) — X API key, task verification, spend guards
 - [docs/COMMANDS.md](docs/COMMANDS.md) — every command + option
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — Docker & VPS production deploy
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — data model, services, draw proof
