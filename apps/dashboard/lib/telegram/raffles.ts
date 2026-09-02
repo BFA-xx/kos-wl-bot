@@ -3,8 +3,10 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
+  findPrivateTelegramCommunityAccesses,
   requirePrivateTelegramCommunityPermission,
   requireTelegramCommunityPermission,
+  type TelegramCommunityAccess,
 } from "@/lib/telegram/access";
 import { dashboardOrigin, escapeTelegramHtml } from "@/lib/telegram/format";
 import { ensureTelegramIdentity } from "@/lib/telegram/identity";
@@ -175,14 +177,11 @@ interface QuickRafflePayload {
 
 const forceReply = { force_reply: true as const, selective: true };
 
-async function startQuickRaffle(ctx: Context): Promise<void> {
-  const access = await requireTelegramCommunityPermission(
-    ctx,
-    PERMISSIONS.RAFFLE_CREATE,
-    "QUICK_RAFFLES",
-  );
-  if (!access || !ctx.from || !ctx.chat) return;
-  await ctx.deleteMessage().catch(() => undefined);
+async function beginQuickRaffle(
+  ctx: Context,
+  access: TelegramCommunityAccess,
+): Promise<void> {
+  if (!ctx.from || !ctx.chat) return;
   const privateChatId = String(ctx.from.id);
   await prisma.telegramConversation.upsert({
     where: {
@@ -224,6 +223,43 @@ async function startQuickRaffle(ctx: Context): Promise<void> {
       },
     });
   }
+}
+
+async function startQuickRaffle(ctx: Context): Promise<void> {
+  if (ctx.chat?.type === "private") {
+    const accesses = await findPrivateTelegramCommunityAccesses(
+      ctx,
+      PERMISSIONS.RAFFLE_CREATE,
+      "QUICK_RAFFLES",
+    );
+    if (accesses.length === 1) {
+      await beginQuickRaffle(ctx, accesses[0]);
+      return;
+    }
+    if (accesses.length > 1) {
+      const keyboard = new InlineKeyboard();
+      for (const { community } of accesses) {
+        keyboard
+          .text(
+            community.communityName.slice(0, 60),
+            `quick:start:${community.id}`,
+          )
+          .row();
+      }
+      await ctx.reply("Choose a community for this quick raffle.", {
+        reply_markup: keyboard,
+      });
+    }
+    return;
+  }
+  const access = await requireTelegramCommunityPermission(
+    ctx,
+    PERMISSIONS.RAFFLE_CREATE,
+    "QUICK_RAFFLES",
+  );
+  if (!access) return;
+  await ctx.deleteMessage().catch(() => undefined);
+  await beginQuickRaffle(ctx, access);
 }
 
 async function cancelQuickRaffle(ctx: Context): Promise<void> {
@@ -507,6 +543,18 @@ export function registerTelegramRaffleHandlers(bot: Bot): void {
   bot.callbackQuery(/^quick:req:(standard|wallet)$/u, (ctx) =>
     chooseQuickRequirement(ctx, ctx.match[1] === "wallet"),
   );
+  bot.callbackQuery(/^quick:start:([a-z0-9]{20,36})$/u, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const access = await requirePrivateTelegramCommunityPermission(
+      ctx,
+      ctx.match[1],
+      PERMISSIONS.RAFFLE_CREATE,
+      "QUICK_RAFFLES",
+    );
+    if (!access) return;
+    await ctx.deleteMessage().catch(() => undefined);
+    await beginQuickRaffle(ctx, access);
+  });
   bot.callbackQuery("quick:confirm", confirmQuickRaffle);
   bot.callbackQuery("quick:cancel", async (ctx) => {
     await ctx.answerCallbackQuery();

@@ -3,6 +3,7 @@ import type { KosModerationActionType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { PERMISSIONS, type Permission } from "@/lib/permissions";
 import {
+  findPrivateTelegramCommunityAccesses,
   requirePrivateTelegramCommunityPermission,
   requireTelegramCommunityPermission,
 } from "@/lib/telegram/access";
@@ -310,6 +311,32 @@ async function showPrivateApprovalQueue(
 }
 
 async function openPrivateApprovalQueue(ctx: Context): Promise<void> {
+  if (ctx.chat?.type === "private") {
+    const accesses = await findPrivateTelegramCommunityAccesses(
+      ctx,
+      PERMISSIONS.MEMBER_MANAGE,
+      "ONBOARDING",
+    );
+    if (accesses.length === 1) {
+      await showPrivateApprovalQueue(ctx, accesses[0].community.id);
+      return;
+    }
+    if (accesses.length > 1) {
+      const keyboard = new InlineKeyboard();
+      for (const { community } of accesses) {
+        keyboard
+          .text(
+            community.communityName.slice(0, 60),
+            `approval:list:${community.id}`,
+          )
+          .row();
+      }
+      await ctx.reply("Choose a community to review access requests.", {
+        reply_markup: keyboard,
+      });
+    }
+    return;
+  }
   const access = await requireTelegramCommunityPermission(
     ctx,
     PERMISSIONS.MEMBER_MANAGE,
@@ -579,6 +606,31 @@ async function inspectUser(ctx: Context): Promise<void> {
 }
 
 async function settings(ctx: Context): Promise<void> {
+  if (ctx.chat?.type === "private") {
+    const accesses = await findPrivateTelegramCommunityAccesses(
+      ctx,
+      PERMISSIONS.SETTINGS_EDIT,
+    );
+    if (accesses.length === 1) {
+      await showPrivateSettings(ctx, accesses[0].community.id);
+      return;
+    }
+    if (accesses.length > 1) {
+      const keyboard = new InlineKeyboard();
+      for (const { community } of accesses) {
+        keyboard
+          .text(
+            community.communityName.slice(0, 60),
+            `settings:open:${community.id}`,
+          )
+          .row();
+      }
+      await ctx.reply("Choose a community to open its settings.", {
+        reply_markup: keyboard,
+      });
+    }
+    return;
+  }
   const access = await requireTelegramCommunityPermission(
     ctx,
     PERMISSIONS.SETTINGS_EDIT,
@@ -597,6 +649,28 @@ async function settings(ctx: Context): Promise<void> {
       ),
     })
     .catch(() => undefined);
+}
+
+async function showPrivateSettings(
+  ctx: Context,
+  communityId: string,
+): Promise<void> {
+  const access = await requirePrivateTelegramCommunityPermission(
+    ctx,
+    communityId,
+    PERMISSIONS.SETTINGS_EDIT,
+  );
+  if (!access) return;
+  const organization = await prisma.organization.findUniqueOrThrow({
+    where: { id: access.community.organizationId },
+    select: { slug: true },
+  });
+  await ctx.reply("Open KOS organization settings.", {
+    reply_markup: new InlineKeyboard().url(
+      "KOS settings",
+      `${dashboardOrigin()}/${organization.slug}/settings`,
+    ),
+  });
 }
 
 export function registerTelegramAdminHandlers(bot: Bot): void {
@@ -621,4 +695,8 @@ export function registerTelegramAdminHandlers(bot: Bot): void {
   bot.callbackQuery(/^approval:(approve|reject):([a-z0-9]{20,36})$/u, (ctx) =>
     reviewApproval(ctx, ctx.match[1] as "approve" | "reject", ctx.match[2]),
   );
+  bot.callbackQuery(/^settings:open:([a-z0-9]{20,36})$/u, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showPrivateSettings(ctx, ctx.match[1]);
+  });
 }
