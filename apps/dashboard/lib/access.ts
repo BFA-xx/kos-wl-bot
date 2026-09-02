@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { markDashboardActive } from "@/lib/presence";
 import { getSessionUser } from "@/lib/auth";
 import { hasPermission, type Permission } from "@/lib/permissions";
 import type {
@@ -94,6 +95,10 @@ export async function requireOrgAccess(
   if (permission && !hasPermission({ isOwner, permissions }, permission)) {
     throw new AccessError(403, `Missing permission: ${permission}`);
   }
+
+  // Tell the bot an operator is here so it sweeps in seconds rather than
+  // sleeping to its idle cap. See lib/presence.ts for why this is free.
+  markDashboardActive();
 
   return { user, org, member: member ?? null, isOwner, permissions, guildIds };
 }

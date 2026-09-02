@@ -60,8 +60,29 @@ const schema = z.object({
   /** How often (seconds) live LIVE-raffle embeds are refreshed. */
   EMBED_REFRESH_SECONDS: z.coerce.number().int().positive().default(30),
 
-  /** Scheduler sweep interval (seconds) for open/close/draw transitions. */
+  /** Floor between scheduler ticks (seconds) when work is due back-to-back. */
   SCHEDULER_TICK_SECONDS: z.coerce.number().int().positive().default(15),
+
+  /**
+   * Longest the scheduler will sleep when nothing is due (seconds).
+   *
+   * Timed work (raffle/campaign open + close) wakes exactly on its own
+   * deadline, so this only bounds how long a *dashboard-written* request
+   * (publish/reroll/edit/delete) waits before the bot notices it. It is also
+   * the single biggest lever on the Neon bill: the database is only billed
+   * while a compute is awake, and it can only suspend while nobody is
+   * connected. 900s keeps the compute idle ~2/3 of the time.
+   */
+  SCHEDULER_IDLE_SECONDS: z.coerce.number().int().positive().default(900),
+
+  /**
+   * How long after the last dashboard request we keep sweeping at the fast
+   * cadence. An open dashboard already polls the database every few seconds,
+   * so the compute is awake anyway and sweeping quickly costs nothing — it
+   * just means a publish/reroll/edit lands in seconds instead of waiting out
+   * SCHEDULER_IDLE_SECONDS.
+   */
+  DASHBOARD_PRESENCE_SECONDS: z.coerce.number().int().positive().default(120),
 
   /** Maximum records processed per scheduler operation and tick. */
   SCHEDULER_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(25),
