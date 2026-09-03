@@ -18,6 +18,7 @@ import { evaluateTelegramRaffleAccess } from "@/lib/telegram/raffle-access";
 import { ensureTelegramIdentity } from "@/lib/telegram/identity";
 import { awardKosPoints } from "@/lib/telegram/points";
 import { registerTelegramEngagementHandlers } from "@/lib/telegram/engagement";
+import { sendTelegramEntryRequirements } from "@/lib/telegram/entry-requirements";
 
 let cachedBot: Bot | null = null;
 let botInit: Promise<unknown> | null = null;
@@ -154,6 +155,22 @@ async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
     return;
   }
   if (!access.canEnter || !access.ready) {
+    if (access.block === "requirements" && access.requirements) {
+      const delivered = await sendTelegramEntryRequirements(ctx, {
+        tokenId,
+        raffleId: publication.raffle.id,
+        raffleTitle: publication.raffle.title,
+        gates: access.requirements.gates,
+        discordOnly: access.requirements.discordOnly,
+      });
+      await ctx.answerCallbackQuery({
+        text: delivered
+          ? "I sent the required raffle steps to your private chat."
+          : (access.message ?? "Complete the raffle requirements, then retry."),
+        show_alert: !delivered,
+      });
+      return;
+    }
     await answer(ctx, access.message ?? "You cannot enter this raffle yet.");
     return;
   }
@@ -166,7 +183,6 @@ async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
       lastSeenAt: new Date(),
     },
   });
-
   const entryCount = await recordWebEntry(
     access.ready.user,
     publication.raffle,

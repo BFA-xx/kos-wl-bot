@@ -123,6 +123,9 @@ code changes.
   tracking, immutable-ID mentions, and state-aware public welcomes.
 - `apps/dashboard/lib/telegram/engagement.ts`: feature-gated `gm`/`gKOS`
   recognition and direct `gKOS🖤` group replies with flood limits.
+- `apps/dashboard/lib/telegram/entry-requirements.ts`: private named checklist,
+  deduplicated remediation links, and same-publication entry retry for failed
+  Telegram raffle gates.
 - `apps/dashboard/lib/telegram/identity.ts`: provider-neutral KOS identity
   creation and safe bridging to the existing Discord-backed `User`.
 - `apps/dashboard/lib/telegram/navigation.ts`: `/start`, menus, profile,
@@ -348,6 +351,13 @@ Membership reconciliation is shared by the preview and the entry path, so
 opening a card refreshes stale `TelegramCommunityMember` rows exactly as
 entering did.
 
+When Telegram entry fails `evaluateWebGates`, do not flatten its reasons into a
+callback alert. `sendTelegramEntryRequirements` privately names each failed
+gate, deduplicates shared KOS task-panel links, and includes `Retry entry` using
+the same unexpired publication action token. Legacy and Task Engine steps still
+use the authenticated KOS click-and-attest UI; Telegram must not mark them
+verified merely because a member pressed Enter.
+
 ## Raffle Topics
 
 Forum groups can route KOS raffle messages to one topic. The thread id lives in
@@ -548,6 +558,10 @@ Heisenberg when the intended second account is `cryptowhale74`.
     KOS Bot replies directly with `gKOS🖤`.
 23. Confirm `programming`, `/gm`, a bot-authored message, and a private `gm` do
     not trigger the community greeting reply.
+24. Press Enter on a Telegram raffle with incomplete tasks and confirm the
+    callback says a private checklist was sent rather than repeating one reason.
+25. Complete the named steps from the private action, return to KOS Bot, press
+    `Retry entry`, and confirm the normal gate checker records the entry.
 
 ## Known Limitations and Next Work
 

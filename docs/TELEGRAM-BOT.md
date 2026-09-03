@@ -107,6 +107,16 @@ letters in words such as `programming`, commands, bot messages, private chats,
 and unconnected groups do not. Replies are silently limited to two per member
 and fifteen per group per minute to stay below Telegram flood limits.
 
+## Raffle Requirement Recovery
+
+When a Telegram entry fails eligibility, KOS Bot privately sends the member a
+named checklist instead of flattening repeated reasons into an alert. Task
+gates share one `Complete raffle steps` link to the authenticated KOS member
+panel; wallet/profile gates receive their own deduplicated actions. The message
+keeps `Retry entry` for the same Telegram publication after the requirements
+are verified. This preserves the established click-and-attest policy and does
+not bypass roles, membership, age, wallet, task, or Discord-only gates.
+
 ## Configuration
 
 Canonical production variables are:

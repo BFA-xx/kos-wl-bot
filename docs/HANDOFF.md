@@ -93,6 +93,10 @@ case where that topic is deleted and the post should fall back to the main chat.
   standalone `gm` or `gKOS` tokens receive a direct `gKOS🖤` reply. The handler
   ignores private chats, bots, commands, unconnected groups, and embedded text
   such as `programming`, with per-user and per-chat flood limits.
+- Failed Telegram raffle entry no longer collapses multiple requirements into
+  a repeated alert. KOS Bot sends the member a private, named gate checklist
+  with deduplicated KOS task/wallet actions and a callback to retry the same
+  entry after the existing click-and-attest requirements are complete.
 - Group welcomes remain public and tag the actual entering account, but adapt
   their copy for incomplete, pending, approved, and rejected members. Approval
   data, reviewer controls, and quick-raffle/settings setup remain private.

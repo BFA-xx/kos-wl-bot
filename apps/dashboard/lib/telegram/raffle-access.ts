@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import {
   evaluateWebGates,
   fetchGuildMember,
+  type Gate,
   type RaffleWithRoles,
   type RestMember,
 } from "@/lib/raffle-entry";
@@ -49,6 +50,8 @@ export interface TelegramRaffleAccess {
   message: string | null;
   /** A link that helps clear the block, when one exists. */
   actionUrl: string | null;
+  /** Structured failed gates used to render a private recovery checklist. */
+  requirements: { gates: Gate[]; discordOnly: boolean } | null;
   /** Everything `recordWebEntry` needs. Non-null only when `canEnter`. */
   ready: { user: User; accountId: string; member: RestMember } | null;
 }
@@ -139,6 +142,7 @@ export async function evaluateTelegramRaffleAccess(
     message: string,
     actionUrl: string | null = null,
     rest: TelegramRaffleCheck[] = [],
+    requirements: TelegramRaffleAccess["requirements"] = null,
   ): TelegramRaffleAccess => ({
     checks: [...checks, ...rest],
     alreadyEntered: false,
@@ -146,6 +150,7 @@ export async function evaluateTelegramRaffleAccess(
     block,
     message,
     actionUrl,
+    requirements,
     ready: null,
   });
 
@@ -276,6 +281,7 @@ export async function evaluateTelegramRaffleAccess(
       block: null,
       message: null,
       actionUrl: null,
+      requirements: null,
       ready: null,
     };
   }
@@ -286,16 +292,23 @@ export async function evaluateTelegramRaffleAccess(
     const reasons = report.gates.flatMap((gate) =>
       gate.ok ? [] : [gate.reason ?? gate.label],
     );
+    const uniqueReasons = [...new Set(reasons)];
     checks.push({
       key: "requirements",
       label: "Entry requirements",
       status: "fail",
-      detail: reasons.join(" · ") || "Some requirements are not met yet.",
+      detail: uniqueReasons.join(" · ") || "Some requirements are not met yet.",
     });
     return blocked(
       "requirements",
-      reasons.join(" ") || "You do not meet this raffle's requirements yet.",
+      uniqueReasons.join(" ") ||
+        "You do not meet this raffle's requirements yet.",
       report.gates.find((gate) => !gate.ok && gate.url)?.url ?? null,
+      [],
+      {
+        gates: report.gates.filter((gate) => !gate.ok),
+        discordOnly: report.discordOnly === true,
+      },
     );
   }
 
@@ -329,6 +342,7 @@ export async function evaluateTelegramRaffleAccess(
     block: null,
     message: null,
     actionUrl: null,
+    requirements: null,
     ready: { user: account.user, accountId: account.id, member: discordMember },
   };
 }

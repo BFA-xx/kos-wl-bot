@@ -193,7 +193,53 @@ describe("Telegram raffle pre-flight", () => {
     expect(checkFor(access.checks, "requirements")?.detail).toContain(
       "You need @holder.",
     );
+    expect(access.requirements).toEqual({
+      gates: [
+        { key: "role", label: "Role", ok: false, reason: "You need @holder." },
+      ],
+      discordOnly: false,
+    });
     expect(mocks.fetchGuildMember).not.toHaveBeenCalled();
+  });
+
+  it("keeps repeated requirement failures structured for private recovery", async () => {
+    const url = "/me/raffles?raffle=7";
+    mocks.evaluateWebGates.mockResolvedValue({
+      canEnter: false,
+      discordOnly: false,
+      gates: [
+        {
+          key: "follow",
+          label: "Follow",
+          ok: false,
+          reason: "Verify it.",
+          url,
+        },
+        { key: "like", label: "Like", ok: false, reason: "Verify it.", url },
+        {
+          key: "retweet",
+          label: "Retweet",
+          ok: false,
+          reason: "Verify it.",
+          url,
+        },
+      ],
+    });
+
+    const access = await evaluateTelegramRaffleAccess(
+      makeCtx(),
+      telegramUser,
+      "identity-1",
+      community,
+      raffle,
+    );
+
+    expect(access.message).toBe("Verify it.");
+    expect(access.requirements?.gates.map(({ label }) => label)).toEqual([
+      "Follow",
+      "Like",
+      "Retweet",
+    ]);
   });
 
   it("blocks when Discord membership cannot be confirmed", async () => {
