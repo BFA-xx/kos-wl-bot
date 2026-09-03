@@ -21,7 +21,40 @@ this user like it" endpoint. The only way to know is to read who engaged with
 the post, so the cost belongs to the post, not to the crowd. See D056 in
 [DECISIONS.md](DECISIONS.md).
 
-## 1. Create the X app
+## 1. Use the X app you already have
+
+**KOS already has an X app** — it is what powers "Connect X" on `/me`. Verification
+authenticates through that *same* app: it uses the member's OAuth token, obtained
+by that app, and refreshes it with that app's client id and secret.
+
+> **Do not create a second app.** OAuth tokens are app-scoped, so a new app
+> invalidates every `ConnectedAccount` refresh token already stored and forces
+> every member who has linked X to link again.
+
+If X linking works on your dashboard today, `X_CLIENT_ID` and `X_CLIENT_SECRET`
+are already set (in Vercel for the dashboard) and need no change. The scopes the
+linking flow already requests — `users.read tweet.read follows.read
+offline.access` — are exactly what follow verification needs, so **nobody has to
+re-link**.
+
+Two things do still need doing on the existing app:
+
+- **Copy the credentials into the bot's environment.** Linking was a
+  dashboard-only flow, so the bot never needed them. It does now: it refreshes
+  member tokens when someone verifies from Discord. Add `X_CLIENT_ID` and
+  `X_CLIENT_SECRET` to the root `.env` on EC2.
+- **Confirm your API credits sit on this app's project.** If the app predates
+  X's pay-per-use migration and the credits went elsewhere, calls fail on
+  billing rather than auth — which reads as a 4xx and silently falls back to
+  attest.
+
+Only for like/repost sweeps (`X_VERIFY_MODE=full`) do you need one new value:
+the **Bearer Token**, from *Keys and tokens* on that same app. `follow_only`
+needs no new keys at all.
+
+### Setting up an app from scratch
+
+Only if there is no existing app — a fresh deployment, or a second tenant:
 
 1. Go to the [X Developer Portal](https://developer.x.com/en/portal/dashboard)
    and create a Project + App.
@@ -36,6 +69,9 @@ the post, so the cost belongs to the post, not to the crowd. See D056 in
    - **OAuth 2.0 Client ID** → `X_CLIENT_ID`
    - **OAuth 2.0 Client Secret** → `X_CLIENT_SECRET`
    - **Bearer Token** → `X_BEARER_TOKEN` (only needed for like/repost sweeps)
+
+The app requests `users.read tweet.read follows.read offline.access`. Members who
+linked X before verification existed already granted these, so no re-link.
 
 The app requests `users.read tweet.read follows.read offline.access`. Members
 who linked X before this change already granted these, so nobody has to re-link.
@@ -58,6 +94,8 @@ These go in the **root `.env`** (the bot and the dashboard both read it on EC2)
 bot refreshes member tokens itself.
 
 ```bash
+# Already set for the dashboard if X linking works — reuse them, and add the
+# same pair to the bot's environment.
 X_CLIENT_ID="..."
 X_CLIENT_SECRET="..."
 
