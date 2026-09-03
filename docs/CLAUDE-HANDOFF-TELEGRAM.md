@@ -129,6 +129,9 @@ code changes.
   access status, admin entry, deep links, and the five-step onboarding UI.
 - `apps/dashboard/lib/telegram/onboarding.ts`: completion, approval-activated
   reward, referral completion, and idempotent private reviewer notifications.
+- `apps/dashboard/lib/telegram/raffle-access.ts`: the single eligibility
+  evaluation shared by the raffle card and the Enter button, plus durable
+  `TelegramCommunityMember` reconciliation.
 - `apps/dashboard/lib/telegram/raffles.ts`: private raffle list/entry history
   and durable private quick-raffle setup.
 - `apps/dashboard/lib/telegram/points.ts`: configurable KOS point ledger and
@@ -313,6 +316,54 @@ publication succeeds and only for active communities with
 `AUTO_ANNOUNCEMENTS`. Manual `/raffle publish <id>` is a protected fallback.
 Quick raffle creates a validated KOS Raffle draft for the existing scheduler;
 its multi-step setup is private.
+
+## Raffle Eligibility
+
+The raffle card used to advertise "standard KOS checks" beside an Enter button,
+and the member discovered the real verdict only after tapping, as one of seven
+callback alerts. `evaluateTelegramRaffleAccess` is now the one evaluation the
+card and the button both run, so what a member is shown and what happens when
+they tap cannot drift apart. Do not add an eligibility check to one without the
+other — a second copy is the same parallel-state mistake the KOS points ledger
+made.
+
+The order of checks is deliberate:
+
+```text
+community membership -> KOS approval -> linked KOS profile
+  -> raffle status -> already entered -> web gates -> Discord membership
+```
+
+Discord REST is last so a member blocked earlier never pays for that call, and
+`evaluateWebGates` is only reached once cheaper checks pass. Checks after a
+block are reported as `pending`, not `fail`, because they were never evaluated.
+
+`alreadyEntered` is a state, not a failure: it swaps the Enter button for Leave.
+When every check passes but the group's entry token has expired, the card offers
+the website rather than silently dropping the button.
+
+Membership reconciliation is shared by the preview and the entry path, so
+opening a card refreshes stale `TelegramCommunityMember` rows exactly as
+entering did.
+
+## Web Parity
+
+Member-facing KOS state must be readable on the website in the same change that
+adds it to Telegram. Points, levels, referrals, community access and
+notification preferences are keyed on `KosIdentity`; `lib/kos/member.ts` reads
+them for `/me` through the unique `KosIdentity.legacyUserId` bridge, and
+`lib/kos/notifications.ts` holds the one preference vocabulary both surfaces use.
+
+Two point systems coexist deliberately and must not be confused:
+
+```text
+KosPointTransaction  identity-keyed, global   <- KOS Bot, /me KOS section
+PointsLedger         org + Discord user       <- Discord, web, rewards store
+```
+
+They cannot be merged as they stand: `PointsLedger.userId` is non-null, and a
+Telegram-first identity has no Discord `User` row. Label them distinctly in any
+new surface rather than summing them.
 
 ## Feature Flags
 

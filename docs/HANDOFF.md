@@ -5,6 +5,33 @@ Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
 Previous audited production baseline: `d079d52`
 
+## KOS web parity and Telegram raffle eligibility (2026-09-03)
+
+- The KOS member economy is now readable on the website. `KosPointTransaction`,
+  `KosReferral` and Telegram community access were written only by KOS Bot and
+  visible only in Telegram; `GET /api/me/kos` and the `/me` and `/me/points`
+  surfaces now read the same identity-keyed rows through the unique
+  `KosIdentity.legacyUserId` bridge. The global KOS total is labelled distinctly
+  from the per-community `PointsLedger` balance the rewards store spends.
+- Collapsing `KosPointTransaction` into `PointsLedger` was considered and
+  rejected: `PointsLedger` requires a non-null `userId`, and a Telegram-first
+  identity has no Discord `User` row, so those members could not be represented.
+- Notification preferences gained write parity through
+  `PATCH /api/me/kos/notifications`, which upserts the row Telegram's
+  `/notifications` toggles. The key vocabulary lives in `lib/kos/notifications`
+  and both surfaces read it, including the `notify:` callback regex.
+- Telegram raffle cards now show eligibility before the member taps Enter.
+  `lib/telegram/raffle-access.ts` is one evaluation shared by the card and the
+  entry button, so they cannot disagree; `enterFromTelegram` consumes it instead
+  of re-deriving the checks inline.
+- Leaving a raffle worked on Discord and the web but not Telegram. `removeWebEntry`
+  now sits beside `recordWebEntry` in `lib/raffle-entry.ts` and backs both.
+- Raffle cards show relative countdowns instead of raw ISO timestamps, the list
+  pages beyond its first ten, and `/entries` reports wins.
+- Verified locally: dashboard typecheck, 162 tests across 43 files, Prettier,
+  the production build, and `git diff --check`. Not yet deployed; the Telegram
+  human acceptance path in `docs/CLAUDE-HANDOFF-TELEGRAM.md` still applies.
+
 ## KOS Telegram guided onboarding and private admin console (2026-09-03)
 
 - The focused continuation guide is `docs/CLAUDE-HANDOFF-TELEGRAM.md`. Read it
