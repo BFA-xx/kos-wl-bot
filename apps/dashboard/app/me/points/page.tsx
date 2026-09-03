@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { Empty, PageTitle, SectionTitle, StatCard } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
 import { MemberTasksWorkspace } from "@/components/MemberTasksWorkspace";
+import { KosPointsSection } from "@/components/KosPointsSection";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -143,6 +144,8 @@ export default function MePointsPage() {
               )}
             </div>
           </div>
+
+          <KosPointsSection />
 
           <div className="mt-8">
             <MemberTasksWorkspace

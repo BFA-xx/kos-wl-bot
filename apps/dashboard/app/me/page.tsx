@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { PageTitle, SectionTitle, StatCard } from "@/components/ui";
 import { XConnectCard } from "@/components/XConnectCard";
 import { TelegramConnectCard } from "@/components/TelegramConnectCard";
+import { KosStandingCard } from "@/components/KosStandingCard";
 import { fmtDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -111,6 +112,10 @@ export default async function MeProfilePage() {
               : null
           }
         />
+      </div>
+
+      <div className="mt-8">
+        <KosStandingCard />
       </div>
     </>
   );

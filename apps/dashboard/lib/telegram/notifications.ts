@@ -1,23 +1,11 @@
 import { type Bot, type Context, InlineKeyboard } from "grammy";
 import { ensureTelegramIdentity } from "@/lib/telegram/identity";
 import { prisma } from "@/lib/db";
-
-const PREFERENCE_KEYS = [
-  "announcements",
-  "raffleReminders",
-  "winners",
-  "points",
-  "community",
-] as const;
-type PreferenceKey = (typeof PREFERENCE_KEYS)[number];
-
-const LABELS: Record<PreferenceKey, string> = {
-  announcements: "Announcements",
-  raffleReminders: "Raffle reminders",
-  winners: "Winner updates",
-  points: "Points updates",
-  community: "Community updates",
-};
+import {
+  KOS_NOTIFICATION_KEYS as PREFERENCE_KEYS,
+  KOS_NOTIFICATION_LABELS as LABELS,
+  type KosNotificationKey as PreferenceKey,
+} from "@/lib/kos/notifications";
 
 export async function showTelegramNotificationPreferences(
   ctx: Context,
@@ -64,7 +52,7 @@ export function registerTelegramNotificationHandlers(bot: Bot): void {
     await showTelegramNotificationPreferences(ctx, true);
   });
   bot.callbackQuery(
-    /^notify:(announcements|raffleReminders|winners|points|community)$/u,
+    new RegExp(`^notify:(${PREFERENCE_KEYS.join("|")})$`, "u"),
     async (ctx) => {
       if (!ctx.from || ctx.chat?.type !== "private") return;
       const key = ctx.match[1] as PreferenceKey;
