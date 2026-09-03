@@ -17,6 +17,10 @@ Previous audited production baseline: `d079d52`
 - Submitted access requests privately notify current Telegram administrators
   who also hold KOS `member:manage`. Notifications are deduplicated through an
   organization audit marker and link directly to the private approval queue.
+- A member who leaves a connected Telegram group can run `/start` again and
+  choose `Apply again`. The same KOS identity and history are preserved while
+  that community membership receives a new pending review cycle. Banned,
+  active, and already-pending memberships cannot use the restart action.
 - Group welcomes remain public and tag the actual entering account, but adapt
   their copy for incomplete, pending, approved, and rejected members. Approval
   data, reviewer controls, and quick-raffle/settings setup remain private.

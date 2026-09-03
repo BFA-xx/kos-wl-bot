@@ -25,7 +25,15 @@ import { showTelegramRaffle } from "@/lib/telegram/raffles";
 import {
   attachTelegramCommunityIdentity,
   discoverTelegramCommunityAccess,
+  findTelegramCommunityReapplications,
+  restartTelegramCommunityApplication,
 } from "@/lib/telegram/community";
+
+function onboardingCallback(step: string, communityId?: string): string {
+  return communityId
+    ? `onboarding:${step}:${communityId}`
+    : `onboarding:${step}`;
+}
 
 function mainMenuKeyboard(onboardingComplete = true): InlineKeyboard {
   const origin = dashboardOrigin();
@@ -92,6 +100,7 @@ async function showGettingStarted(
   ctx: Context,
   communityName?: string,
   edit = false,
+  communityId?: string,
 ): Promise<void> {
   if (!ctx.from || ctx.chat?.type !== "private") return;
   const identity = await ensureTelegramIdentity(ctx.from);
@@ -114,7 +123,7 @@ async function showGettingStarted(
       "Existing KOS profile and wallet connections are optional.",
     ].join("\n"),
     new InlineKeyboard()
-      .text("Begin onboarding", "onboarding:telegram")
+      .text("Begin onboarding", onboardingCallback("telegram", communityId))
       .row()
       .text("Back to menu", "nav:menu"),
     edit,
@@ -139,6 +148,7 @@ async function showWelcome(
 async function showTelegramOnboardingStep(
   ctx: Context,
   edit = false,
+  communityId?: string,
 ): Promise<void> {
   if (!ctx.from || ctx.chat?.type !== "private") return;
   await ensureTelegramIdentity(ctx.from);
@@ -154,7 +164,10 @@ async function showTelegramOnboardingStep(
       `<b>${account}</b> is verified through your private Telegram session.`,
       "KOS uses your immutable Telegram account ID, not your changeable username, as the secure identity link.",
     ].join("\n"),
-    new InlineKeyboard().text("Continue", "onboarding:identity"),
+    new InlineKeyboard().text(
+      "Continue",
+      onboardingCallback("identity", communityId),
+    ),
     edit,
   );
 }
@@ -162,6 +175,7 @@ async function showTelegramOnboardingStep(
 async function showIdentityOnboardingStep(
   ctx: Context,
   edit = false,
+  communityId?: string,
 ): Promise<void> {
   if (!ctx.from || ctx.chat?.type !== "private") return;
   const identity = await ensureTelegramIdentity(ctx.from);
@@ -180,7 +194,10 @@ async function showIdentityOnboardingStep(
       "",
       "This identity will connect your community access, raffles, points, referrals, and future KOS products.",
     ].join("\n"),
-    new InlineKeyboard().text("Continue", "onboarding:connections"),
+    new InlineKeyboard().text(
+      "Continue",
+      onboardingCallback("connections", communityId),
+    ),
     edit,
   );
 }
@@ -188,6 +205,7 @@ async function showIdentityOnboardingStep(
 async function showConnectionsOnboardingStep(
   ctx: Context,
   edit = false,
+  communityId?: string,
 ): Promise<void> {
   if (!ctx.from || ctx.chat?.type !== "private") return;
   const identity = await ensureTelegramIdentity(ctx.from);
@@ -205,9 +223,12 @@ async function showConnectionsOnboardingStep(
   keyboard
     .url("Add optional wallet", `${dashboardOrigin()}/me/wallets`)
     .row()
-    .text("Refresh connection status", "onboarding:connections")
+    .text(
+      "Refresh connection status",
+      onboardingCallback("connections", communityId),
+    )
     .row()
-    .text("Continue", "onboarding:review");
+    .text("Continue", onboardingCallback("review", communityId));
   await render(
     ctx,
     [
@@ -224,7 +245,11 @@ async function showConnectionsOnboardingStep(
   );
 }
 
-async function showOnboardingReview(ctx: Context, edit = false): Promise<void> {
+async function showOnboardingReview(
+  ctx: Context,
+  edit = false,
+  communityId?: string,
+): Promise<void> {
   if (!ctx.from || ctx.chat?.type !== "private") return;
   const identity = await ensureTelegramIdentity(ctx.from);
   await discoverTelegramCommunityAccess(ctx, identity.id);
@@ -236,17 +261,18 @@ async function showOnboardingReview(ctx: Context, edit = false): Promise<void> {
       where: { identityId: identity.id },
       select: {
         approvalStatus: true,
-        community: { select: { communityName: true } },
+        community: { select: { id: true, communityName: true } },
       },
       orderBy: { requestedAt: "desc" },
     }),
   ]);
   const requests = memberships.map(
     ({ community, approvalStatus }) =>
-      `${escapeTelegramHtml(community.communityName)}: ${approvalStatus}`,
+      `${escapeTelegramHtml(community.communityName)}: ${community.id === communityId ? "READY TO REAPPLY" : approvalStatus}`,
   );
   const hasPendingRequest = memberships.some(
-    ({ approvalStatus }) => approvalStatus === "PENDING",
+    ({ community, approvalStatus }) =>
+      approvalStatus === "PENDING" || community.id === communityId,
   );
   await render(
     ctx,
@@ -268,13 +294,52 @@ async function showOnboardingReview(ctx: Context, edit = false): Promise<void> {
     ].join("\n"),
     new InlineKeyboard()
       .text(
-        hasPendingRequest ? "Submit for team approval" : "Finish KOS identity",
-        "onboarding:submit",
+        communityId
+          ? "Submit new access request"
+          : hasPendingRequest
+            ? "Submit for team approval"
+            : "Finish KOS identity",
+        onboardingCallback("submit", communityId),
       )
       .row()
-      .text("Back", "onboarding:connections"),
+      .text("Back", onboardingCallback("connections", communityId)),
     edit,
   );
+}
+
+async function showReapplicationPrompt(
+  ctx: Context,
+  identityId: string,
+  edit = false,
+): Promise<boolean> {
+  if (!ctx.from || ctx.chat?.type !== "private") return false;
+  const communities = await findTelegramCommunityReapplications({
+    identityId,
+    telegramUserId: String(ctx.from.id),
+  });
+  if (!communities.length) return false;
+  const keyboard = new InlineKeyboard();
+  for (const community of communities.slice(0, 8)) {
+    keyboard
+      .text(
+        `Apply again: ${community.communityName}`.slice(0, 60),
+        onboardingCallback("start", community.id),
+      )
+      .row();
+  }
+  keyboard.text("Open menu", "nav:menu");
+  await render(
+    ctx,
+    [
+      "<b>REAPPLY FOR KOS ACCESS</b>",
+      "",
+      "Your KOS identity and history are still safe.",
+      "Because you left the Telegram community, you can run the onboarding experience again and submit a fresh access request.",
+    ].join("\n"),
+    keyboard,
+    edit,
+  );
+  return true;
 }
 
 async function showOnboardingOutcome(
@@ -490,11 +555,23 @@ async function showAccessStatus(ctx: Context, edit = false): Promise<void> {
   });
   const lines = memberships.map(
     (member) =>
-      `${escapeTelegramHtml(member.community.communityName)}: ${member.approvalStatus}`,
+      `${escapeTelegramHtml(member.community.communityName)}: ${member.approvalStatus}${member.status === "LEFT" ? " (LEFT GROUP)" : ""}`,
   );
   const keyboard = new InlineKeyboard();
   if (identity.onboardingStatus !== "COMPLETED") {
     keyboard.text("Continue onboarding", "onboarding:start").row();
+  }
+  const reapplications = await findTelegramCommunityReapplications({
+    identityId: identity.id,
+    telegramUserId: String(ctx.from.id),
+  });
+  for (const community of reapplications.slice(0, 6)) {
+    keyboard
+      .text(
+        `Apply again: ${community.communityName}`.slice(0, 60),
+        onboardingCallback("start", community.id),
+      )
+      .row();
   }
   keyboard.text("Back", "nav:menu");
   await render(
@@ -648,8 +725,22 @@ async function handleStart(ctx: Context): Promise<void> {
       });
     }
     if (identity.onboardingStatus === "COMPLETED") {
-      await notifyTelegramOnboardingAdmins(ctx, identity.id, community.id);
-      await showOnboardingOutcome(ctx);
+      const reapplications = await findTelegramCommunityReapplications({
+        identityId: identity.id,
+        telegramUserId: String(ctx.from.id),
+      });
+      const canReapply = reapplications.some(({ id }) => id === community.id);
+      if (canReapply) {
+        await showGettingStarted(
+          ctx,
+          community.communityName,
+          false,
+          community.id,
+        );
+      } else {
+        await notifyTelegramOnboardingAdmins(ctx, identity.id, community.id);
+        await showOnboardingOutcome(ctx);
+      }
     } else {
       await showWelcome(ctx, community.communityName);
     }
@@ -667,7 +758,41 @@ async function handleStart(ctx: Context): Promise<void> {
     await showConnectionsOnboardingStep(ctx);
     return;
   }
+  if (await showReapplicationPrompt(ctx, identity.id)) return;
   await showMenu(ctx);
+}
+
+async function submitOnboarding(
+  ctx: Context,
+  communityId?: string,
+): Promise<void> {
+  if (!ctx.from || ctx.chat?.type !== "private") return;
+  const identity = await ensureTelegramIdentity(ctx.from);
+  if (communityId) {
+    const restarted = await restartTelegramCommunityApplication({
+      communityId,
+      identityId: identity.id,
+      telegramUserId: String(ctx.from.id),
+    });
+    if (!restarted) {
+      await ctx.answerCallbackQuery({
+        text: "This application cannot be restarted. Check your current access status.",
+        show_alert: true,
+      });
+      await showAccessStatus(ctx, true);
+      return;
+    }
+  }
+  await ctx.answerCallbackQuery({ text: "Submitting onboarding..." });
+  const outcome = await completeTelegramOnboarding(ctx.from);
+  const pendingApprovals = await discoverTelegramCommunityAccess(
+    ctx,
+    outcome.identityId,
+  );
+  if (pendingApprovals) {
+    await notifyTelegramOnboardingAdmins(ctx, outcome.identityId, communityId);
+  }
+  await showOnboardingOutcome(ctx, true);
 }
 
 export function registerTelegramNavigation(bot: Bot): void {
@@ -733,16 +858,50 @@ export function registerTelegramNavigation(bot: Bot): void {
     await showOnboardingReview(ctx, true);
   });
   bot.callbackQuery("onboarding:submit", async (ctx) => {
-    if (!ctx.from || ctx.chat?.type !== "private") return;
-    await ctx.answerCallbackQuery({ text: "Submitting onboarding..." });
-    const outcome = await completeTelegramOnboarding(ctx.from);
-    const pendingApprovals = await discoverTelegramCommunityAccess(
-      ctx,
-      outcome.identityId,
-    );
-    if (pendingApprovals) {
-      await notifyTelegramOnboardingAdmins(ctx, outcome.identityId);
-    }
-    await showOnboardingOutcome(ctx, true);
+    await submitOnboarding(ctx);
   });
+  bot.callbackQuery(
+    /^onboarding:(start|telegram|identity|connections|review|submit):([a-z0-9]{20,36})$/u,
+    async (ctx) => {
+      const step = ctx.match[1];
+      const communityId = ctx.match[2];
+      if (step === "submit") {
+        await submitOnboarding(ctx, communityId);
+        return;
+      }
+      await ctx.answerCallbackQuery();
+      if (step === "start") {
+        const identity = ctx.from
+          ? await ensureTelegramIdentity(ctx.from)
+          : null;
+        const communities = identity
+          ? await findTelegramCommunityReapplications({
+              identityId: identity.id,
+              telegramUserId: String(ctx.from!.id),
+            })
+          : [];
+        const community = communities.find(({ id }) => id === communityId);
+        if (!community) {
+          await showAccessStatus(ctx, true);
+          return;
+        }
+        await showGettingStarted(
+          ctx,
+          community.communityName,
+          true,
+          communityId,
+        );
+        return;
+      }
+      if (step === "telegram") {
+        await showTelegramOnboardingStep(ctx, true, communityId);
+      } else if (step === "identity") {
+        await showIdentityOnboardingStep(ctx, true, communityId);
+      } else if (step === "connections") {
+        await showConnectionsOnboardingStep(ctx, true, communityId);
+      } else {
+        await showOnboardingReview(ctx, true, communityId);
+      }
+    },
+  );
 }

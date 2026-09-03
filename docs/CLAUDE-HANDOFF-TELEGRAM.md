@@ -172,14 +172,34 @@ are awarded idempotently by `activateApprovedOnboarding` after an authorized
 reviewer approves community access. Referral completion uses the same approval
 boundary.
 
+### Leave and reapply lifecycle
+
+Leaving a Telegram community changes only
+`TelegramCommunityMember.status` to `LEFT`; it does not delete the global KOS
+identity, linked profile, wallet history, points, referrals, or raffle history.
+When a completed member has a `LEFT` membership whose previous approval is
+`APPROVED` or `REJECTED`, both `/start` and `/status` offer `Apply again`.
+
+The reapplication carries the community ID through all five callback steps.
+Only the final `onboarding:submit:<communityId>` action changes the membership
+back to `PENDING`, refreshes `requestedAt`, clears the previous reviewer fields,
+and creates `TELEGRAM_ACCESS_REAPPLIED` audit evidence. The member stays `LEFT`
+until they use the new invite after approval. Banned, active, and
+already-pending memberships cannot be restarted.
+
+Do not reset `KosIdentity.onboardingStatus` to implement reapplication. That
+identity is global and may represent access to several communities. The five
+screens rerun as a community application while preserving the identity.
+
 ## Reviewer Engagement
 
 When a pending member submits onboarding,
 `notifyTelegramOnboardingAdmins` does the following:
 
 1. Loads pending community requests for that identity.
-2. Checks `AuditLog` for `TELEGRAM_ACCESS_REVIEW_REQUESTED` so the same request
-   does not repeatedly notify reviewers.
+2. Checks `AuditLog` for `TELEGRAM_ACCESS_REVIEW_REQUESTED` created at or after
+   the membership's current `requestedAt`, so the same application does not
+   repeatedly notify reviewers but a later reapplication can notify again.
 3. Calls Telegram `getChatAdministrators` for the connected group.
 4. Ignores bots.
 5. Calls `telegramActorHasPermission` for each administrator with
@@ -414,6 +434,14 @@ Heisenberg when the intended second account is `cryptowhale74`.
     the public group.
 16. Run `/quickraffle` privately and stop at final confirmation unless a real
     production raffle creation is explicitly authorized.
+17. After approval, leave the group with the ordinary account.
+18. Send `/start` privately and confirm `Apply again: KOS` appears (or the
+    connected community's current configured name).
+19. Rerun all five steps and submit the new request.
+20. Confirm the reviewer receives one new private alert, the queue shows the
+    account as needing an invite, and the old identity/points remain unchanged.
+21. Confirm a second press on the old Submit button cannot create another
+    application or duplicate reviewer notification.
 
 ## Known Limitations and Next Work
 
@@ -424,6 +452,9 @@ Heisenberg when the intended second account is `cryptowhale74`.
 - The five-step onboarding is callback-driven and uses durable identity state,
   but it does not persist the exact visual step. `PROFILE_COMPLETE` resumes at
   optional connections; this is intentional for the current MVP.
+- Reapplication preserves one membership row per Telegram user and community.
+  `requestedAt` identifies the current review cycle; historical approvals and
+  reapplications remain available in `AuditLog` rather than duplicate rows.
 - Profile and wallet linking leave Telegram for the authenticated KOS web
   surface. Telegram refreshes connection status after the user returns.
 - Mintooor integration is represented in the provider-neutral identity model

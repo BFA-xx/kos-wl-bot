@@ -162,6 +162,95 @@ export async function attachTelegramCommunityIdentity(input: {
   });
 }
 
+export async function findTelegramCommunityReapplications(input: {
+  telegramUserId: string;
+  identityId: string;
+}): Promise<Array<{ id: string; communityName: string }>> {
+  const memberships = await prisma.telegramCommunityMember.findMany({
+    where: {
+      telegramUserId: input.telegramUserId,
+      identityId: input.identityId,
+      status: "LEFT",
+      approvalStatus: { in: ["APPROVED", "REJECTED"] },
+      community: {
+        status: "ACTIVE",
+        featureFlags: { has: "ONBOARDING" },
+      },
+    },
+    select: {
+      community: { select: { id: true, communityName: true } },
+    },
+    orderBy: { leftAt: "desc" },
+  });
+  return memberships.map(({ community }) => community);
+}
+
+export async function restartTelegramCommunityApplication(input: {
+  communityId: string;
+  telegramUserId: string;
+  identityId: string;
+}): Promise<{ communityId: string; communityName: string } | null> {
+  return prisma.$transaction(async (tx) => {
+    const membership = await tx.telegramCommunityMember.findFirst({
+      where: {
+        communityId: input.communityId,
+        telegramUserId: input.telegramUserId,
+        identityId: input.identityId,
+        status: "LEFT",
+        approvalStatus: { in: ["APPROVED", "REJECTED"] },
+        community: {
+          status: "ACTIVE",
+          featureFlags: { has: "ONBOARDING" },
+        },
+      },
+      select: {
+        id: true,
+        approvalStatus: true,
+        community: {
+          select: { id: true, organizationId: true, communityName: true },
+        },
+      },
+    });
+    if (!membership) return null;
+
+    const requestedAt = new Date();
+    const restarted = await tx.telegramCommunityMember.updateMany({
+      where: {
+        id: membership.id,
+        identityId: input.identityId,
+        status: "LEFT",
+        approvalStatus: membership.approvalStatus,
+      },
+      data: {
+        approvalStatus: "PENDING",
+        requestedAt,
+        reviewedAt: null,
+        reviewedById: null,
+        lastSeenAt: requestedAt,
+      },
+    });
+    if (!restarted.count) return null;
+
+    await tx.auditLog.create({
+      data: {
+        organizationId: membership.community.organizationId,
+        action: "TELEGRAM_ACCESS_REAPPLIED",
+        targetType: "telegram_community_member",
+        targetId: membership.id,
+        metadata: {
+          identityId: input.identityId,
+          telegramUserId: input.telegramUserId,
+          requestedAt: requestedAt.toISOString(),
+        },
+      },
+    });
+    return {
+      communityId: membership.community.id,
+      communityName: membership.community.communityName,
+    };
+  });
+}
+
 function isActiveTelegramMembership(
   membership: Awaited<ReturnType<Context["api"]["getChatMember"]>>,
 ): boolean {

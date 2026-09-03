@@ -67,6 +67,7 @@ export async function notifyTelegramOnboardingAdmins(
       },
       select: {
         id: true,
+        requestedAt: true,
         community: {
           select: {
             id: true,
@@ -90,6 +91,7 @@ export async function notifyTelegramOnboardingAdmins(
         action: "TELEGRAM_ACCESS_REVIEW_REQUESTED",
         targetType: "telegram_community_member",
         targetId: request.id,
+        createdAt: { gte: request.requestedAt },
       },
       select: { id: true },
     });
@@ -140,6 +142,7 @@ export async function notifyTelegramOnboardingAdmins(
           targetId: request.id,
           metadata: {
             telegramUserId: String(ctx.from.id),
+            applicationRequestedAt: request.requestedAt.toISOString(),
             reviewerNotifications: requestDeliveries,
           },
         },

@@ -36,6 +36,7 @@ describe("Telegram onboarding reviewer engagement", () => {
     mocks.communityMemberFindMany.mockResolvedValue([
       {
         id: "member-1",
+        requestedAt: new Date("2026-09-03T08:00:00.000Z"),
         community: {
           id: "community-1",
           organizationId: "org-1",
@@ -83,6 +84,13 @@ describe("Telegram onboarding reviewer engagement", () => {
         data: expect.objectContaining({
           action: "TELEGRAM_ACCESS_REVIEW_REQUESTED",
           targetId: "member-1",
+        }),
+      }),
+    );
+    expect(mocks.auditFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          createdAt: { gte: new Date("2026-09-03T08:00:00.000Z") },
         }),
       }),
     );

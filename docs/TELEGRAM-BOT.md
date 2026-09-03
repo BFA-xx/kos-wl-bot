@@ -55,6 +55,13 @@ Submission privately notifies eligible reviewers. A current Telegram
 administrator with the KOS `member:manage` permission reviews it with
 `/approvals` and explicit Approve/Reject buttons.
 
+Leaving a connected Telegram group does not delete the member's KOS identity.
+For a previously approved or rejected membership, `/start` and `/status`
+surface an `Apply again` action. It reruns all five onboarding screens and only
+opens a new pending review on final submission. Active, banned, and
+already-pending memberships cannot be restarted. The new request timestamp
+also creates a fresh, deduplicated private reviewer notification cycle.
+
 Approval is scoped to the KOS community. Until it is approved, the member may
 use the private bot but cannot enter that community's raffles or receive admin
 point awards. Onboarding and referral rewards activate idempotently only after
