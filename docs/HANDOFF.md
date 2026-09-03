@@ -5,6 +5,29 @@ Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
 Previous audited production baseline: `d079d52`
 
+## Released to production (2026-09-03)
+
+Commit `8d9fd43` is live. Both Vercel production projects built and
+`raffle.koslabs.app` is aliased to the new deployment; `./scripts/deploy-ec2.sh`
+passed all 34 bot tests on the box, rebuilt the database client and bot,
+registered nine Discord commands, and restarted PM2 to a healthy
+`ok/ready/lastTickOk` with three guilds. The restart count did not climb
+afterwards, so the shared-package change did not crash-loop the bot.
+
+Telegram command scopes were re-registered from the box: 14 private and 15
+group-admin, the latter now including `raffletopic`. `getWebhookInfo` reports the
+correct URL, zero pending updates and no error.
+
+Note on smoke tests: `/api/me/*` returns the middleware's
+`{"error":"unauthorized"}` for signed-out requests whether or not the route
+exists, so a 401 there proves nothing about a new route being live. Confirm a
+release by checking the production alias resolves to the new deployment id
+instead.
+
+Still unverified, and needing a human in Telegram: the raffle card checklist
+against a real tap, and a raffle posting into a configured topic — including the
+case where that topic is deleted and the post should fall back to the main chat.
+
 ## KOS raffle topics in Telegram (2026-09-03)
 
 - Raffle messages can now be routed to one forum topic per community. The thread
@@ -48,8 +71,7 @@ Previous audited production baseline: `d079d52`
 - Raffle cards show relative countdowns instead of raw ISO timestamps, the list
   pages beyond its first ten, and `/entries` reports wins.
 - Verified locally: dashboard typecheck, 162 tests across 43 files, Prettier,
-  the production build, and `git diff --check`. Not yet deployed; the Telegram
-  human acceptance path in `docs/CLAUDE-HANDOFF-TELEGRAM.md` still applies.
+  the production build, and `git diff --check`.
 
 ## KOS Telegram guided onboarding and private admin console (2026-09-03)
 
