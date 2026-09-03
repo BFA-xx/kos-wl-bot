@@ -8,6 +8,7 @@ import {
 } from "@kos/db";
 
 export const TELEGRAM_FEATURE_FLAGS = [
+  "GREETINGS",
   "QUICK_RAFFLES",
   "ONBOARDING",
   "RAFFLES",

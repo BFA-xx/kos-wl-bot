@@ -74,6 +74,7 @@ export async function POST(
           ),
         )
       : [
+          "GREETINGS",
           "ONBOARDING",
           "RAFFLES",
           "ANNOUNCEMENTS",

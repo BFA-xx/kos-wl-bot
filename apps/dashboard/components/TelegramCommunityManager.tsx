@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 
 const fetcher = (url: string) => fetch(url).then((response) => response.json());
 const FLAGS = [
+  ["GREETINGS", "Greeting replies"],
   ["QUICK_RAFFLES", "Quick raffles"],
   ["ONBOARDING", "Onboarding"],
   ["RAFFLES", "Raffles"],
@@ -46,6 +47,7 @@ export function TelegramCommunityManager() {
   const [name, setName] = useState("");
   const [guildId, setGuildId] = useState("");
   const [flags, setFlags] = useState<string[]>([
+    "GREETINGS",
     "ONBOARDING",
     "RAFFLES",
     "ANNOUNCEMENTS",

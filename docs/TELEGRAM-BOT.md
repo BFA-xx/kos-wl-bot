@@ -92,6 +92,21 @@ approval.
   community administration.
 - `/warn`, `/mute`, `/ban`, `/unban`: Telegram moderation with KOS audit rows.
 
+## Community Greetings
+
+When the connected community enables `GREETINGS`, KOS Bot replies directly to
+human group messages containing `gm` or `gKOS` as standalone,
+case-insensitive tokens:
+
+```text
+gKOS🖤
+```
+
+Messages such as `gm everyone`, `GM KOS`, and `well, gkos!` match. Embedded
+letters in words such as `programming`, commands, bot messages, private chats,
+and unconnected groups do not. Replies are silently limited to two per member
+and fifteen per group per minute to stay below Telegram flood limits.
+
 ## Configuration
 
 Canonical production variables are:

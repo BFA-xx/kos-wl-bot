@@ -20,6 +20,7 @@ import { registerTelegramAdminHandlers } from "@/lib/telegram/admin";
 import { registerTelegramRaffleHandlers } from "@/lib/telegram/raffles";
 import { ensureTelegramIdentity } from "@/lib/telegram/identity";
 import { awardKosPoints } from "@/lib/telegram/points";
+import { registerTelegramEngagementHandlers } from "@/lib/telegram/engagement";
 
 let cachedBot: Bot | null = null;
 let botInit: Promise<unknown> | null = null;
@@ -301,6 +302,7 @@ async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
 
 export function buildTelegramBot(token: string): Bot {
   const bot = new Bot(token);
+  registerTelegramEngagementHandlers(bot);
   bot.use(telegramRateLimitMiddleware);
   registerTelegramNavigation(bot);
   registerTelegramCommunityHandlers(bot);

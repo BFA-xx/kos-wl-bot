@@ -21,6 +21,10 @@ Previous audited production baseline: `d079d52`
   choose `Apply again`. The same KOS identity and history are preserved while
   that community membership receives a new pending review cycle. Banned,
   active, and already-pending memberships cannot use the restart action.
+- Connected communities can enable `GREETINGS`. Human group messages containing
+  standalone `gm` or `gKOS` tokens receive a direct `gKOS🖤` reply. The handler
+  ignores private chats, bots, commands, unconnected groups, and embedded text
+  such as `programming`, with per-user and per-chat flood limits.
 - Group welcomes remain public and tag the actual entering account, but adapt
   their copy for incomplete, pending, approved, and rejected members. Approval
   data, reviewer controls, and quick-raffle/settings setup remain private.

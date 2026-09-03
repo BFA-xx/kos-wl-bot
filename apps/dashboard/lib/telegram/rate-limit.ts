@@ -12,6 +12,7 @@ export async function consumeTelegramRateLimit(
   telegramUserId: string,
   scope = "interaction",
   now = new Date(),
+  limit = INTERACTION_LIMIT,
 ): Promise<boolean> {
   const windowStart = telegramRateWindowStart(now);
   const bucket = await prisma.telegramRateLimitBucket.upsert({
@@ -33,7 +34,7 @@ export async function consumeTelegramRateLimit(
       },
     });
   }
-  return bucket.count <= INTERACTION_LIMIT;
+  return bucket.count <= limit;
 }
 
 export async function telegramRateLimitMiddleware(
@@ -41,6 +42,15 @@ export async function telegramRateLimitMiddleware(
   next: NextFunction,
 ): Promise<void> {
   if (!ctx.from || ctx.update.chat_member) {
+    await next();
+    return;
+  }
+  if (
+    ctx.message?.text &&
+    ctx.chat &&
+    ["group", "supergroup"].includes(ctx.chat.type) &&
+    !ctx.message.text.startsWith("/")
+  ) {
     await next();
     return;
   }

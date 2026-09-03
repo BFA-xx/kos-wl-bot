@@ -121,6 +121,8 @@ code changes.
   decisions, moderation, settings, announcements, statistics, and point awards.
 - `apps/dashboard/lib/telegram/community.ts`: `/chatid`, durable group member
   tracking, immutable-ID mentions, and state-aware public welcomes.
+- `apps/dashboard/lib/telegram/engagement.ts`: feature-gated `gm`/`gKOS`
+  recognition and direct `gKOS🖤` group replies with flood limits.
 - `apps/dashboard/lib/telegram/identity.ts`: provider-neutral KOS identity
   creation and safe bridging to the existing Discord-backed `User`.
 - `apps/dashboard/lib/telegram/navigation.ts`: `/start`, menus, profile,
@@ -249,6 +251,24 @@ The welcome varies by durable state:
 The group sees a community welcome and safe CTA. Approval controls and member
 review data remain private.
 
+## Greeting Engagement
+
+`engagement.ts` is registered before the general interaction rate limiter so a
+matching group greeting can use its own limits. Non-command group text bypasses
+the general interaction bucket, preventing a database write for every ordinary
+message when Telegram delivers all group traffic.
+
+The matcher recognizes standalone, case-insensitive `gm` and `gKOS` tokens in
+phrases or punctuation, but does not match embedded letters such as
+`programming`, `segment`, `gmos`, or `gkoss`. It ignores private chats,
+commands, bots, disabled/unconnected communities, and communities without the
+`GREETINGS` feature. A successful response replies to the triggering message
+with exactly `gKOS🖤`.
+
+Greeting replies are silently capped at two per user per group and fifteen per
+group in each shared one-minute window. Do not remove the chat-level limit
+without considering Telegram flood limits and webhook retry behavior.
+
 ## Data Model
 
 Relevant Prisma models are in `packages/db/prisma/schema.prisma`:
@@ -300,6 +320,7 @@ Telegram community behavior is controlled by `TelegramCommunity.featureFlags`.
 Current vocabulary includes:
 
 ```text
+GREETINGS
 ONBOARDING
 RAFFLES
 QUICK_RAFFLES
@@ -442,6 +463,10 @@ Heisenberg when the intended second account is `cryptowhale74`.
     account as needing an invite, and the old identity/points remain unchanged.
 21. Confirm a second press on the old Submit button cannot create another
     application or duplicate reviewer notification.
+22. In the connected group, send `gm everyone` from a human account and confirm
+    KOS Bot replies directly with `gKOS🖤`.
+23. Confirm `programming`, `/gm`, a bot-authored message, and a private `gm` do
+    not trigger the community greeting reply.
 
 ## Known Limitations and Next Work
 
