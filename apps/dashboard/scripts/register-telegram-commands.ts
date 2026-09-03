@@ -35,6 +35,7 @@ const groupAdminCommands = [
   { command: "unban", description: "Unban by Telegram user ID" },
   { command: "settings", description: "Open KOS community settings" },
   { command: "chatid", description: "Show this Telegram chat ID" },
+  { command: "raffletopic", description: "Post KOS raffles in this topic" },
   { command: "cancel", description: "Cancel your quick-raffle setup" },
 ];
 

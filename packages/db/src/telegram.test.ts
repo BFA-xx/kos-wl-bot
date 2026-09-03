@@ -51,6 +51,7 @@ test("normalizes Telegram raffle defaults conservatively", () => {
     remainUntilEnd: false,
     winnerVisibility: "PUBLIC",
     autoAnnouncements: true,
+    raffleTopicId: null,
   });
   assert.deepEqual(
     telegramRaffleDefaults({
@@ -64,6 +65,7 @@ test("normalizes Telegram raffle defaults conservatively", () => {
       remainUntilEnd: true,
       winnerVisibility: "ADMIN_ONLY",
       autoAnnouncements: false,
+      raffleTopicId: null,
     },
   );
 });
@@ -139,5 +141,35 @@ test("auto-publishes a posted raffle with membership and reminder defaults", asy
   assert.deepEqual(
     calls.deliveries?.map((delivery) => delivery.event),
     ["RAFFLE_CREATED", "RAFFLE_ENDING_SOON"],
+  );
+});
+
+test("treats only a positive integer as a raffle topic", () => {
+  assert.equal(telegramRaffleDefaults({}).raffleTopicId, null);
+  assert.equal(telegramRaffleDefaults({ raffleTopicId: 12 }).raffleTopicId, 12);
+  // Telegram sends thread ids as numbers, but stored JSON may round-trip them.
+  assert.equal(
+    telegramRaffleDefaults({ raffleTopicId: "12" }).raffleTopicId,
+    12,
+  );
+  assert.equal(
+    telegramRaffleDefaults({ raffleTopicId: 0 }).raffleTopicId,
+    null,
+  );
+  assert.equal(
+    telegramRaffleDefaults({ raffleTopicId: -3 }).raffleTopicId,
+    null,
+  );
+  assert.equal(
+    telegramRaffleDefaults({ raffleTopicId: 1.5 }).raffleTopicId,
+    null,
+  );
+  assert.equal(
+    telegramRaffleDefaults({ raffleTopicId: null }).raffleTopicId,
+    null,
+  );
+  assert.equal(
+    telegramRaffleDefaults({ raffleTopicId: "general" }).raffleTopicId,
+    null,
   );
 });

@@ -26,7 +26,7 @@ export interface TelegramChatMember {
   is_member?: boolean;
 }
 
-interface TelegramEnvelope<T> {
+export interface TelegramEnvelope<T> {
   ok: boolean;
   result?: T;
   description?: string;
@@ -43,6 +43,13 @@ export interface TelegramRaffleDefaults {
   remainUntilEnd: boolean;
   winnerVisibility: "PUBLIC" | "ANONYMOUS" | "ADMIN_ONLY";
   autoAnnouncements: boolean;
+  /**
+   * Forum topic to post raffle messages into, when the group uses topics.
+   * Null posts to the main chat, which is also the fallback if the topic is
+   * later closed or deleted. Lives in `defaultRaffleSettings` rather than its
+   * own column so enabling topics needs no migration.
+   */
+  raffleTopicId: number | null;
 }
 
 export function hashIntegrationToken(token: string): string {
@@ -76,11 +83,14 @@ export function telegramRaffleDefaults(value: unknown): TelegramRaffleDefaults {
   )
     ? (settings.winnerVisibility as TelegramRaffleDefaults["winnerVisibility"])
     : "PUBLIC";
+  const topic = Number(settings.raffleTopicId);
   return {
     membershipRequired: settings.membershipRequired === true,
     remainUntilEnd: settings.remainUntilEnd === true,
     winnerVisibility,
     autoAnnouncements: settings.autoAnnouncements !== false,
+    // Telegram thread ids are positive integers; anything else means "no topic".
+    raffleTopicId: Number.isSafeInteger(topic) && topic > 0 ? topic : null,
   };
 }
 

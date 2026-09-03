@@ -13,6 +13,7 @@ import { telegramRateLimitMiddleware } from "@/lib/telegram/rate-limit";
 import { registerTelegramNotificationHandlers } from "@/lib/telegram/notifications";
 import { registerTelegramAdminHandlers } from "@/lib/telegram/admin";
 import { registerTelegramRaffleHandlers } from "@/lib/telegram/raffles";
+import { registerTelegramRaffleTopicHandlers } from "@/lib/telegram/raffle-topic";
 import { evaluateTelegramRaffleAccess } from "@/lib/telegram/raffle-access";
 import { ensureTelegramIdentity } from "@/lib/telegram/identity";
 import { awardKosPoints } from "@/lib/telegram/points";
@@ -209,6 +210,7 @@ export function buildTelegramBot(token: string): Bot {
     await enterFromTelegram(ctx, ctx.match[1]);
   });
   registerTelegramRaffleHandlers(bot);
+  registerTelegramRaffleTopicHandlers(bot);
   bot.catch((error) => {
     telegramLog("error", "handler_failed", {
       requestId: `tg:${error.ctx.update.update_id}`,

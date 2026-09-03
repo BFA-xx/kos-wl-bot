@@ -2,6 +2,7 @@ import {
   callTelegramApi,
   IntegrationDeliveryEvent,
   prisma,
+  telegramRaffleDefaults,
   type TelegramWinnerVisibility,
 } from "@kos/db";
 import { config } from "../config.js";
@@ -29,6 +30,47 @@ function raffleUrl(input: {
     input.organizationSlug,
     input.projectName,
   )}`;
+}
+
+/**
+ * A raffle topic can be closed, deleted, or the group can stop being a forum
+ * long after an admin configured it. Telegram rejects the send in each case, so
+ * fall back to the main chat rather than letting the delivery burn its eight
+ * retries and drop the announcement entirely.
+ */
+export function isTopicUnavailable(description?: string): boolean {
+  if (!description) return false;
+  return /thread not found|topic_deleted|topic_closed|topic (?:is )?closed|not a forum|topics are disabled/iu.test(
+    description,
+  );
+}
+
+export async function sendToCommunity(
+  botToken: string,
+  chatId: string,
+  topicId: number | null,
+  body: Record<string, unknown>,
+  /** Injectable so the fallback is testable without a live Telegram. */
+  call: typeof callTelegramApi = callTelegramApi,
+) {
+  if (topicId) {
+    const threaded = await call<TelegramMessage>(botToken, "sendMessage", {
+      ...body,
+      chat_id: chatId,
+      message_thread_id: topicId,
+    });
+    if (threaded.ok || !isTopicUnavailable(threaded.description)) {
+      return threaded;
+    }
+    logger.warn(
+      { chatId, topicId, error: threaded.description },
+      "Telegram raffle topic unavailable, posting to the main chat",
+    );
+  }
+  return call<TelegramMessage>(botToken, "sendMessage", {
+    ...body,
+    chat_id: chatId,
+  });
 }
 
 function statusHeading(event: IntegrationDeliveryEvent): string {
@@ -59,6 +101,9 @@ async function deliverRaffleMessage(deliveryId: string): Promise<void> {
   if (!delivery || !delivery.publication || !delivery.raffle) return;
   const { publication, raffle, community } = delivery;
   if (community.status !== "ACTIVE") return;
+  const { raffleTopicId } = telegramRaffleDefaults(
+    community.defaultRaffleSettings,
+  );
   const url = raffleUrl({
     id: raffle.id,
     projectName: raffle.projectName,
@@ -67,11 +112,11 @@ async function deliverRaffleMessage(deliveryId: string): Promise<void> {
 
   if (delivery.event === "RAFFLE_ENDING_SOON") {
     if (raffle.status !== "LIVE" || raffle.endAt <= new Date()) return;
-    const response = await callTelegramApi<TelegramMessage>(
+    const response = await sendToCommunity(
       token,
-      "sendMessage",
+      community.telegramChatId,
+      raffleTopicId,
       {
-        chat_id: community.telegramChatId,
         parse_mode: "HTML",
         text: `<b>10 MINUTES LEFT</b>\n\n${escapeHtml(raffle.projectName)} ends soon.`,
         reply_markup: {
@@ -98,6 +143,7 @@ async function deliverRaffleMessage(deliveryId: string): Promise<void> {
     await deliverWinners({
       botToken: token,
       chatId: community.telegramChatId,
+      topicId: raffleTopicId,
       raffle,
       visibility: publication.winnerVisibility,
       url,
@@ -154,10 +200,12 @@ async function deliverRaffleMessage(deliveryId: string): Promise<void> {
     if (edited.ok || edited.description?.includes("message is not modified"))
       return;
   }
-  const sent = await callTelegramApi<TelegramMessage>(token, "sendMessage", {
-    ...body,
-    message_id: undefined,
-  });
+  const sent = await sendToCommunity(
+    token,
+    community.telegramChatId,
+    raffleTopicId,
+    { ...body, message_id: undefined },
+  );
   if (!sent.ok || !sent.result) {
     throw new Error(sent.description ?? "Telegram raffle delivery failed");
   }
@@ -170,6 +218,7 @@ async function deliverRaffleMessage(deliveryId: string): Promise<void> {
 async function deliverWinners(input: {
   botToken: string;
   chatId: string;
+  topicId: number | null;
   raffle: {
     id: number;
     projectName: string;
@@ -212,11 +261,11 @@ async function deliverWinners(input: {
           .join("\n")
       : "No eligible winners were drawn.";
   }
-  const response = await callTelegramApi<TelegramMessage>(
+  const response = await sendToCommunity(
     input.botToken,
-    "sendMessage",
+    input.chatId,
+    input.topicId,
     {
-      chat_id: input.chatId,
       parse_mode: "HTML",
       text: `<b>RAFFLE RESULTS</b>\n\n${escapeHtml(input.raffle.projectName)}\n\n${winners}`,
       reply_markup: {
