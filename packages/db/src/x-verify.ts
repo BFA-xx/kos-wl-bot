@@ -235,6 +235,61 @@ async function refreshXToken(refreshToken: string): Promise<XTokenResponse | nul
 }
 
 /**
+ * Where a member's X tokens live.
+ *
+ * There are two, and they are not interchangeable: a website member's tokens
+ * hang off `ConnectedAccount` (keyed to the Discord-based User), while a
+ * Telegram-only member authorizes with X directly and their tokens hang off
+ * `IdentityAccount` (keyed to their KosIdentity, no website login involved).
+ * The refresh dance is identical, so it is written once and pointed at whichever
+ * table owns the row.
+ */
+export type XTokenScope =
+  | { kind: "user"; userId: string }
+  | { kind: "identity"; identityId: string };
+
+interface StoredXTokens {
+  accessToken: string | null;
+  refreshToken: string | null;
+  tokenExpiresAt: Date | null;
+}
+
+type TokenClient = Pick<PrismaClient, "connectedAccount" | "identityAccount">;
+
+function readTokens(db: TokenClient, scope: XTokenScope): Promise<StoredXTokens | null> {
+  return scope.kind === "user"
+    ? db.connectedAccount.findUnique({
+        where: { userId_provider: { userId: scope.userId, provider: "X" } },
+        select: { accessToken: true, refreshToken: true, tokenExpiresAt: true },
+      })
+    : db.identityAccount.findUnique({
+        where: { identityId_provider: { identityId: scope.identityId, provider: "X" } },
+        select: { accessToken: true, refreshToken: true, tokenExpiresAt: true },
+      });
+}
+
+async function writeTokens(
+  db: TokenClient,
+  scope: XTokenScope,
+  data: { accessToken: string; refreshToken: string | null; tokenExpiresAt: Date },
+): Promise<void> {
+  if (scope.kind === "user") {
+    await db.connectedAccount.update({
+      where: { userId_provider: { userId: scope.userId, provider: "X" } },
+      data,
+    });
+    return;
+  }
+  await db.identityAccount.update({
+    where: { identityId_provider: { identityId: scope.identityId, provider: "X" } },
+    data,
+  });
+}
+
+const scopeKey = (scope: XTokenScope) =>
+  scope.kind === "user" ? `x-oauth:${scope.userId}` : `x-oauth-identity:${scope.identityId}`;
+
+/**
  * A currently-valid X access token for a member, refreshing through the stored
  * refresh token when it has aged out.
  *
@@ -245,13 +300,14 @@ async function refreshXToken(refreshToken: string): Promise<XTokenResponse | nul
  */
 export async function getValidXToken(
   db: PrismaClient,
-  userId: string,
+  scope: string | XTokenScope,
 ): Promise<string | null> {
-  const account = await db.connectedAccount.findUnique({
-    where: { userId_provider: { userId, provider: "X" } },
-  });
-  if (!account?.accessToken) return null;
-  if (usable(account)) return decryptSecret(account.accessToken);
+  const target: XTokenScope =
+    typeof scope === "string" ? { kind: "user", userId: scope } : scope;
+
+  const stored = await readTokens(db, target);
+  if (!stored?.accessToken) return null;
+  if (usable(stored)) return decryptSecret(stored.accessToken);
 
   return db.$transaction(
     async (tx) => {
@@ -259,30 +315,26 @@ export async function getValidXToken(
       // Prisma throws deserializing a void column. $queryRaw here made every
       // token refresh fail, which meant every follow check died before it
       // reached X.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`x-oauth:${userId}`}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${scopeKey(target)}))`;
 
-      const locked = await tx.connectedAccount.findUnique({
-        where: { userId_provider: { userId, provider: "X" } },
-      });
+      const locked = await readTokens(tx as unknown as TokenClient, target);
       if (!locked?.accessToken) return null;
+      // A concurrent refresh may have finished while we waited for the lock.
       if (usable(locked)) return decryptSecret(locked.accessToken);
       if (!locked.refreshToken) return null;
 
-      const stored = decryptSecret(locked.refreshToken);
-      if (!stored) return null;
+      const current = decryptSecret(locked.refreshToken);
+      if (!current) return null;
 
-      const refreshed = await refreshXToken(stored);
+      const refreshed = await refreshXToken(current);
       if (!refreshed) return null;
 
-      await tx.connectedAccount.update({
-        where: { userId_provider: { userId, provider: "X" } },
-        data: {
-          accessToken: encryptSecret(refreshed.access_token),
-          refreshToken: refreshed.refresh_token
-            ? encryptSecret(refreshed.refresh_token)
-            : locked.refreshToken,
-          tokenExpiresAt: new Date(Date.now() + refreshed.expires_in * 1000),
-        },
+      await writeTokens(tx as unknown as TokenClient, target, {
+        accessToken: encryptSecret(refreshed.access_token),
+        refreshToken: refreshed.refresh_token
+          ? encryptSecret(refreshed.refresh_token)
+          : locked.refreshToken,
+        tokenExpiresAt: new Date(Date.now() + refreshed.expires_in * 1000),
       });
       return refreshed.access_token;
     },
@@ -312,7 +364,12 @@ interface XUserLookup {
  */
 export async function verifyXFollow(
   db: PrismaClient,
-  input: { userId: string; targetHandle: string } & XUsageAttribution,
+  input: {
+    userId: string;
+    targetHandle: string;
+    /** Set for a Telegram-only member whose X tokens hang off their identity. */
+    identityId?: string;
+  } & XUsageAttribution,
 ): Promise<XFollowResult> {
   const base: XUsageAttribution = {
     organizationId: input.organizationId,
@@ -337,10 +394,17 @@ export async function verifyXFollow(
     return { outcome, reads: 0, ...extra };
   };
 
-  const account = await db.connectedAccount.findUnique({
-    where: { userId_provider: { userId: input.userId, provider: "X" } },
-    select: { externalId: true, handle: true },
-  });
+  const account = input.identityId
+    ? await db.identityAccount
+        .findUnique({
+          where: { identityId_provider: { identityId: input.identityId, provider: "X" } },
+          select: { externalId: true, username: true },
+        })
+        .then((row) => (row ? { externalId: row.externalId, handle: row.username } : null))
+    : await db.connectedAccount.findUnique({
+        where: { userId_provider: { userId: input.userId, provider: "X" } },
+        select: { externalId: true, handle: true },
+      });
   if (!account) return bail("unlinked");
 
   const identity = { handle: account.handle, xUserId: account.externalId };
@@ -350,7 +414,12 @@ export async function verifyXFollow(
 
   let token: string | null = null;
   try {
-    token = await getValidXToken(db, input.userId);
+    token = await getValidXToken(
+      db,
+      input.identityId
+        ? { kind: "identity", identityId: input.identityId }
+        : { kind: "user", userId: input.userId },
+    );
   } catch (err) {
     // A refresh that throws must not take the whole verification with it.
     return bail("token_expired", {

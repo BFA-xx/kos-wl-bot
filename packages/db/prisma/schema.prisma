@@ -1419,6 +1419,12 @@ model IdentityAccount {
   verifiedAt  DateTime?
   lastSeenAt  DateTime?
   metadata    Json?
+  /// OAuth tokens, encrypted at rest (AES-256-GCM, WALLET_ENCRYPTION_KEY).
+  /// Present for providers a member authorizes directly — X today — so a
+  /// Telegram-only member can prove an X account without a website login.
+  accessToken    String?
+  refreshToken   String?
+  tokenExpiresAt DateTime?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
@@ -1468,6 +1474,7 @@ enum TelegramUpdateStatus {
 enum IntegrationActionType {
   TELEGRAM_LINK
   TELEGRAM_ENTER
+  X_IDENTITY_LINK
 }
 
 enum IntegrationDeliveryStatus {

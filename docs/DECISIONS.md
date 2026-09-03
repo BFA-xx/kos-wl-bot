@@ -704,3 +704,29 @@ each) instead of one shared app bucket, so a raffle rush cannot self-throttle.
 Failing open matters more than catching every cheat: a billing lapse or an X
 outage must never strip a member of a task they actually completed, and
 attesting is exactly the behaviour that preceded this change.
+
+## D057 — Telegram members prove X ownership against their KOS identity
+
+**Status:** Accepted; built 2026-09-03
+**Decision:** Add a required "Follow KOS on X" step to Telegram onboarding
+(now step 5 of 6). A member authorizes X directly, and the tokens are stored on
+`IdentityAccount` keyed to their `KosIdentity` rather than on `ConnectedAccount`
+keyed to the Discord-based `User`. The follow is then proven with the same
+`connection_status` check the website uses, run against the member's own token.
+The one-time link that carries the identity into the OAuth round-trip is an
+`IntegrationActionToken` (`X_IDENTITY_LINK`), single-use and ten minutes long.
+Onboarding submission re-evaluates the gate server-side. A confirmed follow is
+recorded on the identity account and never re-checked. Connecting a KOS raffle
+profile stays optional but is recommended in the step above it.
+**Why:** The two requirements — must follow X, must not require a raffle account
+— were in direct conflict, because X linking previously ran through
+`ConnectedAccount`, which only exists for members who signed in with Discord. A
+Telegram-only member literally could not link X. Binding to the identity instead
+resolves it without a second account: the member signs in with X itself, which
+is also the only way to *prove* a follow rather than take a typed handle on
+trust. Enforcing at submit as well as in the UI matters because an old inline
+keyboard can still fire a stale callback. A recorded pass is permanent because
+each check costs a billable read, and re-charging for an answer already given is
+the same waste the cost audit removed everywhere else. With no handle configured
+the gate stands down entirely — a required step nobody can define would strand
+every new member.

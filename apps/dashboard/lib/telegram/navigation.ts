@@ -11,6 +11,8 @@ import {
   ensureTelegramIdentity,
   linkTelegramAccount,
 } from "@/lib/telegram/identity";
+import { createXLinkUrl } from "@/lib/telegram/x-link";
+import { evaluateXFollowGate } from "@/lib/telegram/x-follow";
 import {
   completeTelegramOnboarding,
   notifyTelegramOnboardingAdmins,
@@ -116,7 +118,7 @@ async function showGettingStarted(
     ctx,
     [
       "<b>KOS ONBOARDING</b>",
-      "Step 1 of 5 - Welcome",
+      "Step 1 of 6 - Welcome",
       "",
       `Welcome to ${escapeTelegramHtml((communityName ?? communities) || "KOS")}.`,
       "This short setup verifies Telegram, creates your KOS identity, and submits any community access request for team review.",
@@ -159,7 +161,7 @@ async function showTelegramOnboardingStep(
     ctx,
     [
       "<b>KOS ONBOARDING</b>",
-      "Step 2 of 5 - Telegram verified",
+      "Step 2 of 6 - Telegram verified",
       "",
       `<b>${account}</b> is verified through your private Telegram session.`,
       "KOS uses your immutable Telegram account ID, not your changeable username, as the secure identity link.",
@@ -187,7 +189,7 @@ async function showIdentityOnboardingStep(
     ctx,
     [
       "<b>KOS ONBOARDING</b>",
-      "Step 3 of 5 - Identity created",
+      "Step 3 of 6 - Identity created",
       "",
       `<b>${escapeTelegramHtml(identity.displayName)}</b>`,
       `KOS ID: <code>${identity.id}</code>`,
@@ -228,21 +230,92 @@ async function showConnectionsOnboardingStep(
       onboardingCallback("connections", communityId),
     )
     .row()
-    .text("Continue", onboardingCallback("review", communityId));
+    .text("Continue", onboardingCallback("xfollow", communityId));
   await render(
     ctx,
     [
       "<b>KOS ONBOARDING</b>",
-      "Step 4 of 5 - Optional connections",
+      "Step 4 of 6 - Optional connections",
       "",
       `Existing KOS profile: <b>${identity.legacyUserId ? "Connected" : "Not connected"}</b>`,
       `Wallets: <b>${walletCount}</b>`,
       "",
-      "You can continue without either connection. A wallet is only required for raffles that explicitly request one.",
+      "",
+      "<b>Recommended:</b> connect a KOS raffle profile. It is not required to finish onboarding, but without one you cannot enter raffles, and points earned here stay on Telegram instead of following you across KOS.",
+      "A wallet is only needed for raffles that explicitly ask for one.",
     ].join("\n"),
     keyboard,
     edit,
   );
+}
+
+/**
+ * Step 5 - follow KOS on X.
+ *
+ * This is the one required step that depends on a third party, so each state
+ * says exactly what the member should do next. A member who cannot be checked
+ * (X down, rate limited, checks paused) is never told they failed — the step
+ * simply cannot be passed yet, and the wording says so.
+ */
+async function showXFollowOnboardingStep(
+  ctx: Context,
+  edit = false,
+  communityId?: string,
+): Promise<void> {
+  if (!ctx.from || ctx.chat?.type !== "private") return;
+  const identity = await ensureTelegramIdentity(ctx.from);
+  const gate = await evaluateXFollowGate(identity.id);
+  const keyboard = new InlineKeyboard();
+  const lines = ["<b>KOS ONBOARDING</b>", "Step 5 of 6 - Follow KOS on X", ""];
+
+  if (gate.status === "not_configured") {
+    // Nothing to follow: never strand a member on a step we cannot define.
+    lines.push("This step is not set up yet, so you can carry on.");
+    keyboard.text("Continue", onboardingCallback("review", communityId));
+  } else if (gate.status === "following") {
+    lines.push(
+      `Following <b>@${escapeTelegramHtml(gate.target)}</b> \u2713`,
+      gate.handle ? `Verified as <b>@${escapeTelegramHtml(gate.handle)}</b>.` : "",
+      "",
+      "Thanks \u2014 that is the last required step.",
+    );
+    keyboard.text("Continue", onboardingCallback("review", communityId));
+  } else if (gate.status === "needs_link") {
+    lines.push(
+      `Follow <b>@${escapeTelegramHtml(gate.target)}</b> to finish onboarding.`,
+      "",
+      "Connect your X account so we can confirm the follow. You sign in with X itself \u2014 no KOS account needed, and we never see your password.",
+    );
+    keyboard
+      .url("Connect X", await createXLinkUrl(identity.id))
+      .row()
+      .url(`Open @${gate.target}`, gate.profileUrl)
+      .row()
+      .text("I've connected X", onboardingCallback("xfollow", communityId));
+  } else if (gate.status === "needs_follow") {
+    lines.push(
+      `Connected as <b>@${escapeTelegramHtml(gate.handle ?? "")}</b>.`,
+      "",
+      `You are not following <b>@${escapeTelegramHtml(gate.target)}</b> yet. Follow, then check again.`,
+    );
+    keyboard
+      .url(`Follow @${gate.target}`, gate.profileUrl)
+      .row()
+      .text("Check follow", onboardingCallback("xfollow", communityId));
+  } else {
+    lines.push(
+      escapeTelegramHtml(gate.reason),
+      "",
+      `Your follow of <b>@${escapeTelegramHtml(gate.target)}</b> has not been confirmed yet. This is on our side, not yours.`,
+    );
+    keyboard
+      .url(`Open @${gate.target}`, gate.profileUrl)
+      .row()
+      .text("Try again", onboardingCallback("xfollow", communityId));
+  }
+
+  keyboard.row().text("Back", onboardingCallback("connections", communityId));
+  await render(ctx, lines.filter(Boolean).join("\n"), keyboard, edit);
 }
 
 async function showOnboardingReview(
@@ -253,7 +326,7 @@ async function showOnboardingReview(
   if (!ctx.from || ctx.chat?.type !== "private") return;
   const identity = await ensureTelegramIdentity(ctx.from);
   await discoverTelegramCommunityAccess(ctx, identity.id);
-  const [walletCount, memberships] = await Promise.all([
+  const [walletCount, memberships, xGate] = await Promise.all([
     identity.legacyUserId
       ? prisma.walletProfile.count({ where: { userId: identity.legacyUserId } })
       : 0,
@@ -265,7 +338,9 @@ async function showOnboardingReview(
       },
       orderBy: { requestedAt: "desc" },
     }),
+    evaluateXFollowGate(identity.id),
   ]);
+  const xSatisfied = xGate.status === "following" || xGate.status === "not_configured";
   const requests = memberships.map(
     ({ community, approvalStatus }) =>
       `${escapeTelegramHtml(community.communityName)}: ${community.id === communityId ? "READY TO REAPPLY" : approvalStatus}`,
@@ -278,10 +353,15 @@ async function showOnboardingReview(
     ctx,
     [
       "<b>KOS ONBOARDING</b>",
-      "Step 5 of 5 - Review",
+      "Step 5 of 6 - Review",
       "",
       "Telegram: <b>Verified</b>",
       "KOS identity: <b>Ready</b>",
+      ...(xGate.status === "not_configured"
+        ? []
+        : [
+            `Follow @${escapeTelegramHtml(xGate.target)}: <b>${xGate.status === "following" ? "Confirmed" : "Required"}</b>`,
+          ]),
       `Existing KOS profile: <b>${identity.legacyUserId ? "Connected" : "Optional"}</b>`,
       `Wallets: <b>${walletCount}</b>`,
       "",
@@ -292,17 +372,25 @@ async function showOnboardingReview(
             "You can finish your KOS identity now and request community access later from a group welcome link.",
           ]),
     ].join("\n"),
-    new InlineKeyboard()
-      .text(
-        communityId
-          ? "Submit new access request"
-          : hasPendingRequest
-            ? "Submit for team approval"
-            : "Finish KOS identity",
-        onboardingCallback("submit", communityId),
-      )
-      .row()
-      .text("Back", onboardingCallback("connections", communityId)),
+    xSatisfied
+      ? new InlineKeyboard()
+          .text(
+            communityId
+              ? "Submit new access request"
+              : hasPendingRequest
+                ? "Submit for team approval"
+                : "Finish KOS identity",
+            onboardingCallback("submit", communityId),
+          )
+          .row()
+          .text("Back", onboardingCallback("connections", communityId))
+      : new InlineKeyboard()
+          .text(
+            `Follow @${xGate.target} to finish`,
+            onboardingCallback("xfollow", communityId),
+          )
+          .row()
+          .text("Back", onboardingCallback("connections", communityId)),
     edit,
   );
 }
@@ -783,6 +871,18 @@ async function submitOnboarding(
       return;
     }
   }
+  // The gate lives here, not only in the UI: a member could otherwise reach
+  // submit through an older keyboard and skip the step entirely.
+  const gate = await evaluateXFollowGate(identity.id);
+  if (gate.status !== "following" && gate.status !== "not_configured") {
+    await ctx.answerCallbackQuery({
+      text: "Follow KOS on X to finish onboarding.",
+      show_alert: true,
+    });
+    await showXFollowOnboardingStep(ctx, true, communityId);
+    return;
+  }
+
   await ctx.answerCallbackQuery({ text: "Submitting onboarding..." });
   const outcome = await completeTelegramOnboarding(ctx.from);
   const pendingApprovals = await discoverTelegramCommunityAccess(
@@ -849,6 +949,10 @@ export function registerTelegramNavigation(bot: Bot): void {
     await ctx.answerCallbackQuery();
     await showConnectionsOnboardingStep(ctx, true);
   });
+  bot.callbackQuery("onboarding:xfollow", async (ctx) => {
+    await ctx.answerCallbackQuery({ text: "Checking X..." });
+    await showXFollowOnboardingStep(ctx, true);
+  });
   bot.callbackQuery("onboarding:review", async (ctx) => {
     await ctx.answerCallbackQuery();
     await showOnboardingReview(ctx, true);
@@ -861,7 +965,7 @@ export function registerTelegramNavigation(bot: Bot): void {
     await submitOnboarding(ctx);
   });
   bot.callbackQuery(
-    /^onboarding:(start|telegram|identity|connections|review|submit):([a-z0-9]{20,36})$/u,
+    /^onboarding:(start|telegram|identity|connections|xfollow|review|submit):([a-z0-9]{20,36})$/u,
     async (ctx) => {
       const step = ctx.match[1];
       const communityId = ctx.match[2];
@@ -899,6 +1003,10 @@ export function registerTelegramNavigation(bot: Bot): void {
         await showIdentityOnboardingStep(ctx, true, communityId);
       } else if (step === "connections") {
         await showConnectionsOnboardingStep(ctx, true, communityId);
+        return;
+      }
+      if (step === "xfollow") {
+        await showXFollowOnboardingStep(ctx, true, communityId);
       } else {
         await showOnboardingReview(ctx, true, communityId);
       }
