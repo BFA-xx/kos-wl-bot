@@ -1,6 +1,27 @@
 import { createDecipheriv, createCipheriv, randomBytes } from "node:crypto";
 import type { PrismaClient, XEngagementKind } from "@prisma/client";
 import { parseXStatusUrl } from "./raids.js";
+import {
+  callX,
+  logXCacheHit,
+  xMonthlyReadBudget,
+  type XUsageAttribution,
+} from "./x-usage.js";
+
+// Spend control lives in x-usage.ts; re-exported so callers have one import.
+export {
+  X_USER_READ_USD,
+  claimVerificationSlot,
+  logXUsage,
+  releaseXReads,
+  reserveXReads,
+  xBudgetMonth,
+  xBudgetSnapshot,
+  xMonthlyReadBudget,
+  xRecheckCooldownMs,
+  type VerificationSlot,
+  type XBudgetSnapshot,
+} from "./x-usage.js";
 
 /**
  * Real X follow verification, shared by the dashboard and the bot.
@@ -46,13 +67,6 @@ import { parseXStatusUrl } from "./raids.js";
 
 const X_API = "https://api.x.com";
 const ENC_PREFIX = "enc:v1:";
-
-/**
- * USD per billable X user-object read, for turning the budget into money.
- * An upper bound per request: 24h deduplication means repeat lookups of the
- * same target within a UTC day are not charged again.
- */
-export const X_USER_READ_USD = 0.01;
 
 export type XVerifyMode = "off" | "follow_only" | "full";
 
@@ -108,19 +122,18 @@ export function xSweepMaxPages(): number {
   return Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), 200) : 20;
 }
 
-/** How long a cached engager set is trusted before it is swept again. */
-export function xSweepTtlMs(): number {
-  const raw = Number(process.env.X_SWEEP_TTL_MINUTES ?? "10");
-  return (Number.isFinite(raw) && raw > 0 ? raw : 10) * 60_000;
-}
-
 /**
- * Billable X reads allowed per calendar month. Default 0 — real verification
- * stays inert until an operator sets both the mode and a budget on purpose.
+ * How long a cached engager set is trusted before it is swept again.
+ *
+ * Defaults to 6 hours, not minutes, because a re-sweep re-buys the post's
+ * ENTIRE engager list — at 100 engagers that is $1.00 a time. A 10-minute TTL
+ * across a 3-day raffle would sweep one post 432 times. Long TTLs are the
+ * correct default here; the cost of staleness is a member waiting a few hours
+ * for a late like to register, and they can still be attested in the meantime.
  */
-export function xMonthlyReadBudget(): number {
-  const raw = Number(process.env.X_VERIFY_MONTHLY_READ_BUDGET ?? "0");
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+export function xSweepTtlMs(): number {
+  const raw = Number(process.env.X_SWEEP_TTL_MINUTES ?? "360");
+  return (Number.isFinite(raw) && raw > 0 ? raw : 360) * 60_000;
 }
 
 export function xVerifyConfigured(): boolean {
@@ -129,11 +142,6 @@ export function xVerifyConfigured(): boolean {
     xMonthlyReadBudget() > 0 &&
     Boolean(process.env.X_CLIENT_ID && process.env.X_CLIENT_SECRET)
   );
-}
-
-/** UTC month key, "YYYY-MM" — the budget ledger's primary key. */
-export function xBudgetMonth(now: Date = new Date()): string {
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 /** Strip a leading @ and any x.com/twitter.com prefix from a configured handle. */
@@ -184,61 +192,6 @@ function decryptSecret(stored: string): string | null {
 /* ------------------------------------------------------------------ *
  * Spend ledger
  * ------------------------------------------------------------------ */
-
-export interface XBudgetSnapshot {
-  month: string;
-  reads: number;
-  budget: number;
-  remaining: number;
-  spentUsd: number;
-}
-
-export async function xBudgetSnapshot(
-  db: PrismaClient,
-  now: Date = new Date(),
-): Promise<XBudgetSnapshot> {
-  const month = xBudgetMonth(now);
-  const budget = xMonthlyReadBudget();
-  const row = await db.xVerifyBudget.findUnique({ where: { month } });
-  const reads = row?.reads ?? 0;
-  return {
-    month,
-    reads,
-    budget,
-    remaining: Math.max(0, budget - reads),
-    spentUsd: Number((reads * X_USER_READ_USD).toFixed(2)),
-  };
-}
-
-/**
- * Atomically claim `cost` reads against this month's ceiling.
- *
- * The claim happens *before* the request goes out, in one statement, so
- * concurrent verifies can't race past the ceiling together. Reads are never
- * refunded when a request fails, and deduplicated repeat lookups still count
- * here: over-counting spends less than X bills, which is the safe direction to
- * be wrong in. Treat the ledger as a request count, not an invoice.
- */
-export async function reserveXReads(
-  db: PrismaClient,
-  cost: number,
-  now: Date = new Date(),
-): Promise<boolean> {
-  const budget = xMonthlyReadBudget();
-  if (cost <= 0) return true;
-  if (cost > budget) return false;
-
-  const month = xBudgetMonth(now);
-  const rows = await db.$queryRaw<{ reads: number }[]>`
-    INSERT INTO "x_verify_budget" ("month", "reads", "updatedAt")
-    VALUES (${month}, ${cost}, now())
-    ON CONFLICT ("month") DO UPDATE
-      SET "reads" = "x_verify_budget"."reads" + ${cost}, "updatedAt" = now()
-      WHERE "x_verify_budget"."reads" + ${cost} <= ${budget}
-    RETURNING "reads"
-  `;
-  return rows.length > 0;
-}
 
 /* ------------------------------------------------------------------ *
  * Member token
@@ -355,7 +308,7 @@ interface XUserLookup {
  */
 export async function verifyXFollow(
   db: PrismaClient,
-  input: { userId: string; targetHandle: string },
+  input: { userId: string; targetHandle: string } & XUsageAttribution,
 ): Promise<XFollowResult> {
   const account = await db.connectedAccount.findUnique({
     where: { userId_provider: { userId: input.userId, provider: "X" } },
@@ -377,40 +330,50 @@ export async function verifyXFollow(
     return { ...identity, outcome: "token_expired", reads: 0 };
   }
 
-  // Claim the spend before spending it.
-  if (!(await reserveXReads(db, 1))) {
+  const attribution: XUsageAttribution = {
+    organizationId: input.organizationId,
+    raffleId: input.raffleId,
+    taskId: input.taskId,
+    userId: input.userId,
+    xUserId: account.externalId,
+  };
+
+  const call = await callX(
+    db,
+    `${X_API}/2/users/by/username/${encodeURIComponent(target)}?user.fields=connection_status`,
+    // `cache` is absent from Node's RequestInit, but Next patches global fetch
+    // and may cache GETs — a stale follow verdict would be worse than the cast.
+    { headers: { authorization: `Bearer ${token}` }, cache: "no-store" } as RequestInit,
+    {
+      ...attribution,
+      endpoint: "/2/users/by/username/:handle",
+      operation: "follow_check",
+      resources: 1,
+    },
+  );
+
+  if (call.error === "budget_exhausted") {
     return { ...identity, outcome: "budget_exhausted", reads: 0 };
   }
-
-  let res: Response;
-  try {
-    res = await fetch(
-      `${X_API}/2/users/by/username/${encodeURIComponent(target)}?user.fields=connection_status`,
-      // `cache` is absent from Node's RequestInit, but Next patches global
-      // fetch and may cache GETs — a stale follow verdict would be worse than
-      // the cast, so keep the opt-out for the dashboard's side of this module.
-      {
-        headers: { authorization: `Bearer ${token}` },
-        cache: "no-store",
-      } as RequestInit,
-    );
-  } catch (err) {
+  const res = call.res;
+  if (!res) {
     return {
       ...identity,
       outcome: "unavailable",
-      reads: 1,
-      detail: `network: ${(err as Error).message}`,
+      reads: call.chargedReads,
+      detail: call.error ?? "no response",
     };
   }
 
+  const reads = call.chargedReads;
   if (res.status === 401 || res.status === 403) {
-    return { ...identity, outcome: "token_expired", reads: 1, detail: `http ${res.status}` };
+    return { ...identity, outcome: "token_expired", reads, detail: `http ${res.status}` };
   }
   if (res.status === 429) {
-    return { ...identity, outcome: "rate_limited", reads: 1 };
+    return { ...identity, outcome: "rate_limited", reads };
   }
   if (!res.ok) {
-    return { ...identity, outcome: "unavailable", reads: 1, detail: `http ${res.status}` };
+    return { ...identity, outcome: "unavailable", reads, detail: `http ${res.status}` };
   }
 
   const body = (await res.json()) as XUserLookup;
@@ -418,7 +381,7 @@ export async function verifyXFollow(
     return {
       ...identity,
       outcome: "unavailable",
-      reads: 1,
+      reads,
       detail: body.errors?.[0]?.detail ?? "target not found",
     };
   }
@@ -429,19 +392,19 @@ export async function verifyXFollow(
     return {
       ...identity,
       outcome: "unavailable",
-      reads: 1,
+      reads,
       detail: "connection_status not returned for this access level",
     };
   }
 
   if (body.data.connection_status.includes("following")) {
-    return { ...identity, outcome: "following", reads: 1 };
+    return { ...identity, outcome: "following", reads };
   }
   // A protected account holds the follow as a request; the member did their part.
   if (body.data.connection_status.includes("follow_request_sent")) {
-    return { ...identity, outcome: "follow_pending", reads: 1 };
+    return { ...identity, outcome: "follow_pending", reads };
   }
-  return { ...identity, outcome: "not_following", reads: 1 };
+  return { ...identity, outcome: "not_following", reads };
 }
 
 /* ------------------------------------------------------------------ *
@@ -507,28 +470,36 @@ interface SweepRun {
  * safe to act on. Costs one post read ($0.005) per sweep.
  */
 async function fetchEngagementCount(
+  db: PrismaClient,
   tweetId: string,
   kind: XEngagementKind,
-): Promise<number | null> {
-  try {
-    const res = await fetch(
-      `${X_API}/2/tweets/${encodeURIComponent(tweetId)}?tweet.fields=public_metrics`,
-      {
-        headers: { authorization: `Bearer ${process.env.X_BEARER_TOKEN!}` },
-        cache: "no-store",
-      } as RequestInit,
-    );
-    if (!res.ok) return null;
-    const body = (await res.json()) as {
-      data?: { public_metrics?: { like_count?: number; retweet_count?: number } };
-    };
-    const metrics = body.data?.public_metrics;
-    if (!metrics) return null;
-    const count = kind === "LIKE" ? metrics.like_count : metrics.retweet_count;
-    return typeof count === "number" ? count : null;
-  } catch {
-    return null;
-  }
+  attribution: XUsageAttribution,
+): Promise<{ count: number | null; reads: number }> {
+  const call = await callX(
+    db,
+    `${X_API}/2/tweets/${encodeURIComponent(tweetId)}?tweet.fields=public_metrics`,
+    {
+      headers: { authorization: `Bearer ${process.env.X_BEARER_TOKEN!}` },
+      cache: "no-store",
+    } as RequestInit,
+    {
+      ...attribution,
+      endpoint: "/2/tweets/:id",
+      operation: "post_metrics",
+      resources: 1,
+    },
+  );
+  if (!call.res?.ok) return { count: null, reads: call.chargedReads };
+  const body = (await call.res.json()) as {
+    data?: { public_metrics?: { like_count?: number; retweet_count?: number } };
+  };
+  const metrics = body.data?.public_metrics;
+  if (!metrics) return { count: null, reads: call.chargedReads };
+  const count = kind === "LIKE" ? metrics.like_count : metrics.retweet_count;
+  return {
+    count: typeof count === "number" ? count : null,
+    reads: call.chargedReads,
+  };
 }
 
 /**
@@ -542,6 +513,7 @@ async function runSweep(
   db: PrismaClient,
   tweetId: string,
   kind: XEngagementKind,
+  attribution: XUsageAttribution,
 ): Promise<SweepRun> {
   const bearer = process.env.X_BEARER_TOKEN!;
   const maxPages = xSweepMaxPages();
@@ -551,38 +523,40 @@ async function runSweep(
 
   // Read the post's own count first, so "the cursor ran out" can be told apart
   // from "the endpoint stopped giving us engagers".
-  if (!(await reserveXReads(db, 1))) {
-    return { actorIds, complete: false, reads, stoppedBy: "budget" };
-  }
-  reads += 1;
-  const expected = await fetchEngagementCount(tweetId, kind);
+  const metrics = await fetchEngagementCount(db, tweetId, kind, attribution);
+  reads += metrics.reads;
+  const expected = metrics.count;
 
   for (let page = 0; page < maxPages; page++) {
-    // Claim the page's worth of reads before asking for them.
-    if (!(await reserveXReads(db, SWEEP_PAGE_SIZE))) {
-      return { actorIds, complete: false, reads, stoppedBy: "budget" };
-    }
-
     const params = new URLSearchParams({ max_results: String(SWEEP_PAGE_SIZE) });
     if (cursor) params.set("pagination_token", cursor);
 
-    let res: Response;
-    try {
-      res = await fetch(
-        `${X_API}/2/tweets/${encodeURIComponent(tweetId)}/${sweepPath(kind)}?${params}`,
-        { headers: { authorization: `Bearer ${bearer}` }, cache: "no-store" } as RequestInit,
-      );
-    } catch (err) {
+    const call = await callX(
+      db,
+      `${X_API}/2/tweets/${encodeURIComponent(tweetId)}/${sweepPath(kind)}?${params}`,
+      { headers: { authorization: `Bearer ${bearer}` }, cache: "no-store" } as RequestInit,
+      {
+        ...attribution,
+        endpoint: `/2/tweets/:id/${sweepPath(kind)}`,
+        operation: "engager_sweep_page",
+        resources: SWEEP_PAGE_SIZE,
+      },
+    );
+    reads += call.chargedReads;
+
+    if (call.error === "budget_exhausted") {
+      return { actorIds, complete: false, reads, stoppedBy: "budget" };
+    }
+    const res = call.res;
+    if (!res) {
       return {
         actorIds,
         complete: false,
-        reads: reads + SWEEP_PAGE_SIZE,
+        reads,
         stoppedBy: "error",
-        detail: `network: ${(err as Error).message}`,
+        detail: call.error ?? "no response",
       };
     }
-    reads += SWEEP_PAGE_SIZE;
-
     if (res.status === 429) {
       return { actorIds, complete: false, reads, stoppedBy: "rate_limit" };
     }
@@ -640,6 +614,7 @@ async function ensureSweep(
   db: PrismaClient,
   tweetId: string,
   kind: XEngagementKind,
+  attribution: XUsageAttribution,
 ): Promise<{ sweepId: string | null; reads: number; stoppedBy?: string; detail?: string }> {
   const staleBefore = new Date(Date.now() - xSweepTtlMs());
   const now = new Date();
@@ -664,9 +639,18 @@ async function ensureSweep(
   if (!existing) return { sweepId: null, reads: 0, stoppedBy: "error" };
 
   // Someone else holds the lease (or the cache is still fresh) — use it as is.
-  if (claimed.length === 0) return { sweepId: existing.id, reads: 0 };
+  // Logged so the saving shows up next to the calls it replaced.
+  if (claimed.length === 0) {
+    await logXCacheHit(db, {
+      ...attribution,
+      endpoint: `/2/tweets/:id/${sweepPath(kind)}`,
+      operation: "engager_sweep_page",
+      outcome: "sweep_cache_hit",
+    });
+    return { sweepId: existing.id, reads: 0 };
+  }
 
-  const run = await runSweep(db, tweetId, kind);
+  const run = await runSweep(db, tweetId, kind, attribution);
   const unique = [...new Set(run.actorIds)];
 
   await db.$transaction([
@@ -703,7 +687,7 @@ async function ensureSweep(
  */
 export async function verifyXEngagement(
   db: PrismaClient,
-  input: { userId: string; tweetUrl: string; kind: XEngagementKind },
+  input: { userId: string; tweetUrl: string; kind: XEngagementKind } & XUsageAttribution,
 ): Promise<XEngagementResult> {
   const account = await db.connectedAccount.findUnique({
     where: { userId_provider: { userId: input.userId, provider: "X" } },
@@ -719,7 +703,19 @@ export async function verifyXEngagement(
     return { ...identity, outcome: "unavailable", reads: 0, detail: "unparseable tweet url" };
   }
 
-  const { sweepId, reads, stoppedBy, detail } = await ensureSweep(db, tweetId, input.kind);
+  const attribution: XUsageAttribution = {
+    organizationId: input.organizationId,
+    raffleId: input.raffleId,
+    taskId: input.taskId,
+    userId: input.userId,
+    xUserId: account.externalId,
+  };
+  const { sweepId, reads, stoppedBy, detail } = await ensureSweep(
+    db,
+    tweetId,
+    input.kind,
+    attribution,
+  );
   if (!sweepId) {
     return { ...identity, outcome: "unavailable", reads, detail: detail ?? "sweep failed" };
   }

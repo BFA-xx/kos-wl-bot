@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
 import {
+  claimVerificationSlot,
+  logXCacheHit,
   verifyXEngagement,
   verifyXFollow,
   xSweepConfigured,
@@ -81,7 +83,7 @@ export async function verifyTask(task: TaskDefinition, userId: string): Promise<
     case "X_LIKE":
     case "X_REPOST":
     case "X_COMMENT":
-      return xVerifier(task.type, cfg, userId);
+      return xVerifier(task, cfg, userId);
     case "DISCORD_JOIN":
     case "DISCORD_ROLE":
       return discordVerifier(task.type, cfg, userId);
@@ -110,7 +112,12 @@ export async function verifyTask(task: TaskDefinition, userId: string): Promise<
  * level too low) falls through to attest rather than rejecting — a billing or
  * API problem must never cost a member a task they actually did.
  */
-async function xVerifier(type: TaskType, cfg: TaskConfig, userId: string): Promise<VerifyResult> {
+async function xVerifier(
+  task: TaskDefinition,
+  cfg: TaskConfig,
+  userId: string,
+): Promise<VerifyResult> {
+  const type = task.type;
   const linked = await prisma.connectedAccount.findUnique({
     where: { userId_provider: { userId, provider: "X" } },
     select: { externalId: true, handle: true },
@@ -123,12 +130,45 @@ async function xVerifier(type: TaskType, cfg: TaskConfig, userId: string): Promi
     };
   }
 
+  // About to spend? Claim the slot first. This collapses double-clicks and
+  // refresh-spam into one paid call, and reuses a recent negative answer
+  // instead of re-buying it — the biggest single source of wasted credits.
+  const willSpend =
+    (type === "X_FOLLOW" && Boolean(cfg.xHandle) && xVerifyConfigured()) ||
+    ((type === "X_LIKE" || type === "X_REPOST") &&
+      Boolean(cfg.tweetUrl) &&
+      xSweepConfigured());
+
+  if (willSpend) {
+    const slot = await claimVerificationSlot(prisma, { taskId: task.id, userId });
+    if (!slot.proceed) {
+      await logXCacheHit(prisma, {
+        endpoint: "verify/claim",
+        operation: type === "X_FOLLOW" ? "follow_check" : "engager_sweep_page",
+        organizationId: task.organizationId,
+        taskId: task.id,
+        userId,
+        xUserId: linked.externalId,
+        outcome: slot.reason,
+      });
+      return {
+        status: "PENDING",
+        reason:
+          slot.reason === "in_flight"
+            ? "Already checking — give it a moment."
+            : `Just checked. Try again in ${slot.retryAfterSeconds}s.`,
+      };
+    }
+  }
+
   if ((type === "X_LIKE" || type === "X_REPOST") && cfg.tweetUrl && xSweepConfigured()) {
     const kind = type === "X_LIKE" ? "LIKE" : "REPOST";
     const check = await verifyXEngagement(prisma, {
       userId,
       tweetUrl: cfg.tweetUrl,
       kind,
+      organizationId: task.organizationId,
+      taskId: task.id,
     });
     const evidence = {
       method: "x_api_engager_sweep",
@@ -155,7 +195,12 @@ async function xVerifier(type: TaskType, cfg: TaskConfig, userId: string): Promi
   }
 
   if (type === "X_FOLLOW" && cfg.xHandle && xVerifyConfigured()) {
-    const check = await verifyXFollow(prisma, { userId, targetHandle: cfg.xHandle });
+    const check = await verifyXFollow(prisma, {
+      userId,
+      targetHandle: cfg.xHandle,
+      organizationId: task.organizationId,
+      taskId: task.id,
+    });
     const target = cfg.xHandle.replace(/^@/, "");
     const evidence = {
       method: "x_api_connection_status",

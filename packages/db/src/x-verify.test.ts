@@ -54,6 +54,9 @@ function fakeDb(overrides: Record<string, unknown> = {}) {
     },
     // reserveXReads: succeed by returning a row.
     $queryRaw: async () => [{ reads: 1 }],
+    // releaseXReads hands a claim back when nothing was billed.
+    $executeRaw: async () => 1,
+    xApiUsageLog: { create: async () => null },
     ...overrides,
   } as never;
 }
@@ -270,7 +273,10 @@ test("a network failure is inconclusive but still counts the claimed read", asyn
   try {
     const result = await verifyXFollow(fakeDb(), { userId: "u1", targetHandle: "kos" });
     assert.equal(result.outcome, "unavailable");
-    assert.equal(result.reads, 1, "a claimed read is not refunded — over-count is the safe side");
+    // A request that never reached X returns no resources, so X bills nothing
+    // and the claim goes back to the budget. Only calls that returned data stay
+    // charged.
+    assert.equal(result.reads, 0, "an unbillable call must not consume budget");
   } finally {
     globalThis.fetch = original;
   }
@@ -352,6 +358,8 @@ function fakeSweepDb(opts: {
         return { count: data.length };
       },
     },
+    $executeRaw: async () => 1,
+    xApiUsageLog: { create: async () => null },
     $transaction: async (ops: unknown[]) => Promise.all(ops as Promise<unknown>[]),
   };
   return { db: db as never, state };

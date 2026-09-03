@@ -2316,3 +2316,42 @@ model XEngagementActor {
   @@id([sweepId, xUserId])
   @@map("x_engagement_actors")
 }
+
+/// One row per outbound X API call (and per cache hit that avoided one).
+/// This is the ground truth for what verification actually costs: the budget
+/// ledger only counts, this explains. Cache hits are logged with cost 0 so the
+/// saving is measurable rather than asserted.
+model XApiUsageLog {
+  id             String   @id @default(cuid())
+  /// Endpoint template, ids stripped — e.g. "/2/users/by/username/:handle".
+  endpoint       String
+  method         String   @default("GET")
+  /// Why we called: follow_check, post_metrics, engager_sweep_page.
+  operation      String
+  /// Billable resources this call returned (0 for a cache hit).
+  resources      Int      @default(0)
+  /// USD at the rate in x-pricing.ts when the call was made. ESTIMATED.
+  estimatedCost  Decimal  @default(0) @db.Decimal(12, 6)
+  /// True when we answered from cache and made no request at all.
+  cached         Boolean  @default(false)
+  statusCode     Int?
+  durationMs     Int?
+  /// Verifier outcome, for correlating spend with results.
+  outcome        String?
+  /// Attribution. Nullable because not every call has all of them.
+  organizationId String?
+  raffleId       Int?
+  taskId         String?
+  userId         String?
+  xUserId        String?
+  /// Retry attempt number, 0 for the first try.
+  attempt        Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([operation, createdAt])
+  @@index([taskId, createdAt])
+  @@index([userId, createdAt])
+  @@index([raffleId])
+  @@map("x_api_usage_logs")
+}

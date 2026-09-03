@@ -7,6 +7,8 @@ import {
   type CompletionStatus,
   type RewardRedemptionStatus,
   syncCampaignsForTask,
+  claimVerificationSlot,
+  logXCacheHit,
   verifyXEngagement,
   verifyXFollow,
   xSweepConfigured,
@@ -280,6 +282,40 @@ async function evaluateTask(
     };
   }
 
+  // Claim the slot before spending, so a member mashing the Verify button (or
+  // running the command twice) collapses into one paid call. Mirrors the web
+  // verifier in apps/dashboard/lib/verify.
+  const willSpend =
+    (task.type === "X_FOLLOW" && Boolean(cfg.xHandle) && xVerifyConfigured()) ||
+    ((task.type === "X_LIKE" || task.type === "X_REPOST") &&
+      Boolean(cfg.tweetUrl) &&
+      xSweepConfigured());
+
+  if (willSpend) {
+    const slot = await claimVerificationSlot(prisma, {
+      taskId: task.id,
+      userId: member.id,
+    });
+    if (!slot.proceed) {
+      await logXCacheHit(prisma, {
+        endpoint: "verify/claim",
+        operation: task.type === "X_FOLLOW" ? "follow_check" : "engager_sweep_page",
+        organizationId: task.organizationId,
+        taskId: task.id,
+        userId: member.id,
+        xUserId: linked.externalId,
+        outcome: slot.reason,
+      });
+      return {
+        status: "PENDING",
+        reason:
+          slot.reason === "in_flight"
+            ? "Already checking — give it a moment."
+            : `Just checked. Try again in ${slot.retryAfterSeconds}s.`,
+      };
+    }
+  }
+
   if (
     (task.type === "X_LIKE" || task.type === "X_REPOST") &&
     cfg.tweetUrl &&
@@ -290,6 +326,8 @@ async function evaluateTask(
       userId: member.id,
       tweetUrl: cfg.tweetUrl,
       kind,
+      organizationId: task.organizationId,
+      taskId: task.id,
     });
 
     if (check.outcome === "engaged") {
@@ -324,6 +362,8 @@ async function evaluateTask(
     const check = await verifyXFollow(prisma, {
       userId: member.id,
       targetHandle: cfg.xHandle,
+      organizationId: task.organizationId,
+      taskId: task.id,
     });
     const target = cfg.xHandle.replace(/^@/, "");
     const evidence = {
