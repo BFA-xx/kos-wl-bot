@@ -1,4 +1,9 @@
-import { type Bot, type Context, InlineKeyboard } from "grammy";
+import {
+  type Bot,
+  type Context,
+  InlineKeyboard,
+  type NextFunction,
+} from "grammy";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -423,15 +428,28 @@ async function cancelQuickRaffle(ctx: Context): Promise<void> {
   await ctx.reply("Quick raffle cancelled.");
 }
 
-async function handleQuickRaffleText(ctx: Context): Promise<void> {
+/**
+ * Consumes replies to a running quick-raffle prompt.
+ *
+ * This is a `message:text` catch-all, so it MUST call `next()` on every path
+ * where it does not handle the message — otherwise it halts grammY's
+ * middleware chain and silently swallows every handler registered after it.
+ * That is exactly how `/raffletopic` went dead in production.
+ */
+async function handleQuickRaffleText(
+  ctx: Context,
+  next: NextFunction,
+): Promise<void> {
   if (
     !ctx.from ||
     !ctx.chat ||
     !privateOnly(ctx) ||
     !ctx.message?.text ||
     ctx.message.text.startsWith("/")
-  )
+  ) {
+    await next();
     return;
+  }
   const conversation = await prisma.telegramConversation.findUnique({
     where: {
       telegramChatId_telegramUserId_kind: {
@@ -441,7 +459,10 @@ async function handleQuickRaffleText(ctx: Context): Promise<void> {
       },
     },
   });
-  if (!conversation) return;
+  if (!conversation) {
+    await next();
+    return;
+  }
   if (conversation.expiresAt <= new Date()) {
     await prisma.telegramConversation.delete({
       where: { id: conversation.id },

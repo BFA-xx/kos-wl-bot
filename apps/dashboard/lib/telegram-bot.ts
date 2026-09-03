@@ -209,8 +209,10 @@ export function buildTelegramBot(token: string): Bot {
   bot.callbackQuery(/^a:([A-Za-z0-9_-]+)$/u, async (ctx) => {
     await enterFromTelegram(ctx, ctx.match[1]);
   });
-  registerTelegramRaffleHandlers(bot);
+  // Before registerTelegramRaffleHandlers: that one ends with a
+  // `message:text` catch-all, and command handlers must be reachable.
   registerTelegramRaffleTopicHandlers(bot);
+  registerTelegramRaffleHandlers(bot);
   bot.catch((error) => {
     telegramLog("error", "handler_failed", {
       requestId: `tg:${error.ctx.update.update_id}`,
