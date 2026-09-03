@@ -21,6 +21,30 @@ export function telegramUserMention(userId: number, label: string): string {
   return `<a href="tg://user?id=${userId}">${escapeTelegramHtml(label)}</a>`;
 }
 
+/**
+ * Humanised countdown for a raffle card. Telegram has no native relative
+ * timestamp the way Discord does, so a raw ISO string was the only thing
+ * members saw; "in 3h 20m" is the closest equivalent we can render.
+ */
+export function telegramCountdown(target: Date, now = new Date()): string {
+  const ms = target.getTime() - now.getTime();
+  if (!Number.isFinite(ms)) return "unknown";
+  const past = ms <= 0;
+  const total = Math.floor(Math.abs(ms) / 1000);
+
+  const days = Math.floor(total / 86_400);
+  const hours = Math.floor((total % 86_400) / 3_600);
+  const minutes = Math.floor((total % 3_600) / 60);
+
+  let spoken: string;
+  if (days > 0) spoken = `${days}d ${hours}h`;
+  else if (hours > 0) spoken = `${hours}h ${minutes}m`;
+  else if (minutes > 0) spoken = `${minutes}m`;
+  else spoken = "under a minute";
+
+  return past ? `${spoken} ago` : `in ${spoken}`;
+}
+
 export function displayTelegramError(reasons: string[]): string {
   return (reasons[0] ?? "Requirements are not complete.").slice(0, 180);
 }

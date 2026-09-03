@@ -2,22 +2,18 @@ import { Bot, type Context } from "grammy";
 import type { Update } from "grammy/types";
 import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/permissions";
-import {
-  evaluateWebGates,
-  fetchGuildMember,
-  recordWebEntry,
-} from "@/lib/raffle-entry";
+import { recordWebEntry } from "@/lib/raffle-entry";
 import { publishRaffleToTelegram } from "@/lib/telegram-publication";
 import { telegramActorHasPermission, telegramConfig } from "@/lib/telegram";
 import { isTelegramAdmin, telegramDisplayName } from "@kos/db";
 import { registerTelegramCommunityHandlers } from "@/lib/telegram/community";
-import { dashboardOrigin, displayTelegramError } from "@/lib/telegram/format";
 import { telegramLog } from "@/lib/telegram/log";
 import { registerTelegramNavigation } from "@/lib/telegram/navigation";
 import { telegramRateLimitMiddleware } from "@/lib/telegram/rate-limit";
 import { registerTelegramNotificationHandlers } from "@/lib/telegram/notifications";
 import { registerTelegramAdminHandlers } from "@/lib/telegram/admin";
 import { registerTelegramRaffleHandlers } from "@/lib/telegram/raffles";
+import { evaluateTelegramRaffleAccess } from "@/lib/telegram/raffle-access";
 import { ensureTelegramIdentity } from "@/lib/telegram/identity";
 import { awardKosPoints } from "@/lib/telegram/points";
 import { registerTelegramEngagementHandlers } from "@/lib/telegram/engagement";
@@ -143,144 +139,37 @@ async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
     await answer(ctx, "This raffle button is no longer active.");
     return;
   }
+
   const identity = await ensureTelegramIdentity(ctx.from);
-  let communityMember = await prisma.telegramCommunityMember.findUnique({
-    where: {
-      communityId_telegramUserId: {
-        communityId: publication.community.id,
-        telegramUserId: String(ctx.from.id),
-      },
-    },
-  });
-  if (!communityMember) {
-    const telegramMembership = await ctx.api
-      .getChatMember(publication.community.telegramChatId, ctx.from.id)
-      .catch(() => null);
-    const active =
-      telegramMembership &&
-      (telegramMembership.status === "creator" ||
-        telegramMembership.status === "administrator" ||
-        telegramMembership.status === "member" ||
-        (telegramMembership.status === "restricted" &&
-          telegramMembership.is_member));
-    if (active) {
-      communityMember = await prisma.telegramCommunityMember.create({
-        data: {
-          communityId: publication.community.id,
-          telegramUserId: String(ctx.from.id),
-          identityId: identity.id,
-          status: "ACTIVE",
-          approvalStatus: "PENDING",
-        },
-      });
-    }
-  } else if (communityMember.status !== "ACTIVE") {
-    const telegramMembership = await ctx.api
-      .getChatMember(publication.community.telegramChatId, ctx.from.id)
-      .catch(() => null);
-    const active =
-      telegramMembership &&
-      (telegramMembership.status === "creator" ||
-        telegramMembership.status === "administrator" ||
-        telegramMembership.status === "member" ||
-        (telegramMembership.status === "restricted" &&
-          telegramMembership.is_member));
-    if (active) {
-      communityMember = await prisma.telegramCommunityMember.update({
-        where: { id: communityMember.id },
-        data: {
-          identityId: identity.id,
-          status: "ACTIVE",
-          leftAt: null,
-          lastSeenAt: new Date(),
-        },
-      });
-    }
-  } else if (!communityMember.identityId) {
-    communityMember = await prisma.telegramCommunityMember.update({
-      where: { id: communityMember.id },
-      data: { identityId: identity.id, lastSeenAt: new Date() },
-    });
-  }
-  if (!communityMember || communityMember.status !== "ACTIVE") {
-    await answer(
-      ctx,
-      "Join this Telegram community before entering its raffle.",
-    );
+  const access = await evaluateTelegramRaffleAccess(
+    ctx,
+    ctx.from,
+    identity.id,
+    publication.community,
+    publication.raffle,
+  );
+  if (access.alreadyEntered) {
+    await answer(ctx, "You are already entered in this raffle.");
     return;
   }
-  if (communityMember.approvalStatus !== "APPROVED") {
-    await answer(
-      ctx,
-      communityMember.approvalStatus === "REJECTED"
-        ? "Your KOS community access request was not approved."
-        : "Your KOS community access request is waiting for team approval.",
-    );
+  if (!access.canEnter || !access.ready) {
+    await answer(ctx, access.message ?? "You cannot enter this raffle yet.");
     return;
   }
-  const account = await prisma.connectedAccount.findUnique({
-    where: {
-      provider_externalId: {
-        provider: "TELEGRAM",
-        externalId: String(ctx.from.id),
-      },
-    },
-    include: { user: true },
-  });
-  if (!account) {
-    await answer(
-      ctx,
-      `Connect Telegram from ${dashboardOrigin()}/me, then try again.`,
-    );
-    return;
-  }
+
   await prisma.connectedAccount.update({
-    where: { id: account.id },
+    where: { id: access.ready.accountId },
     data: {
       handle: ctx.from.username ?? null,
       displayName: telegramDisplayName(ctx.from),
       lastSeenAt: new Date(),
     },
   });
-  if (publication.raffle.status !== "LIVE") {
-    await answer(ctx, "This raffle is not open for entries.");
-    return;
-  }
-  const existing = await prisma.participant.findUnique({
-    where: {
-      raffleId_userId: {
-        raffleId: publication.raffle.id,
-        userId: account.userId,
-      },
-    },
-  });
-  if (existing) {
-    await answer(ctx, "You are already entered in this raffle.");
-    return;
-  }
-  const report = await evaluateWebGates(account.user, publication.raffle);
-  if (!report.canEnter) {
-    await answer(
-      ctx,
-      displayTelegramError(report.gates.flatMap((gate) => gate.reason ?? [])),
-    );
-    return;
-  }
-  const discordMember = await fetchGuildMember(
-    publication.raffle.guildId,
-    account.userId,
-  );
-  if (discordMember === "not_member" || discordMember === "unavailable") {
-    await answer(
-      ctx,
-      "KOS could not confirm your Discord membership right now.",
-    );
-    return;
-  }
+
   const entryCount = await recordWebEntry(
-    account.user,
+    access.ready.user,
     publication.raffle,
-    discordMember,
+    access.ready.member,
     "Telegram",
   );
   if (entryCount !== null) {

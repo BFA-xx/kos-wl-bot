@@ -368,6 +368,45 @@ export async function recordWebEntry(
   return entryCount;
 }
 
+/**
+ * Remove an entry while the raffle is still LIVE — the counterpart to
+ * `recordWebEntry`, shared by the website's Leave button and KOS Bot so the
+ * two surfaces cannot drift apart on what leaving means.
+ */
+export async function removeWebEntry(
+  user: User,
+  raffle: { id: number; guildId: string },
+  source: "website" | "Telegram" = "website",
+): Promise<"removed" | "absent"> {
+  const existing = await prisma.participant.findUnique({
+    where: { raffleId_userId: { raffleId: raffle.id, userId: user.id } },
+  });
+  if (!existing) return "absent";
+
+  await prisma.$transaction([
+    prisma.participant.delete({ where: { id: existing.id } }),
+    prisma.raffle.update({
+      where: { id: raffle.id },
+      data: { entryCount: { decrement: 1 }, editRequestedAt: new Date() },
+    }),
+  ]);
+
+  await prisma.log
+    .create({
+      data: {
+        guildId: raffle.guildId,
+        raffleId: raffle.id,
+        actorId: user.id,
+        category: "ENTRY",
+        action: "ENTRY_REMOVE",
+        message: `${user.username} left raffle #${raffle.id} via ${source === "Telegram" ? "Telegram" : "the website"}`,
+      },
+    })
+    .catch(() => undefined);
+
+  return "removed";
+}
+
 async function entryWeightForRoles(
   raffle: RaffleWithRoles,
   roleIds: string[],

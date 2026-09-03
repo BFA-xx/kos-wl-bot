@@ -8,19 +8,34 @@ import {
   requireTelegramCommunityPermission,
   type TelegramCommunityAccess,
 } from "@/lib/telegram/access";
-import { dashboardOrigin, escapeTelegramHtml } from "@/lib/telegram/format";
+import {
+  dashboardOrigin,
+  escapeTelegramHtml,
+  telegramCountdown,
+} from "@/lib/telegram/format";
 import { ensureTelegramIdentity } from "@/lib/telegram/identity";
+import { removeWebEntry } from "@/lib/raffle-entry";
+import {
+  evaluateTelegramRaffleAccess,
+  renderAccessChecklist,
+} from "@/lib/telegram/raffle-access";
 
 function privateOnly(ctx: Context): boolean {
   return ctx.chat?.type === "private";
 }
+
+const PAGE_SIZE = 8;
+
+const LIVE_PUBLICATION = {
+  community: { status: "ACTIVE", featureFlags: { has: "RAFFLES" } },
+} as const;
 
 export async function showTelegramRaffle(
   ctx: Context,
   raffleId: number,
   edit = false,
 ): Promise<void> {
-  if (!privateOnly(ctx)) {
+  if (!ctx.from || !privateOnly(ctx)) {
     await ctx.reply("Open raffle details in a private chat with KOS Bot.");
     return;
   }
@@ -28,17 +43,12 @@ export async function showTelegramRaffle(
     where: {
       id: raffleId,
       status: { not: "CANCELLED" },
-      telegramPublications: {
-        some: {
-          community: { status: "ACTIVE", featureFlags: { has: "RAFFLES" } },
-        },
-      },
+      telegramPublications: { some: LIVE_PUBLICATION },
     },
     include: {
+      eligibleRoles: true,
       telegramPublications: {
-        where: {
-          community: { status: "ACTIVE", featureFlags: { has: "RAFFLES" } },
-        },
+        where: LIVE_PUBLICATION,
         include: { community: true, entryActionToken: true },
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -50,31 +60,61 @@ export async function showTelegramRaffle(
     await ctx.reply("That raffle is not available in Telegram.");
     return;
   }
+
+  const identity = await ensureTelegramIdentity(ctx.from);
+  const access = await evaluateTelegramRaffleAccess(
+    ctx,
+    ctx.from,
+    identity.id,
+    publication.community,
+    raffle,
+  );
+
   const keyboard = new InlineKeyboard();
-  if (
-    raffle.status === "LIVE" &&
+  const tokenLive =
     publication.entryActionToken &&
-    publication.entryActionToken.expiresAt > new Date()
-  ) {
+    publication.entryActionToken.expiresAt > new Date();
+
+  if (access.alreadyEntered) {
+    keyboard.text("Leave raffle", `raffle:leave:${raffle.id}`).row();
+  } else if (access.canEnter && tokenLive && publication.entryActionToken) {
     keyboard.text("Enter raffle", `a:${publication.entryActionToken.id}`).row();
+  } else if (access.canEnter && !tokenLive) {
+    // Everything passes but the group's entry token has expired — the website
+    // is still a working way in, so say so rather than showing nothing.
+    keyboard
+      .url("Enter on the website", `${dashboardOrigin()}/r/${raffle.id}`)
+      .row();
+  } else if (access.actionUrl) {
+    keyboard
+      .url(
+        access.block === "not_linked" ? "Connect KOS profile" : "Fix this",
+        access.actionUrl,
+      )
+      .row();
+  } else if (access.block === "approval_pending") {
+    keyboard.text("Check access status", "nav:status").row();
   }
+
   keyboard
     .url("Open raffle", `${dashboardOrigin()}/r/${raffle.id}`)
     .row()
     .text("Back to raffles", "raffles:list");
+
+  const closes = raffle.status === "UPCOMING" ? raffle.startAt : raffle.endAt;
   const text = [
     `<b>${escapeTelegramHtml(raffle.title)}</b>`,
     "",
-    `Raffle #${raffle.id}`,
-    `Community: ${escapeTelegramHtml(publication.community.communityName)}`,
-    `Status: ${raffle.status}`,
-    `Winners: ${raffle.spots}`,
-    `Entries: ${raffle.entryCount}`,
-    `Ends: ${raffle.endAt.toISOString().replace("T", " ").slice(0, 16)} UTC`,
-    raffle.requireWallet
-      ? "Requirement: linked wallet"
-      : "Requirement: standard KOS checks",
+    `Raffle #${raffle.id} · ${escapeTelegramHtml(publication.community.communityName)}`,
+    `${raffle.status === "UPCOMING" ? "Opens" : "Ends"} ${escapeTelegramHtml(telegramCountdown(closes))}`,
+    `${raffle.spots} winner${raffle.spots === 1 ? "" : "s"} · ${raffle.entryCount} ${raffle.entryCount === 1 ? "entry" : "entries"}`,
+    "",
+    access.alreadyEntered
+      ? "<b>You are entered.</b>"
+      : "<b>Your eligibility</b>",
+    ...renderAccessChecklist(access, escapeTelegramHtml),
   ].join("\n");
+
   const options = {
     parse_mode: "HTML" as const,
     reply_markup: keyboard,
@@ -89,31 +129,89 @@ export async function showTelegramRaffle(
   await ctx.reply(text, options);
 }
 
-async function showRaffleList(ctx: Context, edit = false): Promise<void> {
+async function leaveTelegramRaffle(
+  ctx: Context,
+  raffleId: number,
+): Promise<void> {
+  if (!ctx.from || !privateOnly(ctx)) return;
+  const raffle = await prisma.raffle.findFirst({
+    where: { id: raffleId, telegramPublications: { some: LIVE_PUBLICATION } },
+    select: { id: true, guildId: true, status: true },
+  });
+  if (!raffle) {
+    await ctx.answerCallbackQuery({
+      text: "That raffle is not available in Telegram.",
+      show_alert: true,
+    });
+    return;
+  }
+  if (raffle.status !== "LIVE") {
+    await ctx.answerCallbackQuery({
+      text: "This raffle is closed — entries are locked.",
+      show_alert: true,
+    });
+    return;
+  }
+  const account = await prisma.connectedAccount.findUnique({
+    where: {
+      provider_externalId: {
+        provider: "TELEGRAM",
+        externalId: String(ctx.from.id),
+      },
+    },
+    include: { user: true },
+  });
+  if (!account) {
+    await ctx.answerCallbackQuery({
+      text: "Connect your KOS profile first.",
+      show_alert: true,
+    });
+    return;
+  }
+  const outcome = await removeWebEntry(account.user, raffle, "Telegram");
+  await ctx.answerCallbackQuery({
+    text:
+      outcome === "removed"
+        ? "You have left this raffle."
+        : "You were not entered in this raffle.",
+  });
+  await showTelegramRaffle(ctx, raffleId, true);
+}
+
+async function showRaffleList(
+  ctx: Context,
+  edit = false,
+  page = 0,
+): Promise<void> {
   if (!ctx.from || !privateOnly(ctx)) {
     await ctx.reply("Use /raffles in a private chat with KOS Bot.");
     return;
   }
   await ensureTelegramIdentity(ctx.from);
+  const safePage = Number.isSafeInteger(page) && page > 0 ? page : 0;
   const raffles = await prisma.raffle.findMany({
     where: {
       status: { in: ["LIVE", "UPCOMING"] },
       endAt: { gt: new Date() },
-      telegramPublications: {
-        some: {
-          community: { status: "ACTIVE", featureFlags: { has: "RAFFLES" } },
-        },
-      },
+      telegramPublications: { some: LIVE_PUBLICATION },
     },
     orderBy: [{ status: "asc" }, { endAt: "asc" }],
-    take: 10,
-    select: { id: true, title: true, status: true },
+    skip: safePage * PAGE_SIZE,
+    // One extra row tells us whether a next page exists without a count query.
+    take: PAGE_SIZE + 1,
+    select: { id: true, title: true, status: true, endAt: true, startAt: true },
   });
+  const visible = raffles.slice(0, PAGE_SIZE);
+  const hasNext = raffles.length > PAGE_SIZE;
+
   const keyboard = new InlineKeyboard();
-  for (const raffle of raffles) {
+  for (const raffle of visible) {
+    const when = telegramCountdown(
+      raffle.status === "UPCOMING" ? raffle.startAt : raffle.endAt,
+    );
     keyboard
       .text(
-        `${raffle.status === "LIVE" ? "LIVE" : "SOON"} #${raffle.id} ${raffle.title}`.slice(
+        `${raffle.status === "LIVE" ? "LIVE" : "SOON"} #${raffle.id} ${raffle.title} · ${when}`.slice(
           0,
           60,
         ),
@@ -121,10 +219,20 @@ async function showRaffleList(ctx: Context, edit = false): Promise<void> {
       )
       .row();
   }
+  if (safePage > 0 || hasNext) {
+    if (safePage > 0) keyboard.text("Previous", `raffles:page:${safePage - 1}`);
+    if (hasNext) keyboard.text("Next", `raffles:page:${safePage + 1}`);
+    keyboard.row();
+  }
   keyboard.text("Back", "nav:menu");
-  const text = raffles.length
-    ? "Active KOS raffles"
-    : "There are no active Telegram raffles right now.";
+
+  const text = visible.length
+    ? safePage > 0
+      ? `Active KOS raffles — page ${safePage + 1}`
+      : "Active KOS raffles"
+    : safePage > 0
+      ? "No more raffles on this page."
+      : "There are no active Telegram raffles right now.";
   if (edit && ctx.callbackQuery?.message) {
     await ctx
       .editMessageText(text, { reply_markup: keyboard })
@@ -155,16 +263,53 @@ async function showEntries(ctx: Context): Promise<void> {
     orderBy: { enteredAt: "desc" },
     take: 10,
   });
+  if (!entries.length) {
+    await ctx.reply("You have not entered a KOS raffle yet.", {
+      reply_markup: new InlineKeyboard().text("Browse raffles", "raffles:list"),
+    });
+    return;
+  }
+
+  // Whether they actually won was previously invisible in Telegram.
+  const wins = await prisma.winner.findMany({
+    where: {
+      userId: identity.legacyUserId,
+      replaced: false,
+      raffleId: { in: entries.map((entry) => entry.raffle.id) },
+    },
+    select: { raffleId: true },
+  });
+  const won = new Set(wins.map((win) => win.raffleId));
+
+  const keyboard = new InlineKeyboard();
+  for (const entry of entries.slice(0, 5)) {
+    keyboard
+      .text(
+        `#${entry.raffle.id} ${entry.raffle.title}`.slice(0, 60),
+        `raffle:view:${entry.raffle.id}`,
+      )
+      .row();
+  }
+  keyboard.text("Back", "nav:menu");
+
   await ctx.reply(
-    entries.length
-      ? [
-          "Your latest KOS raffle entries:",
-          ...entries.map(
-            (entry) =>
-              `#${entry.raffle.id} ${entry.raffle.title} (${entry.raffle.status})`,
-          ),
-        ].join("\n")
-      : "You have not entered a KOS raffle yet.",
+    [
+      "<b>Your latest KOS raffle entries</b>",
+      "",
+      ...entries.map((entry) => {
+        const outcome = won.has(entry.raffle.id)
+          ? "🏆 won"
+          : entry.raffle.status === "ENDED"
+            ? "not selected"
+            : entry.raffle.status.toLowerCase();
+        return `#${entry.raffle.id} ${escapeTelegramHtml(entry.raffle.title)} — ${outcome}`;
+      }),
+    ].join("\n"),
+    {
+      parse_mode: "HTML",
+      reply_markup: keyboard,
+      link_preview_options: { is_disabled: true },
+    },
   );
 }
 
@@ -533,6 +678,15 @@ export function registerTelegramRaffleHandlers(bot: Bot): void {
   bot.callbackQuery("raffles:list", async (ctx) => {
     await ctx.answerCallbackQuery();
     await showRaffleList(ctx, true);
+  });
+  bot.callbackQuery(/^raffles:page:(\d{1,3})$/u, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showRaffleList(ctx, true, Number(ctx.match[1]));
+  });
+  bot.callbackQuery(/^raffle:leave:(\d{1,10})$/u, async (ctx) => {
+    const raffleId = Number(ctx.match[1]);
+    if (Number.isSafeInteger(raffleId) && raffleId > 0)
+      await leaveTelegramRaffle(ctx, raffleId);
   });
   bot.callbackQuery(/^raffle:view:(\d{1,10})$/u, async (ctx) => {
     await ctx.answerCallbackQuery();
