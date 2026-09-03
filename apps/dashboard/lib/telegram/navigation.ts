@@ -353,7 +353,7 @@ async function showOnboardingReview(
     ctx,
     [
       "<b>KOS ONBOARDING</b>",
-      "Step 5 of 6 - Review",
+      "Step 6 of 6 - Review",
       "",
       "Telegram: <b>Verified</b>",
       "KOS identity: <b>Ready</b>",
