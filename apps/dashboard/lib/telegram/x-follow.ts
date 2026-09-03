@@ -13,6 +13,8 @@ import { normalizeXHandle, xProfileUrl } from "@/lib/organization-social";
 
 export type XFollowGateState =
   | { status: "not_configured" }
+  /** Verification is switched off or out of budget — the gate does not block. */
+  | { status: "stood_down"; target: string; handle: string | null }
   | { status: "needs_link"; target: string; profileUrl: string }
   | { status: "needs_follow"; target: string; profileUrl: string; handle: string | null }
   | { status: "unverifiable"; target: string; profileUrl: string; handle: string | null; reason: string }
@@ -68,17 +70,11 @@ export async function evaluateXFollowGate(
     return { status: "following", target, handle };
   }
 
-  // Verification off means we cannot prove a follow. Say so rather than
-  // pretending the member failed it.
-  if (!xVerifyConfigured()) {
-    return {
-      status: "unverifiable",
-      target,
-      profileUrl,
-      handle,
-      reason: "Follow checks are paused right now.",
-    };
-  }
+  // Turning verification off is a deliberate operator action, so the gate
+  // stands down rather than blocking: we cannot require what we have chosen to
+  // stop checking, and halting every new member over our own switch is worse
+  // than losing some follows. This is the emergency release during an event.
+  if (!xVerifyConfigured()) return { status: "stood_down", target, handle };
 
   const check = await verifyXFollow(prisma, {
     userId: identityId,
@@ -95,6 +91,11 @@ export async function evaluateXFollowGate(
   }
   if (check.outcome === "unlinked" || check.outcome === "token_expired") {
     return { status: "needs_link", target, profileUrl };
+  }
+  // Our own spend ceiling, not the member's doing. Blocking every new member
+  // at read 801 would stall an event for a reason none of them can act on.
+  if (check.outcome === "budget_exhausted" || check.outcome === "disabled") {
+    return { status: "stood_down", target, handle };
   }
   return {
     status: "unverifiable",

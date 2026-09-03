@@ -70,7 +70,7 @@ describe("Telegram X follow gate", () => {
     // An outage must not read as "you didn't follow" — the member did nothing
     // wrong and the wording has to reflect that.
     mocks.findUnique.mockResolvedValue(linked);
-    for (const outcome of ["unavailable", "rate_limited", "budget_exhausted"]) {
+    for (const outcome of ["unavailable", "rate_limited"]) {
       mocks.verifyXFollow.mockResolvedValue({ outcome, reads: 0 });
       const gate = await evaluateXFollowGate("id-1");
       expect(gate.status).toBe("unverifiable");
@@ -91,11 +91,20 @@ describe("Telegram X follow gate", () => {
     expect(mocks.findUnique).not.toHaveBeenCalled();
   });
 
-  it("cannot be passed while checks are paused", async () => {
+  it("stands down when checks are switched off, rather than blocking everyone", async () => {
+    // X_VERIFY_MODE=off is the emergency release during an event. Blocking on
+    // our own switch would halt onboarding for a reason no member can act on.
     mocks.findUnique.mockResolvedValue(linked);
     mocks.xVerifyConfigured.mockReturnValue(false);
     const gate = await evaluateXFollowGate("id-1");
-    expect(gate.status).toBe("unverifiable");
+    expect(gate.status).toBe("stood_down");
     expect(mocks.verifyXFollow).not.toHaveBeenCalled();
+  });
+
+  it("stands down when the monthly budget runs out mid-event", async () => {
+    // Read 801 must not hard-block every remaining member.
+    mocks.findUnique.mockResolvedValue(linked);
+    mocks.verifyXFollow.mockResolvedValue({ outcome: "budget_exhausted", reads: 0 });
+    expect((await evaluateXFollowGate("id-1")).status).toBe("stood_down");
   });
 });
