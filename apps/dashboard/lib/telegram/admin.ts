@@ -1,6 +1,7 @@
 import { type Bot, type Context, InlineKeyboard } from "grammy";
 import type { KosModerationActionType } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { unlinkIdentityX } from "@/lib/telegram/x-link-admin";
 import { PERMISSIONS, type Permission } from "@/lib/permissions";
 import {
   findPrivateTelegramCommunityAccesses,
@@ -571,6 +572,50 @@ async function givePoints(ctx: Context): Promise<void> {
   );
 }
 
+
+/**
+ * Release a member's X link so they can connect a different account.
+ *
+ * Admins live in Telegram during an event, and the member who authorized the
+ * wrong X account is already messaging them there — sending them to the web
+ * dashboard to fix it is the wrong shape. Reply to the member's message with
+ * /unlinkx.
+ */
+async function unlinkMemberX(ctx: Context): Promise<void> {
+  const access = await moderationAccess(ctx);
+  const target = repliedUser(ctx);
+  if (!access || !target) {
+    if (access && !target) {
+      await ctx.reply("Reply to a member's message with /unlinkx.");
+    }
+    return;
+  }
+
+  const account = await prisma.identityAccount.findUnique({
+    where: {
+      provider_externalId: { provider: "TELEGRAM", externalId: String(target.id) },
+    },
+    select: { identityId: true },
+  });
+  if (!account) {
+    await ctx.reply("That member has no KOS identity yet.");
+    return;
+  }
+
+  const result = await unlinkIdentityX(
+    account.identityId,
+    ctx.from ? String(ctx.from.id) : null,
+  );
+  await ctx.reply(
+    result.ok
+      ? [
+          `Unlinked ${result.xHandle ? `@${result.xHandle}` : "their X account"}.`,
+          "They can now tap Connect X in onboarding and authorize the right account.",
+        ].join("\n")
+      : result.reason,
+  );
+}
+
 async function inspectUser(ctx: Context): Promise<void> {
   const access = await moderationAccess(ctx);
   const target = repliedUser(ctx);
@@ -687,6 +732,7 @@ export function registerTelegramAdminHandlers(bot: Bot): void {
   bot.command("announce", announce);
   bot.command("givepoints", givePoints);
   bot.command("user", inspectUser);
+  bot.command("unlinkx", unlinkMemberX);
   bot.command("settings", settings);
   bot.command("approvals", openPrivateApprovalQueue);
   bot.callbackQuery("approval:list", async (ctx) => {
