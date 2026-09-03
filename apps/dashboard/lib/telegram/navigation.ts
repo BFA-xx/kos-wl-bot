@@ -272,6 +272,18 @@ async function showXFollowOnboardingStep(
     // Nothing to follow: never strand a member on a step we cannot define.
     lines.push("This step is not set up yet, so you can carry on.");
     keyboard.text("Continue", onboardingCallback("review", communityId));
+  } else if (gate.status === "stood_down") {
+    // Checks are off or out of budget. Still ask — the follow is the point —
+    // but do not hold onboarding hostage to a switch of ours.
+    lines.push(
+      `Please follow <b>@${escapeTelegramHtml(gate.target)}</b>.`,
+      "",
+      "We cannot confirm follows right now, so this step is not blocking you today.",
+    );
+    keyboard
+      .url(`Follow @${gate.target}`, `https://x.com/${gate.target}`)
+      .row()
+      .text("Continue", onboardingCallback("review", communityId));
   } else if (gate.status === "following") {
     lines.push(
       `Following <b>@${escapeTelegramHtml(gate.target)}</b> \u2713`,
@@ -340,7 +352,10 @@ async function showOnboardingReview(
     }),
     evaluateXFollowGate(identity.id),
   ]);
-  const xSatisfied = xGate.status === "following" || xGate.status === "not_configured";
+  const xSatisfied =
+    xGate.status === "following" ||
+    xGate.status === "not_configured" ||
+    xGate.status === "stood_down";
   const requests = memberships.map(
     ({ community, approvalStatus }) =>
       `${escapeTelegramHtml(community.communityName)}: ${community.id === communityId ? "READY TO REAPPLY" : approvalStatus}`,
@@ -360,7 +375,13 @@ async function showOnboardingReview(
       ...(xGate.status === "not_configured"
         ? []
         : [
-            `Follow @${escapeTelegramHtml(xGate.target)}: <b>${xGate.status === "following" ? "Confirmed" : "Required"}</b>`,
+            `Follow @${escapeTelegramHtml(xGate.target)}: <b>${
+              xGate.status === "following"
+                ? "Confirmed"
+                : xGate.status === "stood_down"
+                  ? "Optional right now"
+                  : "Required"
+            }</b>`,
           ]),
       `Existing KOS profile: <b>${identity.legacyUserId ? "Connected" : "Optional"}</b>`,
       `Wallets: <b>${walletCount}</b>`,
@@ -874,7 +895,11 @@ async function submitOnboarding(
   // The gate lives here, not only in the UI: a member could otherwise reach
   // submit through an older keyboard and skip the step entirely.
   const gate = await evaluateXFollowGate(identity.id);
-  if (gate.status !== "following" && gate.status !== "not_configured") {
+  if (
+    gate.status !== "following" &&
+    gate.status !== "not_configured" &&
+    gate.status !== "stood_down"
+  ) {
     await ctx.answerCallbackQuery({
       text: "Follow KOS on X to finish onboarding.",
       show_alert: true,

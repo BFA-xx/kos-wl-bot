@@ -225,3 +225,49 @@ attest for that post.
 Set `X_VERIFY_MODE="off"` and restart. Spending stops immediately and every X
 task returns to link + attest. No deploy or migration rollback is needed, and
 already-verified completions stay verified.
+
+---
+
+# Telegram onboarding follow gate
+
+Step 5 of 6 requires a member to follow the account in `KOS_X_HANDLE` before
+they can finish onboarding. The follow is *proven*: the member authorizes X
+directly, and we check `connection_status` against their own token. A typed
+handle is never accepted, so "just use an account that already follows KOS"
+does not work — they would need that account's password.
+
+One X account backs exactly one KOS identity, so a single X account cannot
+clear the gate for a crowd of Telegram accounts.
+
+## Running an event
+
+| Symptom | What it means | What to do |
+| --- | --- | --- |
+| Member stuck on "not following" | They genuinely are not following | Nothing — they follow, then tap Check follow |
+| Member linked the wrong X account | The binding is sticky by design | `/unlinkx` in Telegram (reply to them), or `/admin/x-links` |
+| "We couldn't reach X" | X outage or rate limit | Retryable. If it persists, use the release below |
+| Everyone blocked at step 5 | Our side | Use the release below, then investigate |
+
+## The emergency release
+
+**`X_VERIFY_MODE=off`** — the gate stands down and onboarding continues.
+Members are still *asked* to follow, but it stops blocking them.
+
+Restart the bot (`pm2 restart kos-bot --update-env`) and redeploy the dashboard
+for it to take effect on both surfaces.
+
+Setting `KOS_X_HANDLE=""` also stands the gate down and removes the step
+entirely. Prefer `X_VERIFY_MODE=off`, which keeps the ask visible.
+
+The gate also stands down on its own if the monthly read budget runs out, so a
+spend ceiling can never halt an event. Watch `/admin/x-costs` — at
+`X_VERIFY_MONTHLY_READ_BUDGET=800` that is roughly 800 first-time verifications,
+since a confirmed follow is recorded and never re-checked.
+
+## What does NOT release the gate
+
+A transient failure — X down, rate limited, an expired member token — keeps
+blocking, because we cannot tell "we could not check" apart from "they did not
+follow", and the alternative is letting people through unverified during
+exactly the window an abuser would exploit. Those states are retryable and the
+member is told the delay is ours.
