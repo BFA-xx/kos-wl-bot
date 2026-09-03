@@ -5,6 +5,25 @@ Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
 Previous audited production baseline: `d079d52`
 
+## KOS raffle topics in Telegram (2026-09-03)
+
+- Raffle messages can now be routed to one forum topic per community. The thread
+  id lives in `TelegramCommunity.defaultRaffleSettings.raffleTopicId`, so the
+  feature needs no migration.
+- `/raffletopic` inside a topic sets it, `clear` restores the main chat, `show`
+  reads it. All three require live Telegram admin status plus `settings:edit`.
+- The post, the reminder and the results send with `message_thread_id`; the edit
+  path that refreshes a live raffle post correctly does not.
+- A deleted or closed topic falls back to the main chat instead of exhausting the
+  delivery's eight retries. Unrelated failures still surface to the retry logic.
+- This changes `packages/db` and `apps/bot`, so it needs an EC2 deploy as well as
+  Vercel. Register commands again as `raffletopic` joins the group-admin scope.
+- Verified locally: typecheck across all three packages, 17 database tests, 34
+  bot tests, 162 dashboard tests, both builds, Prettier on the touched files, and
+  `git diff --check`. Bot tests need the CI env vars from
+  `.github/workflows/quality.yml`; without them the whole bot suite fails on
+  "Invalid environment configuration" regardless of the change under test.
+
 ## KOS web parity and Telegram raffle eligibility (2026-09-03)
 
 - The KOS member economy is now readable on the website. `KosPointTransaction`,

@@ -129,6 +129,8 @@ code changes.
   access status, admin entry, deep links, and the five-step onboarding UI.
 - `apps/dashboard/lib/telegram/onboarding.ts`: completion, approval-activated
   reward, referral completion, and idempotent private reviewer notifications.
+- `apps/dashboard/lib/telegram/raffle-topic.ts`: `/raffletopic`, which stores
+  the forum topic raffle messages are posted into.
 - `apps/dashboard/lib/telegram/raffle-access.ts`: the single eligibility
   evaluation shared by the raffle card and the Enter button, plus durable
   `TelegramCommunityMember` reconciliation.
@@ -345,6 +347,34 @@ the website rather than silently dropping the button.
 Membership reconciliation is shared by the preview and the entry path, so
 opening a card refreshes stale `TelegramCommunityMember` rows exactly as
 entering did.
+
+## Raffle Topics
+
+Forum groups can route KOS raffle messages to one topic. The thread id lives in
+`TelegramCommunity.defaultRaffleSettings.raffleTopicId` — deliberately in the
+existing JSON column, so turning this on needs no migration.
+
+`/raffletopic` run inside a topic sets it, `clear` returns to the main chat, and
+`show` reads it. Telegram exposes no way to name or list topics through the Bot
+API, so being inside the topic is the only reliable way to identify one; the
+command reads `message_thread_id` off its own message.
+
+The post, the ten-minute reminder and the results all send with
+`message_thread_id`. `editMessageText` does not take one — the message id
+already identifies the thread — and the live raffle post refreshes through that
+edit path.
+
+A topic can be closed or deleted, or the group can stop being a forum, long
+after an admin configured it. `sendToCommunity` in
+`apps/bot/src/services/telegramService.ts` detects those specific Telegram
+errors and retries in the main chat, so a stale topic degrades to the old
+behaviour rather than burning eight delivery retries and losing the
+announcement. Unrelated failures pass through untouched so the existing retry
+and backoff still apply. If you add a fourth raffle message, send it through
+that helper.
+
+This spans runtimes: the setting is read by `apps/bot` through `packages/db`, so
+changing it needs an EC2 deploy, not only Vercel.
 
 ## Web Parity
 
