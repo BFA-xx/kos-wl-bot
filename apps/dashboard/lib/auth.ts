@@ -66,7 +66,10 @@ export async function getValidAccessToken(
     async (tx) => {
       // The transaction-scoped advisory lock serializes refresh-token rotation
       // across concurrent Vercel instances without holding a permanent lock.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`discord-oauth:${userId}`}))`;
+      // $executeRaw, not $queryRaw: the lock returns void and Prisma throws
+      // trying to deserialize it. The unit test mocked $queryRaw to return a
+      // row, so this only ever failed against a real database.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`discord-oauth:${userId}`}))`;
 
       const lockedUser = await tx.user.findUnique({ where: { id: userId } });
       if (!lockedUser?.accessToken) return null;

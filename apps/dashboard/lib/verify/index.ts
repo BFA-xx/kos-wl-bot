@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import {
   claimVerificationSlot,
   logXCacheHit,
+  releaseVerificationSlot,
   verifyXEngagement,
   verifyXFollow,
   xSweepConfigured,
@@ -224,13 +225,17 @@ async function xVerifier(
           reason: `You're not following @${target} yet. Follow, then verify again.`,
         };
       case "token_expired":
+        // Nothing was bought, so don't make them wait out a cooldown.
+        await releaseVerificationSlot(prisma, { taskId: task.id, userId });
         return {
           status: "PENDING",
           reason: "Your X connection expired. Reconnect X, then verify again.",
           action: "link_x",
         };
       default:
-        // disabled / budget_exhausted / rate_limited / unavailable → attest.
+        // disabled / budget_exhausted / rate_limited / unavailable → attest,
+        // and release the slot since no credits were spent.
+        await releaseVerificationSlot(prisma, { taskId: task.id, userId });
         break;
     }
   }
