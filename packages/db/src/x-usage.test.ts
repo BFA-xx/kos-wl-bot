@@ -369,3 +369,35 @@ test("the advisory lock runs through executeRaw, not queryRaw", async () => {
     "$queryRaw must never be used for a void-returning lock",
   );
 });
+
+test("a blocked attempt cannot reset its own cooldown", async () => {
+  // The lockout that shipped: the claim used `updatedAt`, but callers rewrite
+  // the completion row after EVERY attempt — including refused ones — so each
+  // blocked click pushed its own deadline forward and the member could never
+  // get through. The clock must be a column nothing else writes.
+  let sql = "";
+  const db = {
+    $queryRaw: async (s: TemplateStringsArray) => {
+      sql = s.join("");
+      return [{ id: "tc" }];
+    },
+    taskCompletion: { findUnique: async () => ({ lastCheckedAt: new Date() }) },
+  } as never;
+
+  await claimVerificationSlot(db, { taskId: "t1", userId: "u1" });
+
+  assert.ok(sql.includes("lastCheckedAt"), "the claim must use the dedicated clock");
+  assert.ok(
+    !/SET\s+"updatedAt"\s*=/.test(sql),
+    "the claim must not treat updatedAt as the cooldown clock",
+  );
+});
+
+test("releasing clears the clock rather than back-dating it", async () => {
+  const { releaseVerificationSlot } = await import("./x-usage.js");
+  let sql = "";
+  const db = { $executeRaw: async (s: TemplateStringsArray) => { sql = s.join(""); return 1; } } as never;
+  await releaseVerificationSlot(db, { taskId: "t1", userId: "u1" });
+  assert.ok(sql.includes('"lastCheckedAt" = NULL'), "a released slot is immediately claimable");
+  assert.ok(sql.includes("NOT IN ('VERIFIED'"), "a passed check keeps its result");
+});

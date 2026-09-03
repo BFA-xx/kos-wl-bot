@@ -1924,6 +1924,11 @@ model TaskCompletion {
   userId       String
   status       CompletionStatus @default(PENDING)
   evidence     Json?
+  /// When a paid X check was last claimed for this pair. Owned solely by
+  /// claimVerificationSlot — `updatedAt` cannot serve as the cooldown clock
+  /// because callers rewrite the row on every attempt, which would let a
+  /// blocked attempt reset its own cooldown and lock the member out forever.
+  lastCheckedAt DateTime?
   verifiedAt   DateTime?
   reviewedById String?
   createdAt    DateTime         @default(now())

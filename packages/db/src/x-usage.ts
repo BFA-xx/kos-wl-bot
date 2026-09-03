@@ -331,7 +331,7 @@ export async function releaseVerificationSlot(
 ): Promise<void> {
   await db.$executeRaw`
     UPDATE "task_completions"
-    SET "updatedAt" = to_timestamp(0)
+    SET "lastCheckedAt" = NULL
     WHERE "taskId" = ${input.taskId}
       AND "userId" = ${input.userId}
       AND "status" NOT IN ('VERIFIED', 'NEEDS_REVIEW')
@@ -346,12 +346,18 @@ export async function claimVerificationSlot(
   if (cooldownMs <= 0) return { proceed: true };
 
   const staleBefore = new Date(Date.now() - cooldownMs);
+  // The clock is `lastCheckedAt`, never `updatedAt`. Callers rewrite the
+  // completion row after every attempt — including blocked ones — so using
+  // `updatedAt` let a refused click bump its own deadline and lock the member
+  // out permanently. This column is written here and nowhere else.
   const rows = await db.$queryRaw<{ id: string }[]>`
-    INSERT INTO "task_completions" ("id", "taskId", "userId", "status", "createdAt", "updatedAt")
-    VALUES (${randomUUID()}, ${input.taskId}, ${input.userId}, 'PENDING', now(), now())
+    INSERT INTO "task_completions"
+      ("id", "taskId", "userId", "status", "createdAt", "updatedAt", "lastCheckedAt")
+    VALUES (${randomUUID()}, ${input.taskId}, ${input.userId}, 'PENDING', now(), now(), now())
     ON CONFLICT ("taskId", "userId") DO UPDATE
-      SET "updatedAt" = now()
-      WHERE "task_completions"."updatedAt" < ${staleBefore}
+      SET "lastCheckedAt" = now()
+      WHERE ("task_completions"."lastCheckedAt" IS NULL
+             OR "task_completions"."lastCheckedAt" < ${staleBefore})
         AND "task_completions"."status" NOT IN ('VERIFIED', 'NEEDS_REVIEW')
     RETURNING "id"
   `;
@@ -360,9 +366,11 @@ export async function claimVerificationSlot(
   // Lost the race, or checked too recently. Work out which, for the message.
   const existing = await db.taskCompletion.findUnique({
     where: { taskId_userId: { taskId: input.taskId, userId: input.userId } },
-    select: { updatedAt: true },
+    select: { lastCheckedAt: true },
   });
-  const elapsed = existing ? Date.now() - existing.updatedAt.getTime() : 0;
+  const elapsed = existing?.lastCheckedAt
+    ? Date.now() - existing.lastCheckedAt.getTime()
+    : 0;
   const retryAfterSeconds = Math.max(1, Math.ceil((cooldownMs - elapsed) / 1000));
   return {
     proceed: false,
