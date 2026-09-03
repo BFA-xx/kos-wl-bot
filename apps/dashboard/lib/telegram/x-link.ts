@@ -38,22 +38,39 @@ export async function createXLinkUrl(identityId: string): Promise<string> {
   return `${dashboardOrigin()}/api/connect/x/telegram/start?t=${secret}`;
 }
 
-/** Consume a link token, returning the identity it was minted for. */
-export async function consumeXLinkToken(secret: string): Promise<string | null> {
+/**
+ * Validate a link token WITHOUT spending it.
+ *
+ * The token is checked when the member leaves for X but only claimed once they
+ * come back successfully. Burning it up front meant any failure at X — a
+ * rejected authorize, a cancelled prompt, a back button — left them holding a
+ * dead link, and the Telegram button still pointed at that same dead URL.
+ */
+export async function peekXLinkToken(secret: string): Promise<string | null> {
   const token = await prisma.integrationActionToken.findUnique({
     where: { tokenHash: hashIntegrationToken(secret) },
-    select: { id: true, action: true, payload: true, expiresAt: true, consumedAt: true },
+    select: { action: true, payload: true, expiresAt: true, consumedAt: true },
   });
   if (!token || token.action !== "X_IDENTITY_LINK") return null;
   if (token.consumedAt || token.expiresAt < new Date()) return null;
+  return (token.payload as { identityId?: string } | null)?.identityId ?? null;
+}
 
-  const identityId = (token.payload as { identityId?: string } | null)?.identityId;
-  if (!identityId) return null;
-
-  // Claim it atomically so a shared link cannot be redeemed twice.
+/**
+ * Claim the token now that the link has actually completed.
+ *
+ * Still single-use: the window between leaving for X and returning is the only
+ * time the link is replayable, and it is bounded by the ten-minute expiry.
+ */
+export async function consumeXLinkToken(secret: string): Promise<boolean> {
   const claimed = await prisma.integrationActionToken.updateMany({
-    where: { id: token.id, consumedAt: null },
+    where: {
+      tokenHash: hashIntegrationToken(secret),
+      action: "X_IDENTITY_LINK",
+      consumedAt: null,
+      expiresAt: { gt: new Date() },
+    },
     data: { consumedAt: new Date() },
   });
-  return claimed.count === 1 ? identityId : null;
+  return claimed.count === 1;
 }
