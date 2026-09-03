@@ -59,9 +59,12 @@ async function welcomeTelegramMember(ctx: Context): Promise<void> {
         externalId: String(member.id),
       },
     },
-    select: { identityId: true },
+    select: {
+      identityId: true,
+      identity: { select: { onboardingStatus: true } },
+    },
   });
-  await prisma.telegramCommunityMember.upsert({
+  const trackedMember = await prisma.telegramCommunityMember.upsert({
     where: {
       communityId_telegramUserId: {
         communityId: community.id,
@@ -82,6 +85,7 @@ async function welcomeTelegramMember(ctx: Context): Promise<void> {
       leftAt: status === "ACTIVE" ? null : new Date(),
       lastSeenAt: new Date(),
     },
+    select: { approvalStatus: true },
   });
   if (!joined) return;
   const onboardingEnabled = await prisma.telegramCommunity.count({
@@ -90,27 +94,45 @@ async function welcomeTelegramMember(ctx: Context): Promise<void> {
   if (!onboardingEnabled) return;
   const memberName = telegramDisplayName(member).slice(0, 80);
   const mention = telegramUserMention(member.id, memberName);
-  await ctx.api.sendMessage(
-    update.chat.id,
-    [
-      `Welcome ${mention} to ${escapeTelegramHtml(community.communityName)}.`,
-      "",
-      "Start KOS Bot to create your KOS identity and unlock community raffles.",
-      "Finish onboarding, then a KOS team admin will approve your access.",
-      "A wallet is only required when a specific raffle asks for one.",
-    ].join("\n"),
-    {
-      parse_mode: "HTML",
-      reply_markup: new InlineKeyboard()
-        .url(
-          "Start KOS Bot",
-          `https://t.me/${ctx.me.username}?start=welcome_${community.id}`,
-        )
-        .row()
-        .url("Open KOS", `${dashboardOrigin()}/me`),
-      link_preview_options: { is_disabled: true },
-    },
-  );
+  const completed = account?.identity.onboardingStatus === "COMPLETED";
+  const approved = trackedMember.approvalStatus === "APPROVED";
+  const rejected = trackedMember.approvalStatus === "REJECTED";
+  const message = approved
+    ? [
+        `Welcome ${mention} to ${escapeTelegramHtml(community.communityName)}.`,
+        "",
+        "Your KOS access is active. Open KOS Bot for raffles, points, invitations, and your profile.",
+      ]
+    : rejected
+      ? [
+          `Welcome ${mention} to ${escapeTelegramHtml(community.communityName)}.`,
+          "",
+          "Your previous KOS access request was not approved. Check your current status privately in KOS Bot.",
+        ]
+      : completed
+        ? [
+            `Welcome ${mention} to ${escapeTelegramHtml(community.communityName)}.`,
+            "",
+            "Your KOS identity is ready and your access request is pending private team review.",
+            "Track the result in your private KOS Bot chat.",
+          ]
+        : [
+            `Welcome ${mention} to ${escapeTelegramHtml(community.communityName)}.`,
+            "",
+            "Start the guided KOS onboarding to verify your identity and request community access.",
+            "A wallet is optional unless a specific raffle requires one.",
+          ];
+  await ctx.api.sendMessage(update.chat.id, message.join("\n"), {
+    parse_mode: "HTML",
+    reply_markup: new InlineKeyboard()
+      .url(
+        "Start KOS Bot",
+        `https://t.me/${ctx.me.username}?start=welcome_${community.id}`,
+      )
+      .row()
+      .url("Open KOS", `${dashboardOrigin()}/me`),
+    link_preview_options: { is_disabled: true },
+  });
 }
 
 export async function attachTelegramCommunityIdentity(input: {

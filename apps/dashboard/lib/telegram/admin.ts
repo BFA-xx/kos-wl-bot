@@ -430,6 +430,18 @@ async function reviewApproval(
           })
           .catch(() => null)
       : null;
+  const memberKeyboard = new InlineKeyboard();
+  if (invite) {
+    memberKeyboard
+      .url(
+        `Join ${access.community.communityName}`.slice(0, 60),
+        invite.invite_link,
+      )
+      .row();
+  }
+  memberKeyboard
+    .text("Check access", "nav:status")
+    .text("Explore raffles", "raffles:list");
   await prisma.auditLog.create({
     data: {
       organizationId: access.community.organizationId,
@@ -448,16 +460,9 @@ async function reviewApproval(
     .sendMessage(
       member.telegramUserId,
       decision === "approve"
-        ? `Your access to ${access.community.communityName} was approved.${points ? ` You received ${points} KOS points.` : ""}${invite ? " Use the private button below to join the Telegram community." : ""}`
-        : `Your access request for ${access.community.communityName} was not approved.`,
-      invite
-        ? {
-            reply_markup: new InlineKeyboard().url(
-              `Join ${access.community.communityName}`.slice(0, 60),
-              invite.invite_link,
-            ),
-          }
-        : undefined,
+        ? `Your access to ${access.community.communityName} was approved.${points ? ` You received ${points} KOS points.` : ""}${invite ? " Use the private button below to join the Telegram community." : " You can now use its KOS raffles and member features."}`
+        : `Your access request for ${access.community.communityName} was not approved. You can check your current access status below.`,
+      { reply_markup: memberKeyboard },
     )
     .catch(() => undefined);
   await ctx.answerCallbackQuery({

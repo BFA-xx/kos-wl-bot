@@ -46,10 +46,13 @@ completed transactionally.
 
 ## Onboarding Approval
 
-Anyone may start KOS Bot and create a provider-neutral KOS identity. Community
-access is not automatic. Starting from a connected community welcome records a
-pending application, and completing onboarding makes it reviewable. A current
-Telegram administrator with the KOS `member:manage` permission reviews it with
+Anyone may start KOS Bot and create a provider-neutral KOS identity. A short,
+resumable private flow verifies the Telegram session, creates the KOS identity,
+offers optional profile and wallet connections, shows the community request,
+and requires an explicit submission. Community access is not automatic.
+Starting from a connected community welcome records a pending application.
+Submission privately notifies eligible reviewers. A current Telegram
+administrator with the KOS `member:manage` permission reviews it with
 `/approvals` and explicit Approve/Reject buttons.
 
 Approval is scoped to the KOS community. Until it is approved, the member may
@@ -70,11 +73,14 @@ approval.
 - `/invite`: create a personal KOS onboarding referral.
 - `/notifications`: manage private notification preferences.
 - `/admin`: show authorized KOS community settings.
+- `/approvals`: privately review pending KOS community access requests.
+- `/quickraffle`: privately create a validated KOS Raffle draft.
+- `/settings`: privately open an authorized community's KOS settings.
 - `/chatid`: show a Telegram group ID for organization setup.
 - `/raffle publish <id>`: protected manual publication fallback. New hosted
   raffles publish automatically when configured.
-- `/approvals`: review pending KOS community access requests.
-- `/quickraffle`: create a validated KOS Raffle through a durable group flow.
+- `/approvals`: group shortcut to the private approval queue.
+- `/quickraffle`: group shortcut to the private durable quick-raffle flow.
 - `/stats`, `/announce`, `/givepoints`, `/user`, `/settings`: protected KOS
   community administration.
 - `/warn`, `/mute`, `/ban`, `/unban`: Telegram moderation with KOS audit rows.

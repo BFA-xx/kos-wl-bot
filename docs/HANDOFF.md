@@ -1,9 +1,29 @@
 # Engineering Handoff
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
-Audited production application commit: `e8f4732`
+Previous audited production baseline: `d079d52`
+
+## KOS Telegram guided onboarding and private admin console (2026-09-03)
+
+- The focused continuation guide is `docs/CLAUDE-HANDOFF-TELEGRAM.md`. Read it
+  before changing Telegram identity, onboarding, approvals, admin privacy,
+  raffle publication, or command registration.
+- KOS Bot now has a resumable five-step private onboarding flow: welcome,
+  Telegram verification, KOS identity, optional profile/wallet connections,
+  review, and submission. Approval remains the boundary for onboarding points
+  and referral completion.
+- Submitted access requests privately notify current Telegram administrators
+  who also hold KOS `member:manage`. Notifications are deduplicated through an
+  organization audit marker and link directly to the private approval queue.
+- Group welcomes remain public and tag the actual entering account, but adapt
+  their copy for incomplete, pending, approved, and rejected members. Approval
+  data, reviewer controls, and quick-raffle/settings setup remain private.
+- `/approvals`, `/quickraffle`, and `/settings` work directly in the bot DM and
+  as group shortcuts that delete the triggering command before moving to DM.
+  Telegram has no Discord-style ephemeral group message; private chat is the
+  deliberate equivalent.
 
 ## KOS Telegram bot Phase 1 (2026-09-02)
 

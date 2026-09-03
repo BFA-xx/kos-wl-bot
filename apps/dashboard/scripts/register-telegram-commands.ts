@@ -16,6 +16,9 @@ const privateCommands = [
   { command: "invite", description: "Create your KOS referral link" },
   { command: "notifications", description: "Manage notification preferences" },
   { command: "admin", description: "Open KOS admin links" },
+  { command: "approvals", description: "Review access requests (admins)" },
+  { command: "quickraffle", description: "Create a quick raffle (admins)" },
+  { command: "settings", description: "Open community settings (admins)" },
 ];
 
 const groupAdminCommands = [
@@ -55,6 +58,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : "Command registration failed");
+  console.error(
+    error instanceof Error ? error.message : "Command registration failed",
+  );
   process.exitCode = 1;
 });

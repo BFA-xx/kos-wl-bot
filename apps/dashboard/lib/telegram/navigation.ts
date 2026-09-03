@@ -11,7 +11,10 @@ import {
   ensureTelegramIdentity,
   linkTelegramAccount,
 } from "@/lib/telegram/identity";
-import { completeTelegramOnboarding } from "@/lib/telegram/onboarding";
+import {
+  completeTelegramOnboarding,
+  notifyTelegramOnboardingAdmins,
+} from "@/lib/telegram/onboarding";
 import {
   getKosLeaderboard,
   getKosPointsSummary,
@@ -24,9 +27,13 @@ import {
   discoverTelegramCommunityAccess,
 } from "@/lib/telegram/community";
 
-function mainMenuKeyboard(): InlineKeyboard {
+function mainMenuKeyboard(onboardingComplete = true): InlineKeyboard {
   const origin = dashboardOrigin();
-  return new InlineKeyboard()
+  const keyboard = new InlineKeyboard();
+  if (!onboardingComplete) {
+    keyboard.text("Continue onboarding", "onboarding:start").row();
+  }
+  return keyboard
     .text("My Profile", "nav:profile")
     .text("Raffles", "raffles:list")
     .row()
@@ -76,7 +83,7 @@ async function showMenu(ctx: Context, edit = false): Promise<void> {
       "",
       "Your KOS identity connects community access, raffles, points, and future ecosystem products.",
     ].join("\n"),
-    mainMenuKeyboard(),
+    mainMenuKeyboard(identity.onboardingStatus === "COMPLETED"),
     edit,
   );
 }
@@ -86,23 +93,30 @@ async function showGettingStarted(
   communityName?: string,
   edit = false,
 ): Promise<void> {
-  const keyboard = new InlineKeyboard()
-    .text("Complete onboarding", "onboarding:complete")
-    .row()
-    .url("Connect KOS profile", `${dashboardOrigin()}/me`)
-    .url("Add wallet", `${dashboardOrigin()}/me/wallets`)
-    .row()
-    .text("Open menu", "nav:menu");
+  if (!ctx.from || ctx.chat?.type !== "private") return;
+  const identity = await ensureTelegramIdentity(ctx.from);
+  const memberships = await prisma.telegramCommunityMember.findMany({
+    where: { identityId: identity.id },
+    select: { community: { select: { communityName: true } } },
+    take: 3,
+  });
+  const communities = memberships
+    .map(({ community }) => community.communityName)
+    .join(", ");
   await render(
     ctx,
     [
-      `<b>${communityName ? `Welcome to ${escapeTelegramHtml(communityName)}` : "Welcome to KOS"}</b>`,
+      "<b>KOS ONBOARDING</b>",
+      "Step 1 of 5 - Welcome",
       "",
-      "Your Telegram identity is verified and your KOS identity is ready.",
-      "Finish onboarding now, then a KOS team admin will review your community access request.",
-      "Connecting an existing KOS profile and wallet remains optional unless a raffle requires it.",
+      `Welcome to ${escapeTelegramHtml((communityName ?? communities) || "KOS")}.`,
+      "This short setup verifies Telegram, creates your KOS identity, and submits any community access request for team review.",
+      "Existing KOS profile and wallet connections are optional.",
     ].join("\n"),
-    keyboard,
+    new InlineKeyboard()
+      .text("Begin onboarding", "onboarding:telegram")
+      .row()
+      .text("Back to menu", "nav:menu"),
     edit,
   );
 }
@@ -119,6 +133,203 @@ async function showWelcome(
       "Your gateway to the KOS ecosystem.",
     ].join("\n"),
     new InlineKeyboard().text("Get Started", "onboarding:start"),
+  );
+}
+
+async function showTelegramOnboardingStep(
+  ctx: Context,
+  edit = false,
+): Promise<void> {
+  if (!ctx.from || ctx.chat?.type !== "private") return;
+  await ensureTelegramIdentity(ctx.from);
+  const account = ctx.from.username
+    ? `@${escapeTelegramHtml(ctx.from.username)}`
+    : escapeTelegramHtml(telegramDisplayName(ctx.from));
+  await render(
+    ctx,
+    [
+      "<b>KOS ONBOARDING</b>",
+      "Step 2 of 5 - Telegram verified",
+      "",
+      `<b>${account}</b> is verified through your private Telegram session.`,
+      "KOS uses your immutable Telegram account ID, not your changeable username, as the secure identity link.",
+    ].join("\n"),
+    new InlineKeyboard().text("Continue", "onboarding:identity"),
+    edit,
+  );
+}
+
+async function showIdentityOnboardingStep(
+  ctx: Context,
+  edit = false,
+): Promise<void> {
+  if (!ctx.from || ctx.chat?.type !== "private") return;
+  const identity = await ensureTelegramIdentity(ctx.from);
+  await prisma.kosIdentity.updateMany({
+    where: { id: identity.id, onboardingStatus: "STARTED" },
+    data: { onboardingStatus: "PROFILE_COMPLETE" },
+  });
+  await render(
+    ctx,
+    [
+      "<b>KOS ONBOARDING</b>",
+      "Step 3 of 5 - Identity created",
+      "",
+      `<b>${escapeTelegramHtml(identity.displayName)}</b>`,
+      `KOS ID: <code>${identity.id}</code>`,
+      "",
+      "This identity will connect your community access, raffles, points, referrals, and future KOS products.",
+    ].join("\n"),
+    new InlineKeyboard().text("Continue", "onboarding:connections"),
+    edit,
+  );
+}
+
+async function showConnectionsOnboardingStep(
+  ctx: Context,
+  edit = false,
+): Promise<void> {
+  if (!ctx.from || ctx.chat?.type !== "private") return;
+  const identity = await ensureTelegramIdentity(ctx.from);
+  const walletCount = identity.legacyUserId
+    ? await prisma.walletProfile.count({
+        where: { userId: identity.legacyUserId },
+      })
+    : 0;
+  const keyboard = new InlineKeyboard();
+  if (!identity.legacyUserId) {
+    keyboard
+      .url("Connect existing KOS profile", `${dashboardOrigin()}/me`)
+      .row();
+  }
+  keyboard
+    .url("Add optional wallet", `${dashboardOrigin()}/me/wallets`)
+    .row()
+    .text("Refresh connection status", "onboarding:connections")
+    .row()
+    .text("Continue", "onboarding:review");
+  await render(
+    ctx,
+    [
+      "<b>KOS ONBOARDING</b>",
+      "Step 4 of 5 - Optional connections",
+      "",
+      `Existing KOS profile: <b>${identity.legacyUserId ? "Connected" : "Not connected"}</b>`,
+      `Wallets: <b>${walletCount}</b>`,
+      "",
+      "You can continue without either connection. A wallet is only required for raffles that explicitly request one.",
+    ].join("\n"),
+    keyboard,
+    edit,
+  );
+}
+
+async function showOnboardingReview(ctx: Context, edit = false): Promise<void> {
+  if (!ctx.from || ctx.chat?.type !== "private") return;
+  const identity = await ensureTelegramIdentity(ctx.from);
+  await discoverTelegramCommunityAccess(ctx, identity.id);
+  const [walletCount, memberships] = await Promise.all([
+    identity.legacyUserId
+      ? prisma.walletProfile.count({ where: { userId: identity.legacyUserId } })
+      : 0,
+    prisma.telegramCommunityMember.findMany({
+      where: { identityId: identity.id },
+      select: {
+        approvalStatus: true,
+        community: { select: { communityName: true } },
+      },
+      orderBy: { requestedAt: "desc" },
+    }),
+  ]);
+  const requests = memberships.map(
+    ({ community, approvalStatus }) =>
+      `${escapeTelegramHtml(community.communityName)}: ${approvalStatus}`,
+  );
+  const hasPendingRequest = memberships.some(
+    ({ approvalStatus }) => approvalStatus === "PENDING",
+  );
+  await render(
+    ctx,
+    [
+      "<b>KOS ONBOARDING</b>",
+      "Step 5 of 5 - Review",
+      "",
+      "Telegram: <b>Verified</b>",
+      "KOS identity: <b>Ready</b>",
+      `Existing KOS profile: <b>${identity.legacyUserId ? "Connected" : "Optional"}</b>`,
+      `Wallets: <b>${walletCount}</b>`,
+      "",
+      ...(requests.length
+        ? ["Community access:", ...requests]
+        : [
+            "Community access: No community selected.",
+            "You can finish your KOS identity now and request community access later from a group welcome link.",
+          ]),
+    ].join("\n"),
+    new InlineKeyboard()
+      .text(
+        hasPendingRequest ? "Submit for team approval" : "Finish KOS identity",
+        "onboarding:submit",
+      )
+      .row()
+      .text("Back", "onboarding:connections"),
+    edit,
+  );
+}
+
+async function showOnboardingOutcome(
+  ctx: Context,
+  edit = false,
+): Promise<void> {
+  if (!ctx.from || ctx.chat?.type !== "private") return;
+  const identity = await ensureTelegramIdentity(ctx.from);
+  const memberships = await prisma.telegramCommunityMember.findMany({
+    where: { identityId: identity.id },
+    include: { community: { select: { communityName: true } } },
+    orderBy: { requestedAt: "desc" },
+  });
+  const pending = memberships.filter(
+    ({ approvalStatus }) => approvalStatus === "PENDING",
+  );
+  const approved = memberships.filter(
+    ({ approvalStatus }) => approvalStatus === "APPROVED",
+  );
+  const title = pending.length
+    ? "ONBOARDING SUBMITTED"
+    : approved.length
+      ? "ONBOARDING COMPLETE"
+      : "KOS IDENTITY READY";
+  const details = pending.length
+    ? [
+        `Access requests pending: <b>${pending.length}</b>`,
+        "The request is in the private admin review queue.",
+        "You will receive the result here. Your onboarding points activate after approval.",
+      ]
+    : approved.length
+      ? [
+          `Approved communities: <b>${approved.length}</b>`,
+          "Your KOS community access is active.",
+        ]
+      : [
+          "Your KOS identity is complete.",
+          "Use the KOS Bot welcome link in a connected community to request access.",
+        ];
+  await render(
+    ctx,
+    [
+      `<b>${title}</b>`,
+      "",
+      `<b>${escapeTelegramHtml(identity.displayName)}</b>`,
+      `KOS ID: <code>${identity.id}</code>`,
+      "",
+      ...details,
+    ].join("\n"),
+    new InlineKeyboard()
+      .text("Check access status", "nav:status")
+      .row()
+      .text("My profile", "nav:profile")
+      .text("Explore raffles", "raffles:list"),
+    edit,
   );
 }
 
@@ -283,7 +494,7 @@ async function showAccessStatus(ctx: Context, edit = false): Promise<void> {
   );
   const keyboard = new InlineKeyboard();
   if (identity.onboardingStatus !== "COMPLETED") {
-    keyboard.text("Complete onboarding", "onboarding:complete").row();
+    keyboard.text("Continue onboarding", "onboarding:start").row();
   }
   keyboard.text("Back", "nav:menu");
   await render(
@@ -436,15 +647,24 @@ async function handleStart(ctx: Context): Promise<void> {
         identityId: identity.id,
       });
     }
-    await showWelcome(ctx, community.communityName);
+    if (identity.onboardingStatus === "COMPLETED") {
+      await notifyTelegramOnboardingAdmins(ctx, identity.id, community.id);
+      await showOnboardingOutcome(ctx);
+    } else {
+      await showWelcome(ctx, community.communityName);
+    }
     return;
   }
   if (payload.kind === "onboarding") {
     await showGettingStarted(ctx);
     return;
   }
-  if (identity.isNew) {
+  if (identity.onboardingStatus === "STARTED") {
     await showWelcome(ctx);
+    return;
+  }
+  if (identity.onboardingStatus === "PROFILE_COMPLETE") {
+    await showConnectionsOnboardingStep(ctx);
     return;
   }
   await showMenu(ctx);
@@ -492,19 +712,37 @@ export function registerTelegramNavigation(bot: Bot): void {
     await ctx.answerCallbackQuery();
     await showGettingStarted(ctx, undefined, true);
   });
+  bot.callbackQuery("onboarding:telegram", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showTelegramOnboardingStep(ctx, true);
+  });
+  bot.callbackQuery("onboarding:identity", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showIdentityOnboardingStep(ctx, true);
+  });
+  bot.callbackQuery("onboarding:connections", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showConnectionsOnboardingStep(ctx, true);
+  });
+  bot.callbackQuery("onboarding:review", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showOnboardingReview(ctx, true);
+  });
   bot.callbackQuery("onboarding:complete", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showOnboardingReview(ctx, true);
+  });
+  bot.callbackQuery("onboarding:submit", async (ctx) => {
     if (!ctx.from || ctx.chat?.type !== "private") return;
+    await ctx.answerCallbackQuery({ text: "Submitting onboarding..." });
     const outcome = await completeTelegramOnboarding(ctx.from);
     const pendingApprovals = await discoverTelegramCommunityAccess(
       ctx,
       outcome.identityId,
     );
-    await ctx.answerCallbackQuery({
-      text: pendingApprovals
-        ? "Onboarding complete. Your KOS team approval is pending."
-        : "Onboarding complete. Join the connected KOS Telegram community to request access.",
-      show_alert: true,
-    });
-    await showMenu(ctx, true);
+    if (pendingApprovals) {
+      await notifyTelegramOnboardingAdmins(ctx, outcome.identityId);
+    }
+    await showOnboardingOutcome(ctx, true);
   });
 }
