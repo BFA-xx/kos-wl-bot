@@ -52,9 +52,10 @@ export async function sendToCommunity(
   body: Record<string, unknown>,
   /** Injectable so the fallback is testable without a live Telegram. */
   call: typeof callTelegramApi = callTelegramApi,
+  method: "sendMessage" | "sendPhoto" = "sendMessage",
 ) {
   if (topicId) {
-    const threaded = await call<TelegramMessage>(botToken, "sendMessage", {
+    const threaded = await call<TelegramMessage>(botToken, method, {
       ...body,
       chat_id: chatId,
       message_thread_id: topicId,
@@ -67,10 +68,32 @@ export async function sendToCommunity(
       "Telegram raffle topic unavailable, posting to the main chat",
     );
   }
-  return call<TelegramMessage>(botToken, "sendMessage", {
+  return call<TelegramMessage>(botToken, method, {
     ...body,
     chat_id: chatId,
   });
+}
+
+/** Telegram caps a photo caption at 1024 characters; plain text gets 4096. */
+const CAPTION_LIMIT = 1024;
+
+/**
+ * Absolute, publicly fetchable banner for a raffle, or null.
+ *
+ * Telegram fetches the URL from its own servers, so it has to be reachable
+ * without a session. `/r/<id>/banner` is deliberately outside the dashboard's
+ * auth middleware for exactly this reason.
+ */
+export function raffleBannerForTelegram(
+  bannerUrl: string | null,
+): string | null {
+  if (!bannerUrl) return null;
+  try {
+    const url = new URL(bannerUrl);
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function statusHeading(event: IntegrationDeliveryEvent): string {
@@ -184,28 +207,74 @@ async function deliverRaffleMessage(deliveryId: string): Promise<void> {
   } else {
     keyboard.push([{ text: "View details", url }]);
   }
+  const text = lines.join("\n");
+  const banner = raffleBannerForTelegram(raffle.bannerUrl);
   const body = {
     chat_id: community.telegramChatId,
     message_id: publication.telegramMessageId
       ? Number(publication.telegramMessageId)
       : undefined,
     parse_mode: "HTML",
-    text: lines.join("\n"),
+    text,
     reply_markup: { inline_keyboard: keyboard },
     disable_web_page_preview: true,
   };
 
   if (publication.telegramMessageId) {
-    const edited = await callTelegramApi<true>(token, "editMessageText", body);
-    if (edited.ok || edited.description?.includes("message is not modified"))
-      return;
+    // A photo post carries a caption, not text, and Telegram rejects the wrong
+    // editor. We do not record which kind was sent, so try the one the current
+    // banner implies and fall back — a raffle can gain or lose a banner after
+    // its first post.
+    const editors = banner
+      ? (["editMessageCaption", "editMessageText"] as const)
+      : (["editMessageText", "editMessageCaption"] as const);
+    for (const editor of editors) {
+      const payload =
+        editor === "editMessageCaption"
+          ? { ...body, text: undefined, caption: text.slice(0, CAPTION_LIMIT) }
+          : body;
+      const edited = await callTelegramApi<true>(token, editor, payload);
+      if (edited.ok || edited.description?.includes("message is not modified"))
+        return;
+    }
   }
-  const sent = await sendToCommunity(
-    token,
-    community.telegramChatId,
-    raffleTopicId,
-    { ...body, message_id: undefined },
-  );
+
+  const post = { ...body, message_id: undefined };
+  let sent = banner
+    ? await sendToCommunity(
+        token,
+        community.telegramChatId,
+        raffleTopicId,
+        {
+          photo: banner,
+          caption: text.slice(0, CAPTION_LIMIT),
+          parse_mode: "HTML",
+          reply_markup: post.reply_markup,
+        },
+        callTelegramApi,
+        "sendPhoto",
+      )
+    : null;
+
+  if (sent && !sent.ok) {
+    // Telegram fetches the image from its own servers, so a banner that is
+    // unreachable or rejected must not cost the community its announcement.
+    logger.warn(
+      { raffleId: raffle.id, banner, error: sent.description },
+      "Telegram raffle banner failed, posting without the image",
+    );
+    sent = null;
+  }
+
+  if (!sent) {
+    sent = await sendToCommunity(
+      token,
+      community.telegramChatId,
+      raffleTopicId,
+      post,
+    );
+  }
+
   if (!sent.ok || !sent.result) {
     throw new Error(sent.description ?? "Telegram raffle delivery failed");
   }

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isTopicUnavailable, sendToCommunity } from "./telegramService.js";
+import type { callTelegramApi } from "@kos/db";
+import {
+  isTopicUnavailable,
+  raffleBannerForTelegram,
+  sendToCommunity,
+} from "./telegramService.js";
 
 test("recognises every way a raffle topic stops accepting posts", () => {
   for (const description of [
@@ -119,4 +124,73 @@ test("skips the threaded attempt entirely when no topic is configured", async ()
 
   assert.equal(calls.length, 1);
   assert.equal(calls.at(0)?.message_thread_id, undefined);
+});
+
+test("a raffle banner posts as a photo into the configured topic", async () => {
+  const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
+  const call = (async (
+    _t: string,
+    method: string,
+    body: Record<string, unknown>,
+  ) => {
+    calls.push({ method, body });
+    return { ok: true, result: { message_id: 5 } };
+  }) as unknown as typeof callTelegramApi;
+
+  await sendToCommunity(
+    "token",
+    "-100",
+    94,
+    { photo: "https://raffle.koslabs.app/r/9/banner?v=1", caption: "hi" },
+    call,
+    "sendPhoto",
+  );
+
+  assert.equal(calls.length, 1);
+  const [photo] = calls;
+  assert.ok(photo);
+  assert.equal(photo.method, "sendPhoto");
+  assert.equal(photo.body.message_thread_id, 94);
+  assert.equal(photo.body.chat_id, "-100");
+});
+
+test("a closed topic still falls back for a photo, not just text", async () => {
+  const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
+  const call = (async (
+    _t: string,
+    method: string,
+    body: Record<string, unknown>,
+  ) => {
+    calls.push({ method, body });
+    if (body.message_thread_id) {
+      return { ok: false, description: "Bad Request: TOPIC_CLOSED" };
+    }
+    return { ok: true, result: { message_id: 6 } };
+  }) as unknown as typeof callTelegramApi;
+
+  const sent = await sendToCommunity(
+    "token",
+    "-100",
+    94,
+    { photo: "https://example.test/b.png", caption: "hi" },
+    call,
+    "sendPhoto",
+  );
+
+  assert.equal(sent.ok, true);
+  assert.equal(calls.length, 2);
+  const retry = calls[1];
+  assert.ok(retry);
+  assert.equal(retry.method, "sendPhoto");
+  assert.equal(retry.body.message_thread_id, undefined);
+});
+
+test("only https banners are handed to Telegram", () => {
+  assert.equal(raffleBannerForTelegram(null), null);
+  assert.equal(raffleBannerForTelegram("not a url"), null);
+  assert.equal(raffleBannerForTelegram("http://insecure.test/b.png"), null);
+  assert.equal(
+    raffleBannerForTelegram("https://raffle.koslabs.app/r/9/banner?v=2"),
+    "https://raffle.koslabs.app/r/9/banner?v=2",
+  );
 });

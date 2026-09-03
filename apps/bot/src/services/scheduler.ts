@@ -152,7 +152,7 @@ export class Scheduler {
    * thing left to wait for is a dashboard request.
    */
   private async nextBoundaryAt(): Promise<Date | null> {
-    const [raffleOpen, raffleClose, campaignOpen, campaignEnd] =
+    const [raffleOpen, raffleClose, campaignOpen, campaignEnd, delivery] =
       await Promise.all([
         prisma.raffle.findFirst({
           where: { status: RaffleStatus.UPCOMING },
@@ -174,6 +174,17 @@ export class Scheduler {
           orderBy: { endAt: "asc" },
           select: { endAt: true },
         }),
+        // Scheduled cross-platform sends are deadlines too. Without this the
+        // scheduler slept through them: a raffle's own endAt woke it, but a
+        // RAFFLE_ENDING_SOON queued for ten minutes earlier did not, so the
+        // reminder landed with the raffle already closing. Retries re-arm as
+        // PENDING with a future notBefore, so they wake it the same way, and
+        // FAILED rows are excluded so a dead delivery cannot hold it awake.
+        prisma.integrationDelivery.findFirst({
+          where: { status: "PENDING" },
+          orderBy: { notBefore: "asc" },
+          select: { notBefore: true },
+        }),
       ]);
 
     const due = [
@@ -181,6 +192,7 @@ export class Scheduler {
       raffleClose?.endAt,
       campaignOpen?.startAt,
       campaignEnd?.endAt,
+      delivery?.notBefore,
     ].filter((d): d is Date => d instanceof Date);
 
     if (due.length === 0) return null;
