@@ -299,9 +299,16 @@ export class Scheduler {
           logger.error({ err, raffleId: r.id }, "auto close/draw failed"),
         );
       }
-      await processTelegramDeliveries(now, config.SCHEDULER_BATCH_SIZE).catch(
-        (err) => logger.error({ err }, "Telegram delivery sweep failed"),
-      );
+      // Deliberately NOT the tick's `now`: raffles opened above create their
+      // deliveries with `notBefore` defaulting to the moment of creation, which
+      // is later than the timestamp captured at the top of this tick. Passing
+      // the stale value skipped every freshly queued announcement until the
+      // following tick — invisible at the old 15s cadence, but up to 15 minutes
+      // once the scheduler began sleeping until the next deadline.
+      await processTelegramDeliveries(
+        new Date(),
+        config.SCHEDULER_BATCH_SIZE,
+      ).catch((err) => logger.error({ err }, "Telegram delivery sweep failed"));
       this.lastTickOk = true;
     } catch (err) {
       this.lastTickOk = false;
