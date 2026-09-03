@@ -33,3 +33,8 @@ export * from "./campaigns.js";
 export * from "./raids.js";
 export * from "./raffles.js";
 export * from "./telegram.js";
+export * from "./x-pricing.js";
+export * from "./x-usage.js";
+export * from "./x-analytics.js";
+export * from "./x-simulate.js";
+export * from "./x-verify.js";

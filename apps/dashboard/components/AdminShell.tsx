@@ -24,6 +24,7 @@ const NAV = [
   { href: "/admin/subscriptions", label: "Subscriptions", Icon: IconCard },
   { href: "/admin/revenue", label: "Revenue", Icon: IconChart },
   { href: "/admin/health", label: "Server Health", Icon: IconServer },
+  { href: "/admin/x-costs", label: "X API Costs", Icon: IconChart },
   { href: "/admin/logs", label: "Logs", Icon: IconDoc },
   { href: "/admin/flags", label: "Feature Flags", Icon: IconShield },
   { href: "/admin/announcements", label: "Announcements", Icon: IconMegaphone },

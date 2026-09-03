@@ -7,6 +7,12 @@ import {
   type CompletionStatus,
   type RewardRedemptionStatus,
   syncCampaignsForTask,
+  claimVerificationSlot,
+  logXCacheHit,
+  verifyXEngagement,
+  verifyXFollow,
+  xSweepConfigured,
+  xVerifyConfigured,
 } from "@kos/db";
 import { KOS } from "../theme.js";
 import { upsertUser } from "./userService.js";
@@ -262,6 +268,9 @@ async function evaluateTask(
     };
   }
 
+  // X tasks: the linked account proves identity. Follows, likes and reposts are
+  // then checked against the X API for real; comments stay attested. Kept in
+  // step with the web verifier in apps/dashboard/lib/verify.
   const linked = await prisma.connectedAccount.findUnique({
     where: { userId_provider: { userId: member.id, provider: "X" } },
     select: { externalId: true, handle: true },
@@ -272,6 +281,126 @@ async function evaluateTask(
       reason: "Link your X account on the web profile first, then verify here.",
     };
   }
+
+  // Claim the slot before spending, so a member mashing the Verify button (or
+  // running the command twice) collapses into one paid call. Mirrors the web
+  // verifier in apps/dashboard/lib/verify.
+  const willSpend =
+    (task.type === "X_FOLLOW" && Boolean(cfg.xHandle) && xVerifyConfigured()) ||
+    ((task.type === "X_LIKE" || task.type === "X_REPOST") &&
+      Boolean(cfg.tweetUrl) &&
+      xSweepConfigured());
+
+  if (willSpend) {
+    const slot = await claimVerificationSlot(prisma, {
+      taskId: task.id,
+      userId: member.id,
+    });
+    if (!slot.proceed) {
+      await logXCacheHit(prisma, {
+        endpoint: "verify/claim",
+        operation: task.type === "X_FOLLOW" ? "follow_check" : "engager_sweep_page",
+        organizationId: task.organizationId,
+        taskId: task.id,
+        userId: member.id,
+        xUserId: linked.externalId,
+        outcome: slot.reason,
+      });
+      return {
+        status: "PENDING",
+        reason:
+          slot.reason === "in_flight"
+            ? "Already checking — give it a moment."
+            : `Just checked. Try again in ${slot.retryAfterSeconds}s.`,
+      };
+    }
+  }
+
+  if (
+    (task.type === "X_LIKE" || task.type === "X_REPOST") &&
+    cfg.tweetUrl &&
+    xSweepConfigured()
+  ) {
+    const kind = task.type === "X_LIKE" ? "LIKE" : "REPOST";
+    const check = await verifyXEngagement(prisma, {
+      userId: member.id,
+      tweetUrl: cfg.tweetUrl,
+      kind,
+      organizationId: task.organizationId,
+      taskId: task.id,
+    });
+
+    if (check.outcome === "engaged") {
+      return {
+        status: "VERIFIED",
+        reason: kind === "LIKE" ? "Like confirmed on X." : "Repost confirmed on X.",
+        evidence: {
+          method: "discord_x_api_engager_sweep",
+          xUserId: linked.externalId,
+          xHandle: linked.handle,
+          target: cfg.tweetUrl,
+          type: task.type,
+          outcome: check.outcome,
+          sweepComplete: check.complete ?? false,
+          at: new Date().toISOString(),
+        },
+      };
+    }
+    if (check.outcome === "not_engaged") {
+      return {
+        status: "PENDING",
+        reason:
+          kind === "LIKE"
+            ? "We could not find your like on that post yet. Like it, then verify again."
+            : "We could not find your repost yet. Repost it (a quote post does not count), then verify again.",
+      };
+    }
+    // Anything else means the sweep could not prove a negative — attest below.
+  }
+
+  if (task.type === "X_FOLLOW" && cfg.xHandle && xVerifyConfigured()) {
+    const check = await verifyXFollow(prisma, {
+      userId: member.id,
+      targetHandle: cfg.xHandle,
+      organizationId: task.organizationId,
+      taskId: task.id,
+    });
+    const target = cfg.xHandle.replace(/^@/, "");
+    const evidence = {
+      method: "discord_x_api_connection_status",
+      xUserId: linked.externalId,
+      xHandle: linked.handle,
+      target,
+      type: task.type,
+      outcome: check.outcome,
+      at: new Date().toISOString(),
+    };
+
+    // "following" and "follow_pending" both mean the member did their part —
+    // a protected account can only ever show a sent request.
+    if (check.outcome === "following" || check.outcome === "follow_pending") {
+      return {
+        status: "VERIFIED",
+        reason: `Follow of @${target} confirmed on X.`,
+        evidence,
+      };
+    }
+    if (check.outcome === "not_following") {
+      return {
+        status: "PENDING",
+        reason: `You are not following @${target} yet. Follow, then verify again.`,
+      };
+    }
+    if (check.outcome === "token_expired") {
+      return {
+        status: "PENDING",
+        reason: "Your X connection expired. Reconnect X on the web profile, then verify here.",
+      };
+    }
+    // disabled / budget_exhausted / rate_limited / unavailable → fall through
+    // to attest, so an outage never rejects a member who did the follow.
+  }
+
   return {
     status: "VERIFIED",
     reason: "X identity linked and action attested.",

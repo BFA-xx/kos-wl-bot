@@ -667,3 +667,40 @@ same address. Duplicating those records would conflict with database-wide
 deduplication and would unfairly multiply one wallet's rotation weight. A
 single multi-chain record preserves ownership, status, and usage accounting
 while removing repetitive one-chain-at-a-time imports.
+
+## D056 — X follows verified per member; likes and reposts by cached sweep
+
+**Status:** Accepted; built 2026-09-02, shipped disabled (`X_VERIFY_MODE=off`)
+**Decision:** Verify `X_FOLLOW` against the X API by authenticating as the
+*member* — their linked OAuth token — and reading the target account with
+`user.fields=connection_status`; `following` in that array is the verdict, in
+one request. Verify `X_LIKE` and `X_REPOST` instead by sweeping the post's
+engager list once with an app-only bearer token, caching it, and answering
+every member from that cache; only a sweep proven COMPLETE — measured against
+the post's own `public_metrics` count, not against a missing cursor — may
+produce a rejection. Leave `X_COMMENT` on link + attest. Guard
+the spend with a kill switch (`X_VERIFY_MODE`) and a monthly ceiling on
+billable reads (`X_VERIFY_MONTHLY_READ_BUDGET`, counted in `x_verify_budget`,
+claimed atomically before each request). Every inconclusive answer — budget
+spent, rate limited, outage, access level too low, absent `connection_status`
+— falls back to attest rather than rejecting. One implementation in
+`packages/db/src/x-verify.ts` serves both the bot and the dashboard.
+**Why:** X retired its free tier in February 2026 and bills per *resource
+returned*, not per request. A follow returns one user object — the target
+account — at $0.010, and resources are deduplicated per 24-hour UTC window, so
+a follow task costs about one charge per target per day however many members
+verify it. A like or repost check instead pages the post's entire engager list,
+so it scales with the post rather than the task and is unbounded at the moment
+the task is created. Sweeping is what makes that affordable: the engager list is
+read once per post per TTL and shared by every member, a page cap bounds what
+any single post can cost, and 24h dedup makes re-sweeps within a day close to
+free. Measuring completeness against `public_metrics` is not optional — X's
+engagement endpoints are documented as returning at most 100 engagers and end a
+truncated list by simply omitting the cursor, which is indistinguishable from a
+finished one; trusting the cursor alone would silently reject every member past
+engager 100 on a popular post. Authenticating as the member rather
+than as the project also puts rate limits on per-member buckets (900/15min
+each) instead of one shared app bucket, so a raffle rush cannot self-throttle.
+Failing open matters more than catching every cheat: a billing lapse or an X
+outage must never strip a member of a task they actually completed, and
+attesting is exactly the behaviour that preceded this change.

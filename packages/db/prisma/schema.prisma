@@ -2262,3 +2262,96 @@ model Announcement {
   @@index([organizationId])
   @@map("announcements")
 }
+
+/// Monthly ceiling on billable X API reads (X_VERIFY_MONTHLY_READ_BUDGET).
+/// One row per UTC calendar month; reads are claimed before a request goes out
+/// so concurrent verifies can't race past the budget together.
+model XVerifyBudget {
+  /// UTC month key, "YYYY-MM".
+  month     String   @id
+  /// Billable X user-object reads charged this month.
+  reads     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("x_verify_budget")
+}
+
+enum XEngagementKind {
+  LIKE
+  REPOST
+}
+
+/// Cached engager set for one X post, so a like/repost task is swept once and
+/// then answered from the database for every member. `complete` is the safety
+/// bit: when the page cap cut the sweep short, absence from the set does NOT
+/// mean the member skipped it, so callers must fall back to attest.
+model XEngagementSweep {
+  id         String          @id @default(cuid())
+  /// X post id (the numeric status id).
+  tweetId    String
+  kind       XEngagementKind
+  /// When the engager set was last refreshed from X.
+  fetchedAt  DateTime
+  /// True only when the entire engager list was read.
+  complete   Boolean         @default(false)
+  /// Engagers recorded by the last sweep.
+  actorCount Int             @default(0)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  actors XEngagementActor[]
+
+  @@unique([tweetId, kind])
+  @@map("x_engagement_sweeps")
+}
+
+/// One X account seen engaging with a swept post.
+model XEngagementActor {
+  sweepId String
+  /// X numeric user id, matched against ConnectedAccount.externalId.
+  xUserId String
+
+  sweep XEngagementSweep @relation(fields: [sweepId], references: [id], onDelete: Cascade)
+
+  @@id([sweepId, xUserId])
+  @@map("x_engagement_actors")
+}
+
+/// One row per outbound X API call (and per cache hit that avoided one).
+/// This is the ground truth for what verification actually costs: the budget
+/// ledger only counts, this explains. Cache hits are logged with cost 0 so the
+/// saving is measurable rather than asserted.
+model XApiUsageLog {
+  id             String   @id @default(cuid())
+  /// Endpoint template, ids stripped — e.g. "/2/users/by/username/:handle".
+  endpoint       String
+  method         String   @default("GET")
+  /// Why we called: follow_check, post_metrics, engager_sweep_page.
+  operation      String
+  /// Billable resources this call returned (0 for a cache hit).
+  resources      Int      @default(0)
+  /// USD at the rate in x-pricing.ts when the call was made. ESTIMATED.
+  estimatedCost  Decimal  @default(0) @db.Decimal(12, 6)
+  /// True when we answered from cache and made no request at all.
+  cached         Boolean  @default(false)
+  statusCode     Int?
+  durationMs     Int?
+  /// Verifier outcome, for correlating spend with results.
+  outcome        String?
+  /// Attribution. Nullable because not every call has all of them.
+  organizationId String?
+  raffleId       Int?
+  taskId         String?
+  userId         String?
+  xUserId        String?
+  /// Retry attempt number, 0 for the first try.
+  attempt        Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([operation, createdAt])
+  @@index([taskId, createdAt])
+  @@index([userId, createdAt])
+  @@index([raffleId])
+  @@map("x_api_usage_logs")
+}
