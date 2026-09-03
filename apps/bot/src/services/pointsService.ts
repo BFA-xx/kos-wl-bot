@@ -9,6 +9,7 @@ import {
   syncCampaignsForTask,
   claimVerificationSlot,
   logXCacheHit,
+  releaseVerificationSlot,
   verifyXEngagement,
   verifyXFollow,
   xSweepConfigured,
@@ -392,13 +393,18 @@ async function evaluateTask(
       };
     }
     if (check.outcome === "token_expired") {
+      // Nothing was bought, so don't hold them in a cooldown.
+      await releaseVerificationSlot(prisma, { taskId: task.id, userId: member.id });
       return {
         status: "PENDING",
         reason: "Your X connection expired. Reconnect X on the web profile, then verify here.",
       };
     }
-    // disabled / budget_exhausted / rate_limited / unavailable → fall through
-    // to attest, so an outage never rejects a member who did the follow.
+    // Everything still reachable here — disabled, budget_exhausted,
+    // rate_limited, unavailable — spent nothing and falls through to attest, so
+    // an outage never rejects a member who did the follow. Release the cooldown
+    // too: there is no paid answer to protect.
+    await releaseVerificationSlot(prisma, { taskId: task.id, userId: member.id });
   }
 
   return {

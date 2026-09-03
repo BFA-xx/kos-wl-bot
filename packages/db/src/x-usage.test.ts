@@ -307,3 +307,65 @@ test("a post past the sweep cap is flagged as capped rather than silently wrong"
     "the operator must be told certainty is capped, not just cost",
   );
 });
+
+/* ------------------------- advisory lock regression ------------------------- */
+
+test("the advisory lock runs through executeRaw, not queryRaw", async () => {
+  // pg_advisory_xact_lock() returns void. Prisma throws deserializing a void
+  // column, so $queryRaw here silently broke every token refresh in production
+  // while the mocked unit test kept passing. Assert the channel, not the mock.
+  const { getValidXToken } = await import("./x-verify.js");
+  const seen = { queryRaw: [] as string[], executeRaw: [] as string[] };
+
+  const db = {
+    connectedAccount: {
+      findUnique: async () => ({
+        accessToken: "stale",
+        refreshToken: "r",
+        tokenExpiresAt: new Date(Date.now() - 60_000), // forces the refresh path
+      }),
+      update: async () => null,
+    },
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        $queryRaw: async (s: TemplateStringsArray) => {
+          seen.queryRaw.push(s.join(""));
+          throw new Error("void column would fail to deserialize here");
+        },
+        $executeRaw: async (s: TemplateStringsArray) => {
+          seen.executeRaw.push(s.join(""));
+          return 1;
+        },
+        connectedAccount: {
+          findUnique: async () => ({
+            accessToken: "stale",
+            refreshToken: "r",
+            tokenExpiresAt: new Date(Date.now() - 60_000),
+          }),
+          update: async () => null,
+        },
+      }),
+  } as never;
+
+  const original = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify({ access_token: "fresh", expires_in: 7200 }), {
+      status: 200,
+    })) as typeof fetch;
+  try {
+    const token = await getValidXToken(db, "u1");
+    assert.equal(token, "fresh", "a refresh must survive the advisory lock");
+  } finally {
+    globalThis.fetch = original;
+  }
+
+  assert.ok(
+    seen.executeRaw.some((q) => q.includes("pg_advisory_xact_lock")),
+    "the lock must be taken with $executeRaw",
+  );
+  assert.equal(
+    seen.queryRaw.filter((q) => q.includes("pg_advisory_xact_lock")).length,
+    0,
+    "$queryRaw must never be used for a void-returning lock",
+  );
+});

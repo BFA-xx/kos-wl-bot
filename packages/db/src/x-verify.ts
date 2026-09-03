@@ -255,7 +255,11 @@ export async function getValidXToken(
 
   return db.$transaction(
     async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`x-oauth:${userId}`}))`;
+      // $executeRaw, not $queryRaw: pg_advisory_xact_lock() returns void, and
+      // Prisma throws deserializing a void column. $queryRaw here made every
+      // token refresh fail, which meant every follow check died before it
+      // reached X.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`x-oauth:${userId}`}))`;
 
       const locked = await tx.connectedAccount.findUnique({
         where: { userId_provider: { userId, provider: "X" } },
@@ -310,25 +314,51 @@ export async function verifyXFollow(
   db: PrismaClient,
   input: { userId: string; targetHandle: string } & XUsageAttribution,
 ): Promise<XFollowResult> {
+  const base: XUsageAttribution = {
+    organizationId: input.organizationId,
+    raffleId: input.raffleId,
+    taskId: input.taskId,
+    userId: input.userId,
+  };
+  // Every early exit is logged. These paths spend nothing, but when one of them
+  // fires for every member the only symptom is "verification does nothing" —
+  // which is exactly the failure that is impossible to diagnose unheard.
+  const bail = async (
+    outcome: XFollowOutcome,
+    extra: Partial<XFollowResult> = {},
+  ): Promise<XFollowResult> => {
+    await logXCacheHit(db, {
+      ...base,
+      xUserId: extra.xUserId ?? null,
+      endpoint: "/2/users/by/username/:handle",
+      operation: "follow_check",
+      outcome,
+    });
+    return { outcome, reads: 0, ...extra };
+  };
+
   const account = await db.connectedAccount.findUnique({
     where: { userId_provider: { userId: input.userId, provider: "X" } },
     select: { externalId: true, handle: true },
   });
-  if (!account) return { outcome: "unlinked", reads: 0 };
+  if (!account) return bail("unlinked");
 
   const identity = { handle: account.handle, xUserId: account.externalId };
   const target = normalizeXHandle(input.targetHandle);
-  if (!target) {
-    return { ...identity, outcome: "unavailable", reads: 0, detail: "no target handle" };
-  }
-  if (!xVerifyConfigured()) {
-    return { ...identity, outcome: "disabled", reads: 0 };
-  }
+  if (!target) return bail("unavailable", { ...identity, detail: "no target handle" });
+  if (!xVerifyConfigured()) return bail("disabled", identity);
 
-  const token = await getValidXToken(db, input.userId);
-  if (!token) {
-    return { ...identity, outcome: "token_expired", reads: 0 };
+  let token: string | null = null;
+  try {
+    token = await getValidXToken(db, input.userId);
+  } catch (err) {
+    // A refresh that throws must not take the whole verification with it.
+    return bail("token_expired", {
+      ...identity,
+      detail: `refresh threw: ${(err as Error).message}`,
+    });
   }
+  if (!token) return bail("token_expired", identity);
 
   const attribution: XUsageAttribution = {
     organizationId: input.organizationId,

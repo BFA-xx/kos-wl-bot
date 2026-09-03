@@ -317,6 +317,27 @@ export type VerificationSlot =
  * VERIFIED and NEEDS_REVIEW rows are never claimed: callers short-circuit those
  * before reaching here, and re-checking a pass would be pure waste.
  */
+/**
+ * Hand a claimed slot back when the check cost nothing.
+ *
+ * The cooldown exists to stop a paid answer being re-bought. If we never
+ * reached X — no linked account, a dead token, an outage, the budget spent —
+ * there is nothing to protect, and making the member wait a minute to retry is
+ * pure friction. Only definitive answers keep their cooldown.
+ */
+export async function releaseVerificationSlot(
+  db: PrismaClient,
+  input: { taskId: string; userId: string },
+): Promise<void> {
+  await db.$executeRaw`
+    UPDATE "task_completions"
+    SET "updatedAt" = to_timestamp(0)
+    WHERE "taskId" = ${input.taskId}
+      AND "userId" = ${input.userId}
+      AND "status" NOT IN ('VERIFIED', 'NEEDS_REVIEW')
+  `;
+}
+
 export async function claimVerificationSlot(
   db: PrismaClient,
   input: { taskId: string; userId: string; cooldownMs?: number },

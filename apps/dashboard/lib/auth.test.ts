@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   lockedFindUnique: vi.fn(),
   update: vi.fn(),
   queryRaw: vi.fn(),
+  executeRaw: vi.fn(),
   transaction: vi.fn(),
   refreshAccessToken: vi.fn(),
 }));
@@ -36,11 +37,15 @@ const expiredUser = {
 describe("Discord access token refresh", () => {
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockReset());
-    mocks.queryRaw.mockResolvedValue([{ pg_advisory_xact_lock: null }]);
+    // The lock is taken with $executeRaw because pg_advisory_xact_lock()
+    // returns void and $queryRaw throws deserializing it. This mock previously
+    // stubbed $queryRaw into returning a row, which hid that from every test.
+    mocks.executeRaw.mockResolvedValue(1);
     mocks.transaction.mockImplementation(
       async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
           $queryRaw: mocks.queryRaw,
+          $executeRaw: mocks.executeRaw,
           user: {
             findUnique: mocks.lockedFindUnique,
             update: mocks.update,
@@ -58,7 +63,7 @@ describe("Discord access token refresh", () => {
     });
 
     await expect(getValidAccessToken("user-1")).resolves.toBe("new-access");
-    expect(mocks.queryRaw).toHaveBeenCalledOnce();
+    expect(mocks.executeRaw).toHaveBeenCalledOnce();
     expect(mocks.refreshAccessToken).not.toHaveBeenCalled();
   });
 
