@@ -6,6 +6,7 @@ import {
 } from "grammy";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { editOrReply } from "@/lib/telegram/edit-or-reply";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
   findPrivateTelegramCommunityAccesses,
@@ -125,13 +126,7 @@ export async function showTelegramRaffle(
     reply_markup: keyboard,
     link_preview_options: { is_disabled: true },
   };
-  if (edit && ctx.callbackQuery?.message) {
-    await ctx
-      .editMessageText(text, options)
-      .catch(async () => ctx.reply(text, options));
-    return;
-  }
-  await ctx.reply(text, options);
+  await editOrReply(ctx, text, options, edit);
 }
 
 async function leaveTelegramRaffle(
@@ -238,13 +233,7 @@ async function showRaffleList(
     : safePage > 0
       ? "No more raffles on this page."
       : "There are no active Telegram raffles right now.";
-  if (edit && ctx.callbackQuery?.message) {
-    await ctx
-      .editMessageText(text, { reply_markup: keyboard })
-      .catch(async () => ctx.reply(text, { reply_markup: keyboard }));
-    return;
-  }
-  await ctx.reply(text, { reply_markup: keyboard });
+  await editOrReply(ctx, text, { reply_markup: keyboard }, edit);
 }
 
 async function showEntries(ctx: Context): Promise<void> {

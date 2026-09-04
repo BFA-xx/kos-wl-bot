@@ -1,6 +1,7 @@
 import { type Bot, type Context, InlineKeyboard } from "grammy";
 import type { KosModerationActionType } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { editOrReply } from "@/lib/telegram/edit-or-reply";
 import { unlinkIdentityX } from "@/lib/telegram/x-link-admin";
 import { PERMISSIONS, type Permission } from "@/lib/permissions";
 import {
@@ -418,13 +419,7 @@ async function showPrivateApprovalQueue(
     page,
     query,
   );
-  if (edit && ctx.callbackQuery?.message) {
-    await ctx
-      .editMessageText(text, { reply_markup: keyboard })
-      .catch(async () => ctx.reply(text, { reply_markup: keyboard }));
-    return;
-  }
-  await ctx.reply(text, { reply_markup: keyboard });
+  await editOrReply(ctx, text, { reply_markup: keyboard }, edit);
 }
 
 async function openPrivateApprovalQueue(
