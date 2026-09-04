@@ -10,6 +10,7 @@ const FLAGS = [
   ["GREETINGS", "Greeting replies"],
   ["QUICK_RAFFLES", "Quick raffles"],
   ["ONBOARDING", "Onboarding"],
+  ["DISCORD_LINK", "Discord link replies"],
   ["RAFFLES", "Raffles"],
   ["POINTS", "Points"],
   ["REFERRALS", "Referrals"],

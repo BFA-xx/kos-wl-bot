@@ -14,6 +14,7 @@ import { registerTelegramNotificationHandlers } from "@/lib/telegram/notificatio
 import { registerTelegramAdminHandlers } from "@/lib/telegram/admin";
 import { registerTelegramRaffleHandlers } from "@/lib/telegram/raffles";
 import { registerTelegramRaffleTopicHandlers } from "@/lib/telegram/raffle-topic";
+import { registerTelegramDiscordLinkHandlers } from "@/lib/telegram/discord-link";
 import { evaluateTelegramRaffleAccess } from "@/lib/telegram/raffle-access";
 import { ensureTelegramIdentity } from "@/lib/telegram/identity";
 import { awardKosPoints } from "@/lib/telegram/points";
@@ -228,6 +229,7 @@ export function buildTelegramBot(token: string): Bot {
   // Before registerTelegramRaffleHandlers: that one ends with a
   // `message:text` catch-all, and command handlers must be reachable.
   registerTelegramRaffleTopicHandlers(bot);
+  registerTelegramDiscordLinkHandlers(bot);
   registerTelegramRaffleHandlers(bot);
   bot.catch((error) => {
     telegramLog("error", "handler_failed", {

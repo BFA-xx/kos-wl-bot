@@ -9,6 +9,7 @@ import {
 
 export const TELEGRAM_FEATURE_FLAGS = [
   "GREETINGS",
+  "DISCORD_LINK",
   "QUICK_RAFFLES",
   "ONBOARDING",
   "RAFFLES",
