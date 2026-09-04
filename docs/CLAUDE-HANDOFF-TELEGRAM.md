@@ -353,10 +353,11 @@ entering did.
 
 When Telegram entry fails `evaluateWebGates`, do not flatten its reasons into a
 callback alert. `sendTelegramEntryRequirements` privately names each failed
-gate, deduplicates shared KOS task-panel links, and includes `Retry entry` using
-the same unexpired publication action token. Legacy and Task Engine steps still
-use the authenticated KOS click-and-attest UI; Telegram must not mark them
-verified merely because a member pressed Enter.
+gate, links directly to each provider action, deduplicates shared KOS task-panel
+links, and includes `Retry entry` using the same unexpired publication action
+token. Legacy and Task Engine steps still use the authenticated KOS
+click-and-attest UI; Telegram must not mark them verified merely because a
+member pressed Enter.
 
 ## Raffle Topics
 

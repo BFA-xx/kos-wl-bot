@@ -15,6 +15,7 @@ describe("Telegram raffle entry requirements", () => {
           ok: false,
           reason: "Open and verify this raffle step.",
           url: "/me/raffles?raffle=177",
+          actionUrl: "https://twitter.com/intent/follow?screen_name=Borosnfts",
         },
         {
           key: "legacy-task-2",
@@ -22,6 +23,8 @@ describe("Telegram raffle entry requirements", () => {
           ok: false,
           reason: "Open and verify this raffle step.",
           url: "/me/raffles?raffle=177",
+          actionUrl:
+            "https://twitter.com/intent/like?tweet_id=2095532476278214964",
         },
         {
           key: "legacy-task-3",
@@ -29,6 +32,8 @@ describe("Telegram raffle entry requirements", () => {
           ok: false,
           reason: "Open and verify this raffle step.",
           url: "/me/raffles?raffle=177",
+          actionUrl:
+            "https://twitter.com/intent/retweet?tweet_id=2095532476278214964",
         },
       ],
     });
@@ -37,8 +42,24 @@ describe("Telegram raffle entry requirements", () => {
     expect(result.text).toContain("Like the announcement");
     expect(result.text).toContain("Join the partner community");
     expect(result.text).toContain("KOS &lt;Launch&gt;");
+    expect(result.text).toContain("Open this task on X");
+    expect(result.text).toContain(
+      "https://twitter.com/intent/follow?screen_name=Borosnfts",
+    );
     expect(result.keyboard.inline_keyboard.flat()).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          text: "Open on X: Follow the project",
+          url: "https://twitter.com/intent/follow?screen_name=Borosnfts",
+        }),
+        expect.objectContaining({
+          text: "Open on X: Like the announcement",
+          url: "https://twitter.com/intent/like?tweet_id=2095532476278214964",
+        }),
+        expect.objectContaining({
+          text: "Open on X: Join the partner community",
+          url: "https://twitter.com/intent/retweet?tweet_id=2095532476278214964",
+        }),
         expect.objectContaining({ text: "Complete raffle steps" }),
         expect.objectContaining({
           text: "Retry entry",

@@ -163,3 +163,6 @@ and approval, Phase 3 KOS Raffle access and quick creation, Phase 4 global
 points/levels/referrals, Phase 5 moderation/admin/preferences, and Phase 6
 provider-neutral ecosystem event contracts. KOS Raffle remains authoritative;
 Mintooor is an optional interface only and is not imported into this bot.
+Failed external tasks include their direct provider URL as both an inline link
+and a Telegram button. Keep the deduplicated KOS task-panel button as well:
+opening the provider completes the action, while KOS records its verification.

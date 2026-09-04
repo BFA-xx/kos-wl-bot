@@ -10,6 +10,7 @@ import {
   getLegacyRaffleTasks,
   LEGACY_TASK_VERIFY,
 } from "@/lib/legacy-raffle-tasks";
+import { taskActionUrl, type TaskConfig } from "@/lib/verify";
 
 /**
  * Web raffle entry — the same gates the Discord bot enforces, evaluated
@@ -30,6 +31,8 @@ export interface Gate {
   reason?: string;
   /** Optional link that helps satisfy the gate. */
   url?: string;
+  /** Direct provider link for the action itself, when it differs from `url`. */
+  actionUrl?: string;
 }
 
 export interface GateReport {
@@ -237,7 +240,17 @@ export async function evaluateWebGates(
   // 8. Task Engine gate — every required task VERIFIED.
   const raffleTasks = await prisma.raffleTask.findMany({
     where: { raffleId: raffle.id, required: true },
-    include: { task: { select: { id: true, title: true, active: true } } },
+    include: {
+      task: {
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          config: true,
+          active: true,
+        },
+      },
+    },
   });
   if (raffleTasks.length > 0) {
     const completions = await prisma.taskCompletion.findMany({
@@ -258,6 +271,9 @@ export async function evaluateWebGates(
         ok,
         reason: ok ? undefined : "Complete and verify this task.",
         url: `/me/raffles?raffle=${raffle.id}`,
+        actionUrl:
+          taskActionUrl(rt.task.type, rt.task.config as TaskConfig) ??
+          undefined,
       });
     }
   }
@@ -293,6 +309,7 @@ export async function evaluateWebGates(
         ok,
         reason: ok ? undefined : "Open and verify this raffle step.",
         url: `/me/raffles?raffle=${raffle.id}`,
+        actionUrl: task.url ?? undefined,
       });
     }
   }
