@@ -13,11 +13,26 @@ export async function middleware(req: NextRequest) {
   const isDiscordMemberFeed =
     /^\/api\/[^/]+\/integrations\/discord-members$/u.test(pathname);
 
+  // The X link flow a Telegram member walks carries its own authentication and
+  // must NOT require a dashboard session: they open it in Telegram's in-app
+  // browser, where no kos_session cookie exists. `start` is authorized by a
+  // signed single-use link token in ?t, `callback` by the OAuth state matching
+  // an httpOnly cookie plus PKCE, and the result page only renders a status
+  // code. Same reasoning as /api/auth, which is allowlisted for the Discord
+  // OAuth flow. Without this the middleware answers {"error":"unauthorized"}
+  // before the route runs, and only members who had previously signed into the
+  // dashboard in that same in-app browser get through.
+  const isXLinkFlow =
+    pathname === "/api/connect/x/telegram/start" ||
+    pathname === "/api/connect/x/callback" ||
+    pathname === "/connect/x/telegram";
+
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/r/") ||
     pathname.startsWith("/api/auth") ||
     pathname === "/api/integrations/telegram/webhook" ||
+    isXLinkFlow ||
     isDiscordMemberFeed ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico" ||
