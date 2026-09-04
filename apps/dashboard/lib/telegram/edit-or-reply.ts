@@ -27,20 +27,27 @@ export function isUnchangedMessage(error: unknown): boolean {
 type EditOptions = NonNullable<Parameters<Context["editMessageText"]>[1]>;
 type ReplyOptions = NonNullable<Parameters<Context["reply"]>[1]>;
 
+/**
+ * "unchanged" is the case a caller may want to speak to: the screen was
+ * already correct, so nothing moved on screen and a button can look dead.
+ */
+export type RenderOutcome = "edited" | "unchanged" | "sent";
+
 export async function editOrReply(
   ctx: Context,
   text: string,
   options: EditOptions & ReplyOptions,
   /** False when the caller knows this is a fresh screen, not a re-render. */
   edit = true,
-): Promise<void> {
+): Promise<RenderOutcome> {
   if (edit && ctx.callbackQuery?.message) {
     try {
       await ctx.editMessageText(text, options);
-      return;
+      return "edited";
     } catch (error) {
-      if (isUnchangedMessage(error)) return;
+      if (isUnchangedMessage(error)) return "unchanged";
     }
   }
   await ctx.reply(text, options);
+  return "sent";
 }

@@ -1,7 +1,7 @@
 import { type Bot, type Context, InlineKeyboard } from "grammy";
 import type { KosModerationActionType } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { editOrReply } from "@/lib/telegram/edit-or-reply";
+import { editOrReply, type RenderOutcome } from "@/lib/telegram/edit-or-reply";
 import { unlinkIdentityX } from "@/lib/telegram/x-link-admin";
 import { PERMISSIONS, type Permission } from "@/lib/permissions";
 import {
@@ -319,6 +319,37 @@ export function decodeApprovalQuery(encoded: string): string {
   return Buffer.from(encoded, "base64url").toString("utf8").slice(0, 64);
 }
 
+export interface ApprovalRow {
+  index: number;
+  tg: string;
+  x: string;
+  invite: boolean;
+}
+
+/**
+ * The queue as an aligned monospace table.
+ *
+ * Telegram truncates inline button text to the button width, which reduced
+ * every name to something like "Tr...x7_". The message body has no such limit,
+ * so the identifying columns live here and the buttons carry only an index.
+ *
+ * Display names come from Telegram and are attacker-controlled, so the whole
+ * block is escaped before it is wrapped in <pre> — otherwise a name containing
+ * markup would break out of the block and Telegram would reject the message.
+ */
+export function approvalTableBlock(rows: ApprovalRow[]): string {
+  const tgWidth = Math.max(8, ...rows.map((row) => row.tg.length));
+  // Index column is padStart(2), so the header must match it exactly or
+  // every column below sits one character off.
+  const header = `${"#".padStart(2, " ")}  ${"Telegram".padEnd(tgWidth, " ")}  X`;
+  const body = rows.map((row) => {
+    const index = String(row.index).padStart(2, " ");
+    const tg = row.tg.padEnd(tgWidth, " ");
+    return `${index}  ${tg}  ${row.x}${row.invite ? "  +" : ""}`;
+  });
+  return `<pre>${escapeTelegramHtml([header, ...body].join("\n"))}</pre>`;
+}
+
 async function buildApprovalQueue(communityId: string, page = 0, query = "") {
   const safePage = Number.isSafeInteger(page) && page > 0 ? page : 0;
   const where = approvalWhere(communityId, query);
@@ -333,9 +364,8 @@ async function buildApprovalQueue(communityId: string, page = 0, query = "") {
             // Reviewers judge an application on the X account behind it, so
             // the handle belongs on the button, not one screen deeper.
             accounts: {
-              where: { provider: "X" },
-              select: { username: true },
-              take: 1,
+              where: { provider: { in: ["TELEGRAM", "X"] } },
+              select: { provider: true, username: true },
             },
           },
         },
@@ -348,21 +378,28 @@ async function buildApprovalQueue(communityId: string, page = 0, query = "") {
   ]);
 
   const keyboard = new InlineKeyboard();
-  for (const member of pending) {
-    const name = (member.identity?.displayName ?? member.telegramUserId).slice(
-      0,
-      22,
-    );
-    const x = member.identity?.accounts[0]?.username;
-    const membershipSuffix = member.status === "ACTIVE" ? "" : " (invite)";
+  const rows: ApprovalRow[] = [];
+  pending.forEach((member, offset) => {
+    const index = safePage * APPROVAL_PAGE_SIZE + offset + 1;
+    const accounts = member.identity?.accounts ?? [];
+    const tg =
+      accounts.find((a) => a.provider === "TELEGRAM")?.username ??
+      member.identity?.displayName ??
+      member.telegramUserId;
+    const x = accounts.find((a) => a.provider === "X")?.username;
+    rows.push({
+      index,
+      tg: tg.slice(0, 18),
+      x: x ? `@${x.slice(0, 17)}` : "—",
+      invite: member.status !== "ACTIVE",
+    });
+    // Names live in the message body, not on the buttons: Telegram truncates
+    // button text to fit the width, which turned every name into "Tr...x7_".
     keyboard
-      .text(
-        `Approve ${name}${x ? ` @${x.slice(0, 15)}` : ""}${membershipSuffix}`,
-        `approval:approve:${member.id}:${safePage}`,
-      )
-      .text("Reject", `approval:reject:${member.id}:${safePage}`)
+      .text(`Approve ${index}`, `approval:approve:${member.id}:${safePage}`)
+      .text(`Reject ${index}`, `approval:reject:${member.id}:${safePage}`)
       .row();
-  }
+  });
 
   const first = total === 0 ? 0 : safePage * APPROVAL_PAGE_SIZE + 1;
   const last = safePage * APPROVAL_PAGE_SIZE + pending.length;
@@ -381,22 +418,31 @@ async function buildApprovalQueue(communityId: string, page = 0, query = "") {
   if (total === 0) {
     lines.push(
       query
-        ? `No pending KOS access requests match "${query}".`
+        ? `No pending KOS access requests match "${escapeTelegramHtml(query)}".`
         : "There are no pending KOS access requests.",
     );
   } else {
     lines.push(
       query
-        ? `Pending KOS access requests matching "${query}": ${total}`
-        : `Pending KOS access requests: ${total}`,
+        ? `<b>Pending requests matching "${escapeTelegramHtml(query)}": ${total}</b>`
+        : `<b>Pending KOS access requests: ${total}</b>`,
     );
     lines.push(`Showing ${first}-${last}.`);
+    lines.push("");
+    // Monospace keeps the columns aligned; the body wraps where a button
+    // cannot, so this is the only place a long handle stays readable.
+    lines.push(approvalTableBlock(rows));
+    if (rows.some((r) => r.invite)) {
+      lines.push("+ not in the group — approval sends an invite link.");
+    }
     if (!prev && !next && last < total) {
-      // The term was too long to survive a callback payload.
       lines.push("Use a shorter search term to page through these.");
     }
   }
-  if (!query) lines.push("Search with /approvals <name, @handle or id>.");
+  if (!query)
+    lines.push(
+      escapeTelegramHtml("Search with /approvals <name, @handle or id>."),
+    );
   return { keyboard, text: lines.join("\n") };
 }
 
@@ -406,20 +452,29 @@ async function showPrivateApprovalQueue(
   edit = false,
   page = 0,
   query = "",
-): Promise<void> {
+): Promise<RenderOutcome | "denied"> {
   const access = await requirePrivateTelegramCommunityPermission(
     ctx,
     communityId,
     PERMISSIONS.MEMBER_MANAGE,
     "ONBOARDING",
   );
-  if (!access) return;
+  if (!access) return "denied";
   const { keyboard, text } = await buildApprovalQueue(
     access.community.id,
     page,
     query,
   );
-  await editOrReply(ctx, text, { reply_markup: keyboard }, edit);
+  return editOrReply(
+    ctx,
+    text,
+    {
+      parse_mode: "HTML",
+      reply_markup: keyboard,
+      link_preview_options: { is_disabled: true },
+    },
+    edit,
+  );
 }
 
 async function openPrivateApprovalQueue(
@@ -871,14 +926,25 @@ export function registerTelegramAdminHandlers(bot: Bot): void {
   bot.callbackQuery(
     /^approval:page:([a-z0-9]{20,36}):(\d{1,3}):([A-Za-z0-9_-]*)$/u,
     async (ctx) => {
-      await ctx.answerCallbackQuery();
-      await showPrivateApprovalQueue(
+      // Answered after the work, not before, so Refresh can say whether
+      // anything actually changed. An unchanged queue edits nothing, and
+      // without a word the button looks broken. Permission denial replies
+      // rather than answering, so every path answers here or the client
+      // spins.
+      const outcome = await showPrivateApprovalQueue(
         ctx,
         ctx.match[1],
         true,
         Number(ctx.match[2]),
         decodeApprovalQuery(ctx.match[3]),
       );
+      await ctx
+        .answerCallbackQuery(
+          outcome === "unchanged"
+            ? { text: "Queue is up to date." }
+            : undefined,
+        )
+        .catch(() => undefined);
     },
   );
   bot.callbackQuery(

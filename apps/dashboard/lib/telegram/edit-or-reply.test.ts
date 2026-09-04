@@ -22,7 +22,10 @@ describe("editOrReply", () => {
         new Error("Bad Request: message is not modified: the message content"),
       ),
     );
-    await editOrReply(ctx, "queue", { reply_markup: undefined });
+    const outcome = await editOrReply(ctx, "queue", {
+      reply_markup: undefined,
+    });
+    expect(outcome).toBe("unchanged");
     expect(editMessageText).toHaveBeenCalledOnce();
     expect(reply).not.toHaveBeenCalled();
   });
