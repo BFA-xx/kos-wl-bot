@@ -31,7 +31,10 @@ describe("Telegram onboarding reviewer engagement", () => {
     vi.clearAllMocks();
     mocks.kosIdentityFindUnique.mockResolvedValue({
       displayName: "Crypto Whale",
-      accounts: [{ username: "cryptowhale74" }],
+      accounts: [
+        { provider: "TELEGRAM", username: "cryptowhale74" },
+        { provider: "X", username: "whale_on_x" },
+      ],
     });
     mocks.communityMemberFindMany.mockResolvedValue([
       {
@@ -78,6 +81,13 @@ describe("Telegram onboarding reviewer engagement", () => {
       99,
       expect.stringContaining("Crypto Whale (@cryptowhale74)"),
       expect.objectContaining({ reply_markup: expect.anything() }),
+    );
+    // Reviewers decide on the strength of the X account, so it has to be in
+    // the notification itself.
+    expect(sendMessage).toHaveBeenCalledWith(
+      99,
+      expect.stringContaining("X: @whale_on_x"),
+      expect.anything(),
     );
     expect(mocks.auditCreate).toHaveBeenCalledWith(
       expect.objectContaining({

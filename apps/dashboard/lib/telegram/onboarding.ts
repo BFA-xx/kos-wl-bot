@@ -53,9 +53,8 @@ export async function notifyTelegramOnboardingAdmins(
       select: {
         displayName: true,
         accounts: {
-          where: { provider: "TELEGRAM" },
-          select: { username: true },
-          take: 1,
+          where: { provider: { in: ["TELEGRAM", "X"] } },
+          select: { provider: true, username: true },
         },
       },
     }),
@@ -111,7 +110,14 @@ export async function notifyTelegramOnboardingAdmins(
       });
       if (!access.ok) continue;
       notified.add(key);
-      const username = identity.accounts[0]?.username;
+      const username = identity.accounts.find(
+        (account) => account.provider === "TELEGRAM",
+      )?.username;
+      // Reviewers approve on the strength of the X account, so it belongs in
+      // the notification rather than a click away.
+      const xUsername = identity.accounts.find(
+        (account) => account.provider === "X",
+      )?.username;
       const delivered = await ctx.api
         .sendMessage(
           administrator.user.id,
@@ -119,6 +125,7 @@ export async function notifyTelegramOnboardingAdmins(
             "New KOS access request",
             "",
             `${identity.displayName}${username ? ` (@${username})` : ""} completed onboarding for ${community.communityName}.`,
+            `X: ${xUsername ? `@${xUsername}` : "not linked"}`,
             "Review this request privately.",
           ].join("\n"),
           {
