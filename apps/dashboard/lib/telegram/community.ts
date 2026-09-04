@@ -1,5 +1,5 @@
 import { type Bot, type Context, InlineKeyboard } from "grammy";
-import { telegramDisplayName } from "@kos/db";
+import { telegramDisplayName, telegramRaffleDefaults } from "@kos/db";
 import { prisma } from "@/lib/db";
 import { didTelegramMemberJoin } from "@/lib/telegram";
 import {
@@ -7,6 +7,7 @@ import {
   escapeTelegramHtml,
   telegramUserMention,
 } from "@/lib/telegram/format";
+import { sendTelegramMessageWithTopicFallback } from "@/lib/telegram/topic-message";
 
 async function showTelegramChatId(ctx: Context): Promise<void> {
   if (!ctx.chat || ctx.chat.type === "private") {
@@ -34,7 +35,7 @@ async function welcomeTelegramMember(ctx: Context): Promise<void> {
       telegramChatId: String(update.chat.id),
       status: "ACTIVE",
     },
-    select: { id: true, communityName: true },
+    select: { id: true, communityName: true, defaultRaffleSettings: true },
   });
   if (!community) return;
 
@@ -122,17 +123,26 @@ async function welcomeTelegramMember(ctx: Context): Promise<void> {
             "Start the guided KOS onboarding to verify your identity and request community access.",
             "A wallet is optional unless a specific raffle requires one.",
           ];
-  await ctx.api.sendMessage(update.chat.id, message.join("\n"), {
-    parse_mode: "HTML",
-    reply_markup: new InlineKeyboard()
-      .url(
-        "Start KOS Bot",
-        `https://t.me/${ctx.me.username}?start=welcome_${community.id}`,
-      )
-      .row()
-      .url("Open KOS", `${dashboardOrigin()}/me`),
-    link_preview_options: { is_disabled: true },
-  });
+  const { welcomeTopicId } = telegramRaffleDefaults(
+    community.defaultRaffleSettings,
+  );
+  await sendTelegramMessageWithTopicFallback(
+    ctx.api.sendMessage.bind(ctx.api),
+    update.chat.id,
+    message.join("\n"),
+    {
+      parse_mode: "HTML",
+      reply_markup: new InlineKeyboard()
+        .url(
+          "Start KOS Bot",
+          `https://t.me/${ctx.me.username}?start=welcome_${community.id}`,
+        )
+        .row()
+        .url("Open KOS", `${dashboardOrigin()}/me`),
+      link_preview_options: { is_disabled: true },
+    },
+    welcomeTopicId,
+  );
 }
 
 export async function attachTelegramCommunityIdentity(input: {

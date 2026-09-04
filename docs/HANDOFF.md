@@ -5,6 +5,18 @@ Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
 Previous audited production baseline: `d079d52`
 
+## Telegram Start Here welcomes (2026-09-04)
+
+- Welcome and onboarding messages can be routed independently from raffles by
+  running `/welcometopic` inside the community's **Start Here** forum topic.
+- The setting is stored as `welcomeTopicId` in the existing
+  `TelegramCommunity.defaultRaffleSettings` JSON. `show` reports the current
+  destination and `clear` restores main-chat delivery; no migration is needed.
+- `chat_member` updates contain no topic name, so the one-time in-topic command
+  is required. Welcome delivery falls back to the main chat only when the saved
+  topic is closed, deleted, or topics are disabled.
+- The Telegram group-admin command menu must be re-registered after deployment.
+
 ## Released to production (2026-09-03)
 
 Commit `8d9fd43` is live. Both Vercel production projects built and

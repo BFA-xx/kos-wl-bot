@@ -387,6 +387,20 @@ that helper.
 This spans runtimes: the setting is read by `apps/bot` through `packages/db`, so
 changing it needs an EC2 deploy, not only Vercel.
 
+## Welcome Topics
+
+Forum groups can route member welcomes separately from raffles. An admin runs
+`/welcometopic` inside **Start Here** to store
+`TelegramCommunity.defaultRaffleSettings.welcomeTopicId`; `show` reports it and
+`clear` returns to main-chat delivery. Telegram join updates do not include a
+topic name, so do not attempt to discover Start Here by label.
+
+`welcomeTelegramMember` sends with that `message_thread_id`. If the topic was
+closed, deleted, or topics were disabled, the dashboard webhook retries the
+welcome in the main chat. Other Telegram errors still surface. This setting is
+JSON-backed and requires no migration, but the command menu must be
+re-registered after release.
+
 ## Web Parity
 
 Member-facing KOS state must be readable on the website in the same change that

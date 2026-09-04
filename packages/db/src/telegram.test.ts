@@ -52,6 +52,7 @@ test("normalizes Telegram raffle defaults conservatively", () => {
     winnerVisibility: "PUBLIC",
     autoAnnouncements: true,
     raffleTopicId: null,
+    welcomeTopicId: null,
   });
   assert.deepEqual(
     telegramRaffleDefaults({
@@ -66,6 +67,7 @@ test("normalizes Telegram raffle defaults conservatively", () => {
       winnerVisibility: "ADMIN_ONLY",
       autoAnnouncements: false,
       raffleTopicId: null,
+      welcomeTopicId: null,
     },
   );
 });
@@ -170,6 +172,26 @@ test("treats only a positive integer as a raffle topic", () => {
   );
   assert.equal(
     telegramRaffleDefaults({ raffleTopicId: "general" }).raffleTopicId,
+    null,
+  );
+});
+
+test("treats only a positive integer as a welcome topic", () => {
+  assert.equal(telegramRaffleDefaults({}).welcomeTopicId, null);
+  assert.equal(
+    telegramRaffleDefaults({ welcomeTopicId: 44 }).welcomeTopicId,
+    44,
+  );
+  assert.equal(
+    telegramRaffleDefaults({ welcomeTopicId: "44" }).welcomeTopicId,
+    44,
+  );
+  assert.equal(
+    telegramRaffleDefaults({ welcomeTopicId: 0 }).welcomeTopicId,
+    null,
+  );
+  assert.equal(
+    telegramRaffleDefaults({ welcomeTopicId: "general" }).welcomeTopicId,
     null,
   );
 });

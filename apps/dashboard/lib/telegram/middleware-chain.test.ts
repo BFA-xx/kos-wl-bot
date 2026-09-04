@@ -85,6 +85,14 @@ describe("Telegram middleware chain", () => {
     expect(spy).toHaveBeenCalled();
   });
 
+  it("lets the welcome-topic command through the quick-raffle text catch-all", async () => {
+    const spy = vi.fn();
+    await botWithLaterHandler(spy).handleUpdate(
+      textUpdate("/welcometopic", "supergroup"),
+    );
+    expect(spy).toHaveBeenCalled();
+  });
+
   it("lets ordinary private text through when no setup is running", async () => {
     const spy = vi.fn();
     await botWithLaterHandler(spy).handleUpdate(textUpdate("gm", "private"));

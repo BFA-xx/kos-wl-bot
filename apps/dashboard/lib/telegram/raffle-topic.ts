@@ -22,7 +22,18 @@ function currentSettings(
     : {};
 }
 
-async function raffleTopic(ctx: Context): Promise<void> {
+interface TopicCommand {
+  setting: "raffleTopicId" | "welcomeTopicId";
+  command: "/raffletopic" | "/welcometopic";
+  subject: "KOS raffles" | "KOS welcome messages";
+  destination: "the topic" | "Start Here";
+  auditAction: "TELEGRAM_RAFFLE_TOPIC_SET" | "TELEGRAM_WELCOME_TOPIC_SET";
+}
+
+export async function configureTelegramTopic(
+  ctx: Context,
+  config: TopicCommand,
+): Promise<void> {
   const access = await requireTelegramCommunityPermission(
     ctx,
     PERMISSIONS.SETTINGS_EDIT,
@@ -34,13 +45,13 @@ async function raffleTopic(ctx: Context): Promise<void> {
     .toLowerCase();
   const current = telegramRaffleDefaults(
     access.community.defaultRaffleSettings,
-  ).raffleTopicId;
+  )[config.setting];
 
   if (argument === "show") {
     await ctx.reply(
       current
-        ? `KOS raffles post to topic ${current}.`
-        : "KOS raffles post to the main chat. Run /raffletopic inside a topic to change that.",
+        ? `${config.subject} post to topic ${current}.`
+        : `${config.subject} post to the main chat. Run ${config.command} inside ${config.destination} to change that.`,
     );
     return;
   }
@@ -50,7 +61,7 @@ async function raffleTopic(ctx: Context): Promise<void> {
 
   if (!clearing && !threadId) {
     await ctx.reply(
-      "Run /raffletopic inside the topic that should carry KOS raffles, or /raffletopic clear to post in the main chat.",
+      `Run ${config.command} inside ${config.destination}, or ${config.command} clear to post in the main chat.`,
     );
     return;
   }
@@ -59,8 +70,8 @@ async function raffleTopic(ctx: Context): Promise<void> {
   if (next === current) {
     await ctx.reply(
       next
-        ? "KOS raffles already post to this topic."
-        : "KOS raffles already post to the main chat.",
+        ? `${config.subject} already post to this topic.`
+        : `${config.subject} already post to the main chat.`,
     );
     return;
   }
@@ -70,7 +81,7 @@ async function raffleTopic(ctx: Context): Promise<void> {
     data: {
       defaultRaffleSettings: {
         ...currentSettings(access.community.defaultRaffleSettings),
-        raffleTopicId: next,
+        [config.setting]: next,
       } as Prisma.InputJsonValue,
     },
   });
@@ -79,21 +90,38 @@ async function raffleTopic(ctx: Context): Promise<void> {
       data: {
         organizationId: access.community.organizationId,
         actorId: access.userId,
-        action: "TELEGRAM_RAFFLE_TOPIC_SET",
+        action: config.auditAction,
         targetType: "telegram_community",
         targetId: access.community.id,
-        metadata: { raffleTopicId: next },
+        metadata: { [config.setting]: next },
       },
     })
     .catch(() => undefined);
 
   await ctx.reply(
     next
-      ? "KOS raffles will post in this topic from now on. Existing raffle messages stay where they were posted."
-      : "KOS raffles will post to the main chat from now on.",
+      ? `${config.subject} will post in this topic from now on. Existing messages stay where they were posted.`
+      : `${config.subject} will post to the main chat from now on.`,
   );
 }
 
 export function registerTelegramRaffleTopicHandlers(bot: Bot): void {
-  bot.command("raffletopic", raffleTopic);
+  bot.command("raffletopic", (ctx) =>
+    configureTelegramTopic(ctx, {
+      setting: "raffleTopicId",
+      command: "/raffletopic",
+      subject: "KOS raffles",
+      destination: "the topic",
+      auditAction: "TELEGRAM_RAFFLE_TOPIC_SET",
+    }),
+  );
+  bot.command("welcometopic", (ctx) =>
+    configureTelegramTopic(ctx, {
+      setting: "welcomeTopicId",
+      command: "/welcometopic",
+      subject: "KOS welcome messages",
+      destination: "Start Here",
+      auditAction: "TELEGRAM_WELCOME_TOPIC_SET",
+    }),
+  );
 }

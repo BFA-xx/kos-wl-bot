@@ -50,6 +50,8 @@ export interface TelegramRaffleDefaults {
    * own column so enabling topics needs no migration.
    */
   raffleTopicId: number | null;
+  /** Forum topic used for member welcome and onboarding messages. */
+  welcomeTopicId: number | null;
 }
 
 export function hashIntegrationToken(token: string): string {
@@ -84,6 +86,7 @@ export function telegramRaffleDefaults(value: unknown): TelegramRaffleDefaults {
     ? (settings.winnerVisibility as TelegramRaffleDefaults["winnerVisibility"])
     : "PUBLIC";
   const topic = Number(settings.raffleTopicId);
+  const welcomeTopic = Number(settings.welcomeTopicId);
   return {
     membershipRequired: settings.membershipRequired === true,
     remainUntilEnd: settings.remainUntilEnd === true,
@@ -91,6 +94,10 @@ export function telegramRaffleDefaults(value: unknown): TelegramRaffleDefaults {
     autoAnnouncements: settings.autoAnnouncements !== false,
     // Telegram thread ids are positive integers; anything else means "no topic".
     raffleTopicId: Number.isSafeInteger(topic) && topic > 0 ? topic : null,
+    welcomeTopicId:
+      Number.isSafeInteger(welcomeTopic) && welcomeTopic > 0
+        ? welcomeTopic
+        : null,
   };
 }
 

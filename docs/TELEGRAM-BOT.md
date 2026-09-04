@@ -86,6 +86,8 @@ approval.
 - `/chatid`: show a Telegram group ID for organization setup.
 - `/raffle publish <id>`: protected manual publication fallback. New hosted
   raffles publish automatically when configured.
+- `/raffletopic`: route raffle posts to the current forum topic.
+- `/welcometopic`: route member welcomes to the current forum topic.
 - `/approvals`: group shortcut to the private approval queue.
 - `/quickraffle`: group shortcut to the private durable quick-raffle flow.
 - `/stats`, `/announce`, `/givepoints`, `/user`, `/settings`: protected KOS
@@ -107,6 +109,14 @@ letters in words such as `programming`, commands, bot messages, private chats,
 and unconnected groups do not. Replies are silently limited to two per member
 and fifteen per group per minute to stay below Telegram flood limits.
 
+## Welcome Topic
+
+Run `/welcometopic` inside the community's **Start Here** forum topic once.
+Future member welcome and onboarding messages use that topic rather than the
+main chat. `/welcometopic show` reports the saved thread and
+`/welcometopic clear` restores main-chat delivery. A removed or closed topic
+falls back to the main chat so onboarding is not silently lost.
+
 ## Raffle Requirement Recovery
 
 When a Telegram entry fails eligibility, KOS Bot privately sends the member a
@@ -116,6 +126,10 @@ panel; wallet/profile gates receive their own deduplicated actions. The message
 keeps `Retry entry` for the same Telegram publication after the requirements
 are verified. This preserves the established click-and-attest policy and does
 not bypass roles, membership, age, wallet, task, or Discord-only gates.
+
+Failed external tasks include their direct provider URL as both an inline link
+and a Telegram button. Keep the deduplicated KOS task-panel button as well:
+opening the provider completes the action, while KOS records its verification.
 
 ## Configuration
 
@@ -163,6 +177,3 @@ and approval, Phase 3 KOS Raffle access and quick creation, Phase 4 global
 points/levels/referrals, Phase 5 moderation/admin/preferences, and Phase 6
 provider-neutral ecosystem event contracts. KOS Raffle remains authoritative;
 Mintooor is an optional interface only and is not imported into this bot.
-Failed external tasks include their direct provider URL as both an inline link
-and a Telegram button. Keep the deduplicated KOS task-panel button as well:
-opening the provider completes the action, while KOS records its verification.
