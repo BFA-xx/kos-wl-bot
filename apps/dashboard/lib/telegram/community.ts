@@ -1,4 +1,5 @@
 import { type Bot, type Context, InlineKeyboard } from "grammy";
+import type { Prisma } from "@prisma/client";
 import { telegramDisplayName, telegramRaffleDefaults } from "@kos/db";
 import { prisma } from "@/lib/db";
 import { didTelegramMemberJoin } from "@/lib/telegram";
@@ -123,10 +124,10 @@ async function welcomeTelegramMember(ctx: Context): Promise<void> {
             "Start the guided KOS onboarding to verify your identity and request community access.",
             "A wallet is optional unless a specific raffle requires one.",
           ];
-  const { welcomeTopicId } = telegramRaffleDefaults(
+  const { welcomeTopicId, welcomeMessageId } = telegramRaffleDefaults(
     community.defaultRaffleSettings,
   );
-  await sendTelegramMessageWithTopicFallback(
+  const sent = await sendTelegramMessageWithTopicFallback(
     ctx.api.sendMessage.bind(ctx.api),
     update.chat.id,
     message.join("\n"),
@@ -143,6 +144,58 @@ async function welcomeTelegramMember(ctx: Context): Promise<void> {
     },
     welcomeTopicId,
   );
+
+  // Send first, then remove the previous one: if the send fails, the topic
+  // keeps the welcome it already had rather than being left with none. The
+  // buttons are plain deep links, so whoever is standing is usable by anyone.
+  if (sent?.message_id) {
+    await replaceStandingWelcome(ctx, {
+      communityId: community.id,
+      chatId: update.chat.id,
+      previousMessageId: welcomeMessageId,
+      nextMessageId: String(sent.message_id),
+    });
+  }
+}
+
+async function replaceStandingWelcome(
+  ctx: Context,
+  input: {
+    communityId: string;
+    chatId: number | string;
+    previousMessageId: string | null;
+    nextMessageId: string;
+  },
+): Promise<void> {
+  // Read-modify-write on the settings blob. Two joins landing together can
+  // leave one welcome undeleted; the next join clears it, and a stray message
+  // is a better failure than a lost setting.
+  await prisma
+    .$transaction(async (tx) => {
+      const current = await tx.telegramCommunity.findUnique({
+        where: { id: input.communityId },
+        select: { defaultRaffleSettings: true },
+      });
+      const settings =
+        current?.defaultRaffleSettings &&
+        typeof current.defaultRaffleSettings === "object" &&
+        !Array.isArray(current.defaultRaffleSettings)
+          ? { ...(current.defaultRaffleSettings as Record<string, unknown>) }
+          : {};
+      settings.welcomeMessageId = input.nextMessageId;
+      await tx.telegramCommunity.update({
+        where: { id: input.communityId },
+        data: { defaultRaffleSettings: settings as Prisma.InputJsonValue },
+      });
+    })
+    .catch(() => undefined);
+
+  if (!input.previousMessageId) return;
+  const previous = Number(input.previousMessageId);
+  if (!Number.isSafeInteger(previous) || previous < 1) return;
+  // Telegram refuses to delete anything older than 48 hours, and the message
+  // may already be gone, so a failure here is expected and not worth retrying.
+  await ctx.api.deleteMessage(input.chatId, previous).catch(() => undefined);
 }
 
 export async function attachTelegramCommunityIdentity(input: {

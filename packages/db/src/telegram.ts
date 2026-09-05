@@ -52,6 +52,11 @@ export interface TelegramRaffleDefaults {
   raffleTopicId: number | null;
   /** Forum topic used for member welcome and onboarding messages. */
   welcomeTopicId: number | null;
+  /**
+   * The welcome currently standing in that topic. Each new join replaces it,
+   * so the topic holds one live welcome instead of a scroll of dead ones.
+   */
+  welcomeMessageId: string | null;
 }
 
 export function hashIntegrationToken(token: string): string {
@@ -97,6 +102,10 @@ export function telegramRaffleDefaults(value: unknown): TelegramRaffleDefaults {
     welcomeTopicId:
       Number.isSafeInteger(welcomeTopic) && welcomeTopic > 0
         ? welcomeTopic
+        : null,
+    welcomeMessageId:
+      typeof settings.welcomeMessageId === "string" && settings.welcomeMessageId
+        ? settings.welcomeMessageId
         : null,
   };
 }
