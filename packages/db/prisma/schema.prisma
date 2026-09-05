@@ -307,6 +307,7 @@ model Raffle {
   telegramPublications  TelegramRafflePublication[]
   eligibilityRules      RaffleEligibilityRule[]
   integrationDeliveries IntegrationDelivery[]
+  winnerSheetLink       WinnerSheetRaffle?
 
   @@index([guildId, status])
   @@index([status, endAt])
@@ -777,6 +778,8 @@ model Organization {
   collaborationSavedFilters CollaborationSavedFilter[]
   teamWalletPools           TeamWalletPool[]
   telegramCommunities       TelegramCommunity[]
+  googleConnection          GoogleConnection?
+  winnerSheets              WinnerSheet[]
 
   @@index([ownerId])
   @@map("organizations")
@@ -2366,4 +2369,76 @@ model XApiUsageLog {
   @@index([userId, createdAt])
   @@index([raffleId])
   @@map("x_api_usage_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Winner sheets — Google Sheets handover of a raffle's winning addresses
+// ---------------------------------------------------------------------------
+
+/// One organization's connected Google account. Handover sheets are created in
+/// this account's Drive so the org still owns the file after the raffle is
+/// over. Only the refresh token is kept (AES-256-GCM, same key as wallets);
+/// access tokens are minted per request and never stored.
+model GoogleConnection {
+  id             String   @id @default(cuid())
+  organizationId String   @unique
+  /// Google's stable account id (`sub`), so re-connecting the same account
+  /// updates this row instead of orphaning the sheets it already owns.
+  googleUserId   String
+  googleEmail    String
+  refreshToken   String
+  scope          String
+  /// Google accounts granted edit rights on every sheet this org creates.
+  /// Anyone else opening the link gets read-only.
+  editorEmails   String[] @default([])
+  connectedById  String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sheets       WinnerSheet[]
+
+  @@map("google_connections")
+}
+
+/// A Google Sheet holding one collaboration's combined winner list. A GTD
+/// raffle and its FCFS half share a single sheet — opening either one lands on
+/// the same file, GTD addresses first.
+model WinnerSheet {
+  id             String   @id @default(cuid())
+  organizationId String
+  connectionId   String
+  spreadsheetId  String   @unique
+  spreadsheetUrl String
+  /// Address rows written at the last sync. Used for the summary line and to
+  /// flag a sheet left stale behind a reroll or a team-wallet fill.
+  rowCount       Int      @default(0)
+  syncedAt       DateTime @default(now())
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connection   GoogleConnection    @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  raffles      WinnerSheetRaffle[]
+
+  @@index([organizationId, syncedAt])
+  @@map("winner_sheets")
+}
+
+/// Which raffles a sheet covers. `raffleId` is unique: a raffle's winners live
+/// in exactly one sheet, so both halves of a GTD/FCFS pair resolve to it.
+model WinnerSheetRaffle {
+  id        String   @id @default(cuid())
+  sheetId   String
+  raffleId  Int      @unique
+  /// "GTD" | "FCFS" | "WL" — the block this raffle's rows occupy.
+  kind      String
+  createdAt DateTime @default(now())
+
+  sheet  WinnerSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  raffle Raffle      @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+
+  @@index([sheetId])
+  @@map("winner_sheet_raffles")
 }

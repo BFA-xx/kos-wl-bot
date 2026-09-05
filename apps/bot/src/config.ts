@@ -93,6 +93,14 @@ const schema = z.object({
   /** Public dashboard URL, used in proof embeds when present. */
   DASHBOARD_URL: optionalUrl,
 
+  /**
+   * Shared secret for the few calls that run the other way — bot to dashboard.
+   * Today that is the winner handover sheet: the Google account is connected
+   * per organization in the dashboard, so `/raffle export` asks it to build
+   * the sheet. Unset (or no DASHBOARD_URL) and that export stays CSV-only.
+   */
+  BOT_API_TOKEN: optionalString(z.string().min(32)),
+
   /** Stable public raffle origin. Must not be a temporary deployment URL. */
   PUBLIC_RAFFLE_ORIGIN: z.string().url().default("https://raffle.koslabs.app"),
 

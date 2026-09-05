@@ -33,6 +33,7 @@ export const KOS = {
     trophy: "🏆",
     check: "✅",
     cross: "⛔",
+    warn: "⚠️",
     diamond: "◇",
   },
 } as const;

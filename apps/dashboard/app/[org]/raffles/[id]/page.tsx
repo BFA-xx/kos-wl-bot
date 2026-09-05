@@ -10,6 +10,7 @@ import { RaffleQuickActions } from "@/components/RaffleQuickActions";
 import { ParticipantsLive } from "@/components/ParticipantsLive";
 import { TelegramPublicationManager } from "@/components/TelegramPublicationManager";
 import { fmtDate } from "@/lib/format";
+import { winnerSheetState } from "@/lib/winner-sheet-sync";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -90,6 +91,12 @@ export default async function RaffleDetailPage({
     { isOwner, permissions },
     PERMISSIONS.RAFFLE_DELETE,
   );
+  const winnerSheet = hasPermission(
+    { isOwner, permissions },
+    PERMISSIONS.WALLET_EXPORT,
+  )
+    ? await winnerSheetState(raffle.id, guildIds)
+    : null;
   const verificationTasks = canEdit
     ? await prisma.taskDefinition.findMany({
         where: { organizationId: org.id, active: true },
@@ -396,6 +403,7 @@ export default async function RaffleDetailPage({
         <RaffleActions
           raffleId={raffle.id}
           status={raffle.status}
+          winnerSheet={winnerSheet}
           canReleaseTeamWallets={
             (access.isOwner || access.member?.role.name === "Admin") &&
             raffle._count.teamWalletUsages > 0

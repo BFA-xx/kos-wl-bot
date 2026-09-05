@@ -29,6 +29,10 @@ import { stashBanner } from "../services/pendingRaffles.js";
 import { buildId, Actions } from "../utils/ids.js";
 import { participantsCsv, winnersCsv } from "../proof/csv.js";
 import { persistDiscordRaffleBanner } from "../services/raffleBannerService.js";
+import {
+  requestWinnerSheet,
+  winnerSheetsEnabled,
+} from "../services/winnerSheetService.js";
 
 export const raffleCommand: Command = {
   managerOnly: true,
@@ -210,6 +214,17 @@ export const raffleCommand: Command = {
             .addChoices(
               { name: "Winners (+ wallets)", value: "winners" },
               { name: "Participants", value: "participants" },
+            ),
+        )
+        .addStringOption((o) =>
+          o
+            .setName("as")
+            .setDescription(
+              "Winners only — a shared Google Sheet, or a CSV file",
+            )
+            .addChoices(
+              { name: "Google Sheet (default)", value: "sheet" },
+              { name: "CSV file", value: "csv" },
             ),
         ),
     ),
@@ -559,9 +574,28 @@ async function handleExport(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const id = interaction.options.getInteger("id", true);
   const type = interaction.options.getString("type") ?? "winners";
+  const format = interaction.options.getString("as") ?? "sheet";
   const raffle = await getRaffle(id);
   if (!raffle || raffle.guildId !== interaction.guildId) {
     return interaction.editReply("Raffle not found.");
+  }
+
+  // Winners open as a shared, editable sheet. Only fall back to the CSV when
+  // the sheet was asked for and could not be built, so a manager is never
+  // left without the list.
+  let sheetProblem: string | null = null;
+  if (type === "winners" && format === "sheet" && winnerSheetsEnabled()) {
+    const outcome = await requestWinnerSheet({
+      raffleId: id,
+      guildId: interaction.guildId!,
+      actorId: interaction.user.id,
+    });
+    if (outcome.ok) {
+      return interaction.editReply({
+        content: winnerSheetMessage(id, outcome.sheet),
+      });
+    }
+    sheetProblem = outcome.reason;
   }
 
   let csv: string;
@@ -580,9 +614,48 @@ async function handleExport(interaction: ChatInputCommandInteraction) {
   }
 
   await interaction.editReply({
-    content: `${KOS.emoji.check} Export ready for raffle #${id}.`,
+    content: sheetProblem
+      ? `${KOS.emoji.warn} Couldn't open the Google Sheet — ${sheetProblem}\nHere is the CSV for raffle #${id} instead.`
+      : `${KOS.emoji.check} Export ready for raffle #${id}.`,
     files: [
       new AttachmentBuilder(Buffer.from(csv, "utf8"), { name: filename }),
     ],
   });
+}
+
+/** Summary line for a handover sheet, naming both halves of a GTD/FCFS pair. */
+function winnerSheetMessage(
+  raffleId: number,
+  sheet: {
+    url: string;
+    rowCount: number;
+    raffleIds: number[];
+    blocks: { kind: string; rows: number }[];
+    duplicatesRemoved: number;
+    failedEditors: string[];
+  },
+): string {
+  const combined =
+    sheet.raffleIds.length > 1
+      ? ` — combined from ${sheet.raffleIds.map((id) => `#${id}`).join(" + ")}`
+      : "";
+  const breakdown = sheet.blocks
+    .filter((block) => block.rows > 0)
+    .map((block) => `${block.rows} ${block.kind}`)
+    .join(" + ");
+  return [
+    `${KOS.emoji.check} Winners sheet for raffle #${raffleId}${combined}`,
+    sheet.url,
+    "",
+    `**${sheet.rowCount} address${sheet.rowCount === 1 ? "" : "es"}**${breakdown ? ` (${breakdown})` : ""}, GTD first.`,
+    sheet.duplicatesRemoved > 0
+      ? `${sheet.duplicatesRemoved} address${sheet.duplicatesRemoved === 1 ? "" : "es"} that won both rounds ${sheet.duplicatesRemoved === 1 ? "was" : "were"} listed once, under GTD.`
+      : null,
+    "Anyone with the link can view it; the team's Google accounts can edit it.",
+    sheet.failedEditors.length
+      ? `Google would not grant edit access to: ${sheet.failedEditors.join(", ")}`
+      : null,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
 }

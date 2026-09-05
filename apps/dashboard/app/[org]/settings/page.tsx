@@ -7,6 +7,7 @@ import { RoleWeightsManager } from "@/components/RoleWeightsManager";
 import { RaffleChannelDefaults } from "@/components/RaffleChannelDefaults";
 import { VerificationManager } from "@/components/VerificationManager";
 import { TelegramCommunityManager } from "@/components/TelegramCommunityManager";
+import { GoogleSheetsManager } from "@/components/GoogleSheetsManager";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -58,6 +59,11 @@ export default async function SettingsPage({
         <Card className="lg:col-span-2">
           <SectionTitle>Telegram communities</SectionTitle>
           <TelegramCommunityManager />
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <SectionTitle>Google Sheets</SectionTitle>
+          <GoogleSheetsManager />
         </Card>
 
         <Card className="lg:col-span-2">

@@ -67,7 +67,24 @@ Server-wide totals: raffles, live now, winners, entries, unique participants.
 
 ## `/raffle export`
 
-Exports a CSV for a raffle: `winners` (with wallets, decrypted) or `participants`.
+| Option | Values                                              |
+| ------ | --------------------------------------------------- |
+| `id`   | Raffle ID (required)                                |
+| `type` | `winners` (default, with wallets) \| `participants` |
+| `as`   | `sheet` (default) \| `csv` — winners only           |
+
+Winners come back as a link to a Google Sheet: anyone with the link can view
+it, and the team's Google accounts can edit it. When the raffle is one half of
+a GTD/FCFS pair, both halves are combined into one list with the GTD addresses
+on top. An address that won both rounds is listed once, under GTD.
+
+Opening a sheet that already exists never overwrites it, so edits the team made
+there survive. Rewrite it from the current winners with **Rewrite sheet** on the
+dashboard's raffle page — the bot's export always opens, never rewrites.
+
+Set `as:csv`, or ask for `type:participants`, to get a CSV file instead. If
+Google Sheets is not configured (see `GOOGLE_CLIENT_ID` and `BOT_API_TOKEN` in
+`.env.example`), the winners export falls back to the CSV on its own.
 
 ## `/blacklist add | remove | list`
 

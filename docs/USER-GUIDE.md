@@ -113,6 +113,29 @@ campaigns can be ended or cancelled from the same workspace.
 - **Whole registry:** `/wallet export` (CSV of every member's saved wallets).
 - **Dashboard:** the **Wallets** page → _Download CSV_.
 
+### Hand the winners to a partner
+
+**Open in Google Sheets** on a raffle's page (or `/raffle export` in Discord)
+opens the winning addresses as a shared, editable spreadsheet instead of
+downloading a file.
+
+- **GTD and FCFS arrive as one list**, GTD addresses on top and FCFS below. A
+  raffle linked to a collaboration uses that grouping; otherwise the two halves
+  are matched by project name. An address that won both rounds is listed once,
+  under GTD, so the partner does not spend two spots on one wallet.
+- **Two tabs:** _Winners_ (the working list — username, chain, address, source)
+  and _Addresses_ (just the addresses in the same order, to copy out).
+- **Who can do what:** anyone with the link can view; the Google accounts listed
+  in _Settings → Google Sheets_ can edit. Treat the link as the key — it opens
+  the winners' wallet addresses to anyone who has it.
+- **Editing is safe.** Opening the sheet again never rewrites it. After a reroll
+  or a team-wallet fill the raffle page shows a warning with a **Rewrite sheet**
+  button — that one _does_ replace whatever the team edited.
+
+An admin connects the Google account once in **Settings → Google Sheets**.
+Sheets are created in that account's Drive, so the org keeps them if the
+integration is later disconnected.
+
 ### Anti-farming
 
 - `/blacklist add user:@someone reason:...` — block an account.

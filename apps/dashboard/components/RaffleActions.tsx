@@ -7,6 +7,15 @@ import { PERMISSIONS } from "@/lib/permissions";
 
 type TeamWalletMode = "ROUND_ROBIN" | "RANDOM" | "PRIORITY";
 
+export interface WinnerSheetSummary {
+  url: string;
+  rowCount: number;
+  syncedAt: string;
+  raffleIds: number[];
+  missingRaffleIds: number[];
+  stale: boolean;
+}
+
 interface TeamWalletPreview {
   selectionMode: TeamWalletMode;
   requiredWallets: number;
@@ -30,10 +39,12 @@ export function RaffleActions({
   raffleId,
   status,
   canReleaseTeamWallets = false,
+  winnerSheet = null,
 }: {
   raffleId: number;
   status: string;
   canReleaseTeamWallets?: boolean;
+  winnerSheet?: WinnerSheetSummary | null;
 }) {
   const router = useRouter();
   const { slug } = useOrg();
@@ -59,8 +70,59 @@ export function RaffleActions({
   const [teamWalletPreviewLoading, setTeamWalletPreviewLoading] =
     useState(false);
   const [teamWalletError, setTeamWalletError] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<WinnerSheetSummary | null>(winnerSheet);
+  const [sheetError, setSheetError] = useState<string | null>(null);
 
   const api = (path: string) => `/api/${slug}/raffles/${raffleId}${path}`;
+
+  /**
+   * Open the winners sheet, creating it on first use.
+   *
+   * The tab is opened synchronously on the click and only navigated once the
+   * URL comes back — opening it after the await is what browsers block as a
+   * popup.
+   */
+  async function openSheet(rewrite: boolean) {
+    if (
+      rewrite &&
+      !confirm(
+        "Rewrite the sheet from the current winners? Anything the team edited in it will be replaced.",
+      )
+    ) {
+      return;
+    }
+    setSheetError(null);
+    const tab = window.open("", "_blank", "noopener");
+    setBusy("sheet");
+    const res = await fetch(api("/sheet"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rewrite }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setBusy(null);
+    if (!res.ok) {
+      tab?.close();
+      setSheetError(body.error ?? "Couldn't open the winners sheet.");
+      return;
+    }
+    setSheet({
+      url: body.url,
+      rowCount: body.rowCount,
+      syncedAt: body.syncedAt,
+      raffleIds: body.raffleIds ?? [],
+      missingRaffleIds: body.missingRaffleIds ?? [],
+      stale: Boolean(body.stale),
+    });
+    if (body.failedEditors?.length) {
+      setSheetError(
+        `Sheet ready, but Google would not grant edit access to ${body.failedEditors.join(", ")}. Check the addresses in Settings → Google Sheets.`,
+      );
+    }
+    if (tab) tab.location.href = body.url;
+    else window.location.href = body.url;
+    router.refresh();
+  }
 
   async function endNow() {
     if (!confirm("End this raffle now and draw winners?")) return;
@@ -237,6 +299,19 @@ export function RaffleActions({
       <div className="flex flex-wrap items-center gap-2">
         {canExportWallets ? (
           <>
+            <button
+              className="kos-btn-primary"
+              onClick={() => void openSheet(false)}
+              disabled={busy !== null}
+            >
+              {busy === "sheet"
+                ? sheet
+                  ? "Opening…"
+                  : "Building sheet…"
+                : sheet
+                  ? "Open winners sheet"
+                  : "Open in Google Sheets"}
+            </button>
             <a className="kos-btn" href={api(`/export-xlsx?mode=addresses`)}>
               Addresses (Excel)
             </a>
@@ -286,6 +361,46 @@ export function RaffleActions({
           </button>
         ) : null}
       </div>
+
+      {canExportWallets && (sheet || sheetError) ? (
+        <div className="mt-3 space-y-2 text-sm">
+          {sheet ? (
+            <p className="text-kos-muted">
+              Google Sheet · {sheet.rowCount} address
+              {sheet.rowCount === 1 ? "" : "es"}
+              {sheet.raffleIds.length > 1
+                ? ` from raffles ${sheet.raffleIds.map((id) => `#${id}`).join(" + ")}, GTD first`
+                : ""}{" "}
+              · synced {new Date(sheet.syncedAt).toLocaleString()}
+            </p>
+          ) : null}
+          {sheet && (sheet.stale || sheet.missingRaffleIds.length > 0) ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-400/20 bg-amber-500/[0.08] px-4 py-3 text-amber-200">
+              <span>
+                {sheet.missingRaffleIds.length > 0
+                  ? `Raffle${sheet.missingRaffleIds.length === 1 ? "" : "s"} ${sheet.missingRaffleIds
+                      .map((id) => `#${id}`)
+                      .join(
+                        ", ",
+                      )} ${sheet.missingRaffleIds.length === 1 ? "was" : "were"} drawn after this sheet was written.`
+                  : "Winners or wallets changed after this sheet was written."}
+              </span>
+              <button
+                className="kos-btn shrink-0"
+                onClick={() => void openSheet(true)}
+                disabled={busy !== null}
+              >
+                {busy === "sheet" ? "Rewriting…" : "Rewrite sheet"}
+              </button>
+            </div>
+          ) : null}
+          {sheetError ? (
+            <p className="rounded-2xl border border-red-400/20 bg-red-500/[0.08] px-4 py-3 text-red-200">
+              {sheetError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {canReroll && status === "ENDED" ? (
         <div className="mt-4 border-t border-kos-border pt-4">
