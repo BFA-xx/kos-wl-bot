@@ -251,37 +251,34 @@ export async function collectWinnerSheetRows(
   };
 }
 
-const WINNERS_HEADER = [
-  "#",
-  "List",
-  "Username",
-  "Chain",
-  "Wallet Address",
-  "Source",
-  "Team Member",
-];
+const WINNERS_HEADER = ["#", "List", "Chain", "Wallet Address"];
 
 export function winnerSheetTitle(projectName: string): string {
   return `KOS X ${projectName} — Winners`.slice(0, 120);
 }
 
-/** The two tabs: the working list, and a clean column to hand over. */
+/**
+ * The two tabs: the working list, and a clean column to hand over.
+ *
+ * Neither carries the winner's Discord username, nor whether an address came
+ * from the community or the team pool, nor which teammate owns it. The sheet
+ * is readable by anyone holding the link — normally the partner project — and
+ * a "Team Pool" label there would tell them which of their spots KOS took.
+ * That detail stays in the Excel exports, which are downloaded, not shared.
+ */
 export function buildWinnerSheetTabs(
   projectName: string,
   data: WinnerSheetData,
 ): SheetTab[] {
   const banner = `KOS X ${projectName}`;
   const winners: (string | number)[][] = [
-    [banner, "", "", "", "", "", ""],
+    [banner, "", "", ""],
     WINNERS_HEADER,
     ...data.rows.map((row, index) => [
       index + 1,
       row.kind,
-      row.username,
       row.chain,
       row.address,
-      row.source,
-      row.teamMember ?? "",
     ]),
   ];
 
@@ -295,13 +292,13 @@ export function buildWinnerSheetTabs(
       title: WINNERS_TAB,
       rows: winners,
       frozenRows: 2,
-      columnWidths: [48, 72, 190, 110, 400, 110, 160],
+      columnWidths: [48, 72, 120, 420],
     },
     {
       title: ADDRESSES_TAB,
       rows: addresses,
       frozenRows: 1,
-      columnWidths: [400, 72],
+      columnWidths: [420, 72],
     },
   ];
 }

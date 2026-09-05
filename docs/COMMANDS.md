@@ -74,7 +74,9 @@ Server-wide totals: raffles, live now, winners, entries, unique participants.
 | `as`   | `sheet` (default) \| `csv` — winners only           |
 
 Winners come back as a link to a Google Sheet: anyone with the link can view
-it, and the team's Google accounts can edit it. When the raffle is one half of
+it, and the team's Google accounts can edit it. The sheet holds addresses only
+— no Discord usernames, and no marking of which entries came from the team
+pool. When the raffle is one half of
 a GTD/FCFS pair, both halves are combined into one list with the GTD addresses
 on top. An address that won both rounds is listed once, under GTD.
 

@@ -123,8 +123,13 @@ downloading a file.
   raffle linked to a collaboration uses that grouping; otherwise the two halves
   are matched by project name. An address that won both rounds is listed once,
   under GTD, so the partner does not spend two spots on one wallet.
-- **Two tabs:** _Winners_ (the working list — username, chain, address, source)
-  and _Addresses_ (just the addresses in the same order, to copy out).
+- **Two tabs:** _Winners_ (numbered list — GTD/FCFS, chain, address) and
+  _Addresses_ (just the addresses in the same order, to copy out).
+- **Nothing internal is in it.** No Discord usernames, and no sign of which
+  addresses came from the team pool or whose wallets they are — the sheet is
+  readable by anyone holding the link, and a "Team Pool" column there would
+  tell the partner which of their spots you took. That detail stays in
+  _Winners + Wallets (Excel)_, which downloads rather than shares.
 - **Who can do what:** anyone with the link can view; the Google accounts listed
   in _Settings → Google Sheets_ can edit. Treat the link as the key — it opens
   the winners' wallet addresses to anyone who has it.

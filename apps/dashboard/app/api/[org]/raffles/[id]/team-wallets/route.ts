@@ -96,7 +96,11 @@ export const GET = withAccess(async (request, { params }) => {
     walletChains: raffle.walletChains,
     communityAddressHashes: community.map((row) => row.addressHash),
   });
-  const maxSelectable = Math.min(remaining, candidates.length);
+  // Spots are held back for the team on purpose, so a raffle that already drew
+  // as many community winners as it has spots must still accept team wallets.
+  // What the pool actually has is the only hard cap; the spot count is
+  // reported alongside so the fill can be seen to go over, not blocked by it.
+  const maxSelectable = candidates.length;
   if (requestedCount !== null && requestedCount > maxSelectable) {
     return NextResponse.json(
       {
@@ -106,7 +110,10 @@ export const GET = withAccess(async (request, { params }) => {
     );
   }
   const selectionMode = requestedMode ?? pool.selectionMode;
-  const selectedCount = requestedCount ?? maxSelectable;
+  // Default to closing the gap when there is one. Once the raffle is full,
+  // start at one rather than proposing the entire pool.
+  const selectedCount =
+    requestedCount ?? Math.min(remaining > 0 ? remaining : 1, maxSelectable);
   const selection = selectTeamWallets({
     candidates,
     members,
@@ -259,13 +266,9 @@ export const POST = withAccess(async (request, { params }) => {
             0,
             raffle.spots - community.length - existingReservations,
           );
-          if (count > remaining) {
-            return {
-              ok: false as const,
-              status: 409,
-              error: `Only ${remaining} raffle slot${remaining === 1 ? " remains" : "s remain"}. Refresh the preview.`,
-            };
-          }
+          // No spot-count ceiling here either — see the GET handler. Every
+          // requested wallet is still checked against current availability
+          // below, which is what actually bounds a fill.
           const candidates = await eligibleTeamWallets({
             poolId: currentPool.id,
             raffleId: raffle.id,
@@ -341,7 +344,7 @@ export const POST = withAccess(async (request, { params }) => {
             ok: true as const,
             selected: selected.length,
             community: community.length,
-            remaining: remaining - selected.length,
+            remaining: Math.max(0, remaining - selected.length),
             mode: requestedMode,
           };
         },

@@ -275,6 +275,14 @@ export function RaffleActions({
   const canShowTeamWalletFill = canFillTeamWallets && status === "ENDED";
   const canShowTeamWalletRelease =
     canReleaseTeamWallets && status === "CANCELLED";
+  // Community winners plus every team wallet reserved or about to be. This can
+  // exceed the raffle's spot count on purpose: spots are held back for the
+  // team, so the pool's availability is the only real ceiling.
+  const teamWalletTotal = teamWalletPreview
+    ? teamWalletPreview.communityWallets +
+      teamWalletPreview.teamWalletsReserved +
+      (teamWalletModal === "fill" ? teamWalletCount : 0)
+    : 0;
   const teamWalletPreviewIsCurrent = Boolean(
     teamWalletPreview &&
     teamWalletPreview.selectedCount === teamWalletCount &&
@@ -479,15 +487,19 @@ export function RaffleActions({
                     }
                   />
                   <TeamWalletMetric
-                    label="Remaining"
-                    value={Math.max(
-                      0,
-                      teamWalletPreview.remainingWalletsNeeded -
-                        (teamWalletModal === "fill" ? teamWalletCount : 0),
-                    )}
+                    label="Total"
+                    value={teamWalletTotal}
                     accent
                   />
                 </div>
+
+                <p className="mt-2 text-xs leading-5 text-kos-muted">
+                  {teamWalletTotal > teamWalletPreview.requiredWallets
+                    ? `${teamWalletTotal - teamWalletPreview.requiredWallets} over the raffle's ${teamWalletPreview.requiredWallets} spots — expected when spots were held back for the team.`
+                    : teamWalletTotal === teamWalletPreview.requiredWallets
+                      ? "Exactly the raffle's spot count."
+                      : `${teamWalletPreview.requiredWallets - teamWalletTotal} of the raffle's ${teamWalletPreview.requiredWallets} spots still open.`}
+                </p>
 
                 {teamWalletModal === "fill" ? (
                   <div className="mt-5 space-y-5">
@@ -598,8 +610,13 @@ export function RaffleActions({
                               : "Preview selection"}
                         </button>
                       </div>
-                      {teamWalletPreview.maxSelectable <
-                      teamWalletPreview.remainingWalletsNeeded ? (
+                      {teamWalletPreview.maxSelectable === 0 ? (
+                        <p className="mt-3 text-sm text-amber-300">
+                          No eligible team wallets are available for this
+                          raffle&apos;s chains right now.
+                        </p>
+                      ) : teamWalletPreview.maxSelectable <
+                        teamWalletPreview.remainingWalletsNeeded ? (
                         <p className="mt-3 text-sm text-amber-300">
                           Only {teamWalletPreview.maxSelectable} eligible team
                           wallet
@@ -639,8 +656,8 @@ export function RaffleActions({
                           Selected Wallets
                         </h3>
                         <span className="text-xs text-kos-muted">
-                          Selected: {teamWalletCount} /{" "}
-                          {teamWalletPreview.remainingWalletsNeeded} remaining
+                          Selected: {teamWalletCount} of{" "}
+                          {teamWalletPreview.availableWallets} available
                         </span>
                       </div>
                       {!teamWalletPreviewIsCurrent ? (

@@ -252,15 +252,7 @@ describe("buildWinnerSheetTabs", () => {
     expect(winners!.title).toBe(WINNERS_TAB);
     expect(winners!.rows[0]![0]).toBe("KOS X VOLTOADS");
     expect(winners!.rows[1]).toContain("Wallet Address");
-    expect(winners!.rows[2]).toEqual([
-      1,
-      "GTD",
-      "alice",
-      "ETHEREUM",
-      "0xAAA",
-      "Community",
-      "",
-    ]);
+    expect(winners!.rows[2]).toEqual([1, "GTD", "ETHEREUM", "0xAAA"]);
     expect(winners!.rows[3]![1]).toBe("FCFS");
 
     expect(addresses!.title).toBe(ADDRESSES_TAB);
@@ -274,6 +266,29 @@ describe("buildWinnerSheetTabs", () => {
   it("numbers the combined list continuously across both blocks", () => {
     const [winners] = buildWinnerSheetTabs("VOLTOADS", data);
     expect(winners!.rows.slice(2).map((row) => row[0])).toEqual([1, 2]);
+  });
+
+  it("leaks neither the winners' identities nor team-pool provenance", () => {
+    // Anyone with the link can read this sheet — normally the partner
+    // project — so it must not say which spots KOS filled itself.
+    const flat = buildWinnerSheetTabs("VOLTOADS", {
+      ...data,
+      rows: [
+        {
+          ...sheetRow("0xTEAM", "alice", "GTD", 10),
+          source: "Team Pool",
+          teamMember: "Member A",
+        },
+      ],
+    })
+      .flatMap((tab) => tab.rows.flat())
+      .join("|");
+
+    expect(flat).not.toContain("Team Pool");
+    expect(flat).not.toContain("Member A");
+    expect(flat).not.toContain("alice");
+    expect(flat).not.toContain("Username");
+    expect(flat).toContain("0xTEAM");
   });
 });
 

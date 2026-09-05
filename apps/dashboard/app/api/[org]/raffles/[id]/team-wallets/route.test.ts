@@ -106,7 +106,7 @@ describe("Team Wallet Pool raffle preview", () => {
       communityWallets: 12,
       remainingWalletsNeeded: 18,
       availableWallets: 42,
-      maxSelectable: 18,
+      maxSelectable: 42,
       selectedCount: 18,
       selectionMode: "ROUND_ROBIN",
     });
@@ -140,7 +140,7 @@ describe("Team Wallet Pool raffle preview", () => {
     await expect(response.json()).resolves.toMatchObject({
       remainingWalletsNeeded: 18,
       availableWallets: 42,
-      maxSelectable: 18,
+      maxSelectable: 42,
       selectedCount: 15,
       selectedWallets: expect.arrayContaining([
         expect.objectContaining({ ownerName: "Member A" }),
@@ -160,6 +160,48 @@ describe("Team Wallet Pool raffle preview", () => {
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({
       error: "Only 10 team wallets are selectable right now.",
+    });
+  });
+
+  it("still offers team wallets once community winners fill every spot", async () => {
+    // Spots get held back for the team, so a raffle drawn to its full spot
+    // count is exactly when a fill is wanted — not when it should be blocked.
+    mocks.communityRows.mockResolvedValue(
+      Array.from({ length: 30 }, (_, index) => ({
+        addressHash: `community-${index}`,
+      })),
+    );
+
+    const response = await GET(new Request("https://example.test"), {
+      params: { org: "alpha", id: "110" },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      requiredWallets: 30,
+      communityWallets: 30,
+      remainingWalletsNeeded: 0,
+      availableWallets: 42,
+      maxSelectable: 42,
+      // Defaults to one rather than proposing the whole pool.
+      selectedCount: 1,
+    });
+  });
+
+  it("accepts a fill that takes the raffle past its spot count", async () => {
+    mocks.communityRows.mockResolvedValue(
+      Array.from({ length: 30 }, (_, index) => ({
+        addressHash: `community-${index}`,
+      })),
+    );
+
+    const response = await GET(new Request("https://example.test?count=5"), {
+      params: { org: "alpha", id: "110" },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      selectedCount: 5,
     });
   });
 
@@ -288,6 +330,42 @@ describe("Team Wallet Pool raffle reservation", () => {
     });
     expect(tx.teamWalletUsage.createMany.mock.calls[0]![0].data).toHaveLength(
       15,
+    );
+  });
+
+  it("reserves team wallets for a raffle already at its spot count", async () => {
+    // 30 spots, 30 community winners, and a fill on top: the team's own spots
+    // were held back from the raffle, so this is the normal case, not an error.
+    const tx = transactionClient(4);
+    mocks.communityRows.mockResolvedValue(
+      Array.from({ length: 30 }, (_, index) => ({
+        addressHash: `community-${index}`,
+      })),
+    );
+    const wallets = Array.from({ length: 4 }, (_, index) => ({
+      id: `wallet-${index + 1}`,
+      version: at.toISOString(),
+    }));
+
+    const response = await POST(
+      new Request("https://example.test", {
+        method: "POST",
+        body: JSON.stringify({
+          selectionMode: "ROUND_ROBIN",
+          count: 4,
+          wallets,
+        }),
+      }),
+      { params: { org: "alpha", id: "110" } },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      selected: 4,
+      remaining: 0,
+    });
+    expect(tx.teamWalletUsage.createMany.mock.calls[0]![0].data).toHaveLength(
+      4,
     );
   });
 
