@@ -338,7 +338,22 @@ export default async function ShareableRafflePage({
               </section>
             ) : null}
 
-            {raffle.status === "ENDED" && raffle.winners.length ? (
+            {raffle.status === "ENDED" &&
+            raffle.holdResults &&
+            !raffle.resultsPublishedAt ? (
+              <section className="kos-card p-5 sm:p-6">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-kos-muted">
+                  Results
+                </div>
+                <h2 className="mt-1 text-lg font-semibold">
+                  Results under review
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-kos-muted">
+                  The team is reviewing this draw. Final winners will appear
+                  here once the results are published.
+                </p>
+              </section>
+            ) : raffle.status === "ENDED" && raffle.winners.length ? (
               <section className="kos-card p-5 sm:p-6">
                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-kos-muted">
                   Results

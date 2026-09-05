@@ -41,7 +41,10 @@ export async function GET(
     );
     const id = parsePublicRaffleId(params.id);
     if (!id) {
-      return NextResponse.json({ error: "Invalid raffle id." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid raffle id." },
+        { status: 400 },
+      );
     }
     const source = await sourceRaffle(id, guildIds);
     if (!source) {
@@ -74,6 +77,7 @@ export async function GET(
         collectWallets: source.collectWallets,
         requireWallet: source.requireWallet,
         useRoleWeights: source.useRoleWeights,
+        holdResults: source.holdResults,
         walletChains: source.walletChains,
         bannerUrl: source.bannerUrl ?? "",
         externalUrl: source.externalUrl ?? "",
@@ -109,7 +113,10 @@ export async function POST(
     );
     const id = parsePublicRaffleId(params.id);
     if (!id) {
-      return NextResponse.json({ error: "Invalid raffle id." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid raffle id." },
+        { status: 400 },
+      );
     }
     const source = await sourceRaffle(id, guildIds);
     if (!source) {
@@ -139,7 +146,9 @@ export async function POST(
     }
 
     const fallbackSchedule = duplicateSchedule(source.startAt, source.endAt);
-    const startAt = body.startAt ? new Date(body.startAt) : fallbackSchedule.startAt;
+    const startAt = body.startAt
+      ? new Date(body.startAt)
+      : fallbackSchedule.startAt;
     const endAt = body.endAt ? new Date(body.endAt) : fallbackSchedule.endAt;
     if (
       Number.isNaN(startAt.getTime()) ||
@@ -153,7 +162,9 @@ export async function POST(
       );
     }
 
-    const requestedChannel = String(body.channelId ?? source.channelId ?? "").trim();
+    const requestedChannel = String(
+      body.channelId ?? source.channelId ?? "",
+    ).trim();
     if (!/^\d{5,25}$/u.test(requestedChannel)) {
       return NextResponse.json(
         { error: "Choose a valid raffle post channel." },
@@ -176,7 +187,9 @@ export async function POST(
           roleId: role.roleId,
           roleName: role.roleName,
         }));
-    const uniqueRoles = [...new Map(roles.map((role) => [role.roleId, role])).values()];
+    const uniqueRoles = [
+      ...new Map(roles.map((role) => [role.roleId, role])).values(),
+    ];
 
     const requestedTaskIds = Array.isArray(body.verificationTaskIds)
       ? (body.verificationTaskIds as unknown[]).filter(
@@ -204,9 +217,7 @@ export async function POST(
     }
 
     const walletChains = (
-      Array.isArray(body.walletChains)
-        ? body.walletChains
-        : source.walletChains
+      Array.isArray(body.walletChains) ? body.walletChains : source.walletChains
     ).filter((chain: string) => CHAINS.includes(chain)) as WalletChain[];
 
     const duplicate = await prisma.$transaction(async (tx) => {
@@ -258,7 +269,13 @@ export async function POST(
             "useRoleWeights" in body
               ? Boolean(body.useRoleWeights)
               : source.useRoleWeights,
-          walletChains: walletChains.length ? walletChains : source.walletChains,
+          holdResults:
+            "holdResults" in body
+              ? Boolean(body.holdResults)
+              : source.holdResults,
+          walletChains: walletChains.length
+            ? walletChains
+            : source.walletChains,
           bannerUrl:
             "bannerUrl" in body
               ? sanitizeHttpUrl(body.bannerUrl)

@@ -27,6 +27,7 @@ interface RaffleSummary {
   spots: number;
   entryCount: number | null;
   bannerUrl: string | null;
+  resultsPending?: boolean;
   entered: boolean;
   tasks: TaskRow[];
 }
@@ -325,8 +326,9 @@ function RaffleEntryCard({
           <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
             <div className="text-sm font-semibold">Raffle ended</div>
             <p className="mt-1 text-xs leading-5 text-kos-muted">
-              Entry is closed. You can still review the raffle steps and open
-              the public result page.
+              {raffle.resultsPending
+                ? "Entry is closed. The team is reviewing the draw before publishing the final result."
+                : "Entry is closed. You can still review the raffle steps and open the public result page."}
             </p>
           </div>
         ) : (
@@ -343,7 +345,11 @@ function RaffleEntryCard({
               })}
               className="text-xs text-kos-muted underline-offset-2 hover:text-kos-fg hover:underline"
             >
-              {ended ? "View results →" : "View public raffle page →"}
+              {ended
+                ? raffle.resultsPending
+                  ? "View raffle status →"
+                  : "View results →"
+                : "View public raffle page →"}
             </Link>
           </div>
         ) : null}

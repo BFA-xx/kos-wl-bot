@@ -41,6 +41,7 @@ export const Actions = {
   RaffleToggleMatch: "rf_match",
   RaffleToggleHide: "rf_hide",
   RaffleToggleWallet: "rf_wallet",
+  RaffleToggleResults: "rf_results",
   RaffleCyclePing: "rf_ping",
   RaffleMoreOptions: "rf_more",
   SubmitRaffleOptions: "rf_opts",

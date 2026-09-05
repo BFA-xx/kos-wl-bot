@@ -23,7 +23,7 @@ const STEPS: { title: string; body: string }[] = [
   },
   {
     title: "5 · End & pick winners",
-    body: "A raffle ends automatically at its end time, or hit End Now on the raffle page. Winners are drawn with a verifiable, cryptographically-committed random seed. Not happy? Reroll the whole pool or specific winners.",
+    body: "A raffle ends automatically at its end time, or hit End Now on the raffle page. Winners are drawn with a verifiable, cryptographically-committed random seed. For a team-reviewed draw, enable Hold results for team review: the team can reroll privately, then publish the final result when ready.",
   },
   {
     title: "6 · Collect winner wallets",
@@ -32,23 +32,44 @@ const STEPS: { title: string; body: string }[] = [
 ];
 
 const ROLES: { name: string; body: string }[] = [
-  { name: "Owner", body: "Full control, including transferring or deleting the org." },
-  { name: "Admin", body: "Everything except transfer/delete — run raffles, export wallets, manage members, branding." },
-  { name: "Moderator", body: "Run raffles day-to-day: create/edit/reroll/end + view data and export reports." },
-  { name: "Collab Manager", body: "For collab partners: create/edit raffles + view participants, analytics, reports." },
-  { name: "Viewer", body: "Read-only access to participants, wallets, analytics and reports." },
+  {
+    name: "Owner",
+    body: "Full control, including transferring or deleting the org.",
+  },
+  {
+    name: "Admin",
+    body: "Everything except transfer/delete — run raffles, export wallets, manage members, branding.",
+  },
+  {
+    name: "Moderator",
+    body: "Run raffles day-to-day: create/edit/reroll/end + view data and export reports.",
+  },
+  {
+    name: "Collab Manager",
+    body: "For collab partners: create/edit raffles + view participants, analytics, reports.",
+  },
+  {
+    name: "Viewer",
+    body: "Read-only access to participants, wallets, analytics and reports.",
+  },
 ];
 
 export default function SupportPage() {
   return (
     <>
-      <PageTitle title="Support & Guide" subtitle="Everything you need to run KOS for your community." />
+      <PageTitle
+        title="Support & Guide"
+        subtitle="Everything you need to run KOS for your community."
+      />
 
       <Card className="mb-5">
         <SectionTitle>Getting started</SectionTitle>
         <div className="grid gap-3 sm:grid-cols-2">
           {STEPS.map((s) => (
-            <div key={s.title} className="rounded-xl border border-kos-border bg-kos-panel/50 p-4">
+            <div
+              key={s.title}
+              className="rounded-xl border border-kos-border bg-kos-panel/50 p-4"
+            >
               <div className="text-sm font-semibold">{s.title}</div>
               <p className="mt-1 text-sm text-kos-muted">{s.body}</p>
             </div>
@@ -59,13 +80,18 @@ export default function SupportPage() {
       <Card className="mb-5">
         <SectionTitle>Team roles</SectionTitle>
         <p className="mb-3 text-sm text-kos-muted">
-          Invite teammates under <strong>Team</strong> (by Discord ID or a shareable link) and give
-          each the right role:
+          Invite teammates under <strong>Team</strong> (by Discord ID or a
+          shareable link) and give each the right role:
         </p>
         <div className="space-y-2">
           {ROLES.map((r) => (
-            <div key={r.name} className="flex flex-col gap-1 rounded-xl border border-kos-border bg-kos-panel/50 p-3 sm:flex-row sm:items-baseline sm:gap-3">
-              <span className="w-32 shrink-0 text-sm font-semibold">{r.name}</span>
+            <div
+              key={r.name}
+              className="flex flex-col gap-1 rounded-xl border border-kos-border bg-kos-panel/50 p-3 sm:flex-row sm:items-baseline sm:gap-3"
+            >
+              <span className="w-32 shrink-0 text-sm font-semibold">
+                {r.name}
+              </span>
               <span className="text-sm text-kos-muted">{r.body}</span>
             </div>
           ))}
@@ -81,9 +107,14 @@ export default function SupportPage() {
             <div>
               <div className="font-medium">Tips</div>
               <ul className="mt-1 list-disc space-y-1 pl-4 text-sm text-kos-muted">
-                <li>Winners must add a wallet to be included in the address export.</li>
+                <li>
+                  Winners must add a wallet to be included in the address
+                  export.
+                </li>
                 <li>Use the Blacklist to keep known alts/farmers out.</li>
-                <li>Every completed raffle has a verifiable proof under Reports.</li>
+                <li>
+                  Every completed raffle has a verifiable proof under Reports.
+                </li>
                 <li>Scheduled raffles ping @everyone when they go live.</li>
               </ul>
             </div>
@@ -92,7 +123,8 @@ export default function SupportPage() {
         <Card>
           <div className="font-medium">Need a hand?</div>
           <p className="mt-1 text-sm text-kos-muted">
-            Reach the KOS team by email, or DM the developer on X. We usually reply within a day.
+            Reach the KOS team by email, or DM the developer on X. We usually
+            reply within a day.
           </p>
           <SupportContact />
         </Card>

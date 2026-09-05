@@ -213,6 +213,7 @@ export async function POST(
         hideEntries: Boolean(b.hideEntries),
         requireWallet: Boolean(b.requireWallet),
         useRoleWeights: Boolean(b.useRoleWeights),
+        holdResults: Boolean(b.holdResults),
         collectWallets: b.collectWallets !== false,
         walletChains: walletChains.length ? walletChains : ["ETHEREUM"],
         bannerUrl: b.bannerUrl ? String(b.bannerUrl) : null,

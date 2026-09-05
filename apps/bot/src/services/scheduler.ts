@@ -17,6 +17,7 @@ import {
 } from "./raffleService.js";
 import {
   closeAndDraw,
+  publishRaffleResults,
   rerollWinners,
   type RerollMode,
 } from "./winnerService.js";
@@ -254,6 +255,7 @@ export class Scheduler {
       await this.processDeleteRequests();
       await this.publishDashboardRaffles();
       await this.processRerollRequests();
+      await this.processResultPublishRequests();
       await this.processEditRequests();
       await this.processCampaignLifecycle(now);
       await processVerificationControlRequests(
@@ -506,6 +508,43 @@ export class Scheduler {
         userIds: req.userIds,
       }).catch((err) =>
         logger.error({ err, raffleId: r.id }, "dashboard reroll failed"),
+      );
+    }
+  }
+
+  /** Publish a held raffle after the team has finished any private rerolls. */
+  private async processResultPublishRequests(): Promise<void> {
+    const pending = await prisma.raffle.findMany({
+      where: { resultsPublishRequestedAt: { not: null } },
+      orderBy: [{ resultsPublishRequestedAt: "asc" }, { id: "asc" }],
+      take: config.SCHEDULER_BATCH_SIZE,
+      select: { id: true, resultsPublishRequestedBy: true },
+    });
+    this.warnIfBatchIsFull(
+      "held raffle result publish requests",
+      pending.length,
+    );
+    for (const raffle of pending) {
+      // Clear first to match the other dashboard request queues. Publishing is
+      // itself idempotent through resultsPublishedAt.
+      await prisma.raffle
+        .update({
+          where: { id: raffle.id },
+          data: {
+            resultsPublishRequestedAt: null,
+            resultsPublishRequestedBy: null,
+          },
+        })
+        .catch(() => undefined);
+      await publishRaffleResults(
+        this.client,
+        raffle.id,
+        raffle.resultsPublishRequestedBy ?? "dashboard",
+      ).catch((err) =>
+        logger.error(
+          { err, raffleId: raffle.id },
+          "held raffle result publish failed",
+        ),
       );
     }
   }

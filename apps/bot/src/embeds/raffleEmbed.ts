@@ -24,6 +24,8 @@ export interface RaffleEmbedData {
   entryCount: number;
   hideEntries: boolean;
   useRoleWeights: boolean;
+  holdResults: boolean;
+  resultsPublishedAt: Date | null;
   bannerUrl: string | null;
   externalUrl: string | null;
   requirements: unknown;
@@ -67,6 +69,13 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
   if (externalUrl) head.push(`-# [Visit project ↗](${externalUrl})`);
   if (raffle.description) head.push("", raffle.description.slice(0, 1500));
   head.push("", `**Status** — ${statusBadge(raffle.status)}`, countdown);
+  if (
+    raffle.status === RaffleStatus.ENDED &&
+    raffle.holdResults &&
+    !raffle.resultsPublishedAt
+  ) {
+    head.push("", "🔒 **Results are under team review.**");
+  }
 
   const embed = new EmbedBuilder()
     .setColor(statusColor(raffle.status))
@@ -169,7 +178,9 @@ export function buildRaffleComponents(
       ? "Enter Giveaway"
       : raffle.status === RaffleStatus.UPCOMING
         ? "Not Started Yet"
-        : "Raffle Ended";
+        : raffle.holdResults && !raffle.resultsPublishedAt
+          ? "Results Under Review"
+          : "Raffle Ended";
   const rows: ActionRowBuilder<ButtonBuilder>[] = [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
@@ -229,7 +240,9 @@ export function buildRaffleComponents(
     for (const task of verifyTasks) {
       verifyRow.addComponents(
         new ButtonBuilder()
-          .setCustomId(buildId(Actions.VerifyLegacyTask, raffle.id, task.index, task.hash))
+          .setCustomId(
+            buildId(Actions.VerifyLegacyTask, raffle.id, task.index, task.hash),
+          )
           .setStyle(ButtonStyle.Primary)
           .setLabel(`Verify ${task.label}`.slice(0, 80)),
       );

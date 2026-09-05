@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { PrismaClient } from "@prisma/client";
-import { recordRaffleParticipant, removeRaffleParticipant } from "./raffles.js";
+import {
+  raffleResultsVisible,
+  recordRaffleParticipant,
+  removeRaffleParticipant,
+} from "./raffles.js";
 
 function fakeDatabase() {
   let entryCount = 0;
@@ -80,4 +84,22 @@ test("participant removal is idempotent and never underflows", async () => {
     { changed: false, entryCount: null },
   );
   assert.equal(fake.count(), 0);
+});
+
+test("held raffle results stay private until explicitly published", () => {
+  assert.equal(
+    raffleResultsVisible({ holdResults: true, resultsPublishedAt: null }),
+    false,
+  );
+  assert.equal(
+    raffleResultsVisible({
+      holdResults: true,
+      resultsPublishedAt: new Date("2026-09-05T22:30:00.000Z"),
+    }),
+    true,
+  );
+  assert.equal(
+    raffleResultsVisible({ holdResults: false, resultsPublishedAt: null }),
+    true,
+  );
 });

@@ -38,11 +38,17 @@ interface TeamWalletPreview {
 export function RaffleActions({
   raffleId,
   status,
+  holdResults = false,
+  resultsPublishedAt = null,
+  resultsPublishRequestedAt = null,
   canReleaseTeamWallets = false,
   winnerSheet = null,
 }: {
   raffleId: number;
   status: string;
+  holdResults?: boolean;
+  resultsPublishedAt?: string | null;
+  resultsPublishRequestedAt?: string | null;
   canReleaseTeamWallets?: boolean;
   winnerSheet?: WinnerSheetSummary | null;
 }) {
@@ -153,8 +159,30 @@ export function RaffleActions({
     setBusy(null);
     setMsg(
       res.ok
-        ? "Reroll queued — the bot will process it shortly."
+        ? holdResults && !resultsPublishedAt
+          ? "Private reroll queued — nothing has been announced."
+          : "Reroll queued — the bot will process it shortly."
         : "Reroll failed — raffle must be ENDED with spare entrants.",
+    );
+    router.refresh();
+  }
+
+  async function publishResults() {
+    if (
+      !confirm(
+        "Publish final raffle results? This notifies winners, posts the result, sends wallet prompts, and releases proof.",
+      )
+    )
+      return;
+    setBusy("publish");
+    setMsg(null);
+    const res = await fetch(api("/publish-results"), { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    setBusy(null);
+    setMsg(
+      res.ok
+        ? "Final results queued — the bot will publish them shortly."
+        : (body.error ?? "Final results could not be queued."),
     );
     router.refresh();
   }
@@ -272,7 +300,14 @@ export function RaffleActions({
   }
 
   const canRepost = canEdit && status === "CANCELLED";
-  const canShowTeamWalletFill = canFillTeamWallets && status === "ENDED";
+  const resultsPending = holdResults && !resultsPublishedAt;
+  const canPublishResults =
+    canEnd &&
+    status === "ENDED" &&
+    resultsPending &&
+    !resultsPublishRequestedAt;
+  const canShowTeamWalletFill =
+    canFillTeamWallets && status === "ENDED" && !resultsPending;
   const canShowTeamWalletRelease =
     canReleaseTeamWallets && status === "CANCELLED";
   // Community winners plus every team wallet reserved or about to be. This can
@@ -290,6 +325,7 @@ export function RaffleActions({
   );
   const nothing =
     !canEnd &&
+    !canPublishResults &&
     !canRepost &&
     !canReroll &&
     !canExportWallets &&
@@ -341,6 +377,15 @@ export function RaffleActions({
             {busy === "end" ? "Ending…" : "End Now & Draw"}
           </button>
         ) : null}
+        {canPublishResults ? (
+          <button
+            className="kos-btn-primary"
+            onClick={() => void publishResults()}
+            disabled={busy !== null}
+          >
+            {busy === "publish" ? "Publishing…" : "Publish final results"}
+          </button>
+        ) : null}
         {canShowTeamWalletFill ? (
           <button
             className="kos-btn-primary"
@@ -369,6 +414,14 @@ export function RaffleActions({
           </button>
         ) : null}
       </div>
+
+      {status === "ENDED" && resultsPending ? (
+        <p className="mt-3 text-sm text-amber-200">
+          {resultsPublishRequestedAt
+            ? "Publication is queued; the bot will release the final result shortly."
+            : "Results are private while the team reviews the draw. Rerolls stay private until publication."}
+        </p>
+      ) : null}
 
       {canExportWallets && (sheet || sheetError) ? (
         <div className="mt-3 space-y-2 text-sm">

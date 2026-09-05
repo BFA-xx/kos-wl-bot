@@ -42,6 +42,7 @@ interface DuplicateBlueprint {
   collectWallets: boolean;
   requireWallet: boolean;
   useRoleWeights: boolean;
+  holdResults: boolean;
   walletChains: string[];
   bannerUrl: string;
   externalUrl: string;
@@ -108,6 +109,7 @@ export function NewRaffleModal({
   const [collectWallets, setCollectWallets] = useState(true);
   const [requireWallet, setRequireWallet] = useState(false);
   const [useRoleWeights, setUseRoleWeights] = useState(false);
+  const [holdResults, setHoldResults] = useState(false);
   const [chains, setChains] = useState<string[]>(["ETHEREUM"]);
   const [bannerUrl, setBannerUrl] = useState(prefill?.bannerUrl ?? "");
   const [externalUrl, setExternalUrl] = useState(prefill?.externalUrl ?? "");
@@ -173,6 +175,7 @@ export function NewRaffleModal({
         setCollectWallets(blueprint.collectWallets);
         setRequireWallet(blueprint.requireWallet);
         setUseRoleWeights(blueprint.useRoleWeights);
+        setHoldResults(blueprint.holdResults);
         setChains(blueprint.walletChains);
         setBannerUrl(blueprint.bannerUrl);
         setExternalUrl(blueprint.externalUrl);
@@ -251,6 +254,7 @@ export function NewRaffleModal({
         collectWallets,
         requireWallet,
         useRoleWeights,
+        holdResults,
         walletChains: chains,
         bannerUrl,
         externalUrl,
@@ -701,7 +705,21 @@ export function NewRaffleModal({
                 />
                 Weighted draw
               </label>
+              <label className="flex min-h-11 items-center gap-2 rounded-xl border border-amber-400/20 bg-amber-500/[0.06] px-3 py-2.5 text-amber-100">
+                <input
+                  type="checkbox"
+                  checked={holdResults}
+                  onChange={(e) => setHoldResults(e.target.checked)}
+                />
+                Hold results for team review
+              </label>
             </div>
+            {holdResults ? (
+              <p className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
+                Winners are drawn privately at the end so the team can reroll
+                before publishing the final result.
+              </p>
+            ) : null}
             {useRoleWeights ? (
               <p className="rounded-2xl border border-blue-400/20 bg-blue-500/10 px-3 py-2 text-xs text-blue-100/90">
                 {weightedRoleCount > 0

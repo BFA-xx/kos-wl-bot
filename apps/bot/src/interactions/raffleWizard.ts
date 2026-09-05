@@ -20,7 +20,13 @@ import {
 import { prisma, RoleMatchMode, WalletChain } from "@kos/db";
 import { ALL_CHAINS, chainLabel } from "../utils/wallets.js";
 import { buildId, parseId, Actions } from "../utils/ids.js";
-import { stashPending, getPending, takePending, takeBanner, type PendingRaffle } from "../services/pendingRaffles.js";
+import {
+  stashPending,
+  getPending,
+  takePending,
+  takeBanner,
+  type PendingRaffle,
+} from "../services/pendingRaffles.js";
 import {
   createRaffle,
   publishRaffleMessage,
@@ -32,12 +38,20 @@ import type { EntryRequirements } from "../types.js";
 import { KOS } from "../theme.js";
 import { logger } from "../logger.js";
 
-const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement] as const;
+const TEXT_CHANNELS = [
+  ChannelType.GuildText,
+  ChannelType.GuildAnnouncement,
+] as const;
 
 /** Step 1 → 2: modal submitted; validate text, create a draft, show the panel. */
-export async function handleRaffleCreateModal(interaction: ModalSubmitInteraction) {
+export async function handleRaffleCreateModal(
+  interaction: ModalSubmitInteraction,
+) {
   if (!interaction.inGuild()) {
-    return interaction.reply({ content: "Raffles can only be created in a server.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "Raffles can only be created in a server.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   const projectName = interaction.fields.getTextInputValue("project").trim();
@@ -48,7 +62,10 @@ export async function handleRaffleCreateModal(interaction: ModalSubmitInteractio
 
   const spots = Number.parseInt(spotsRaw, 10);
   if (!Number.isFinite(spots) || spots < 1 || spots > 10000) {
-    return interaction.reply({ content: "WL spots must be a number between 1 and 10000.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "WL spots must be a number between 1 and 10000.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   const now = new Date();
@@ -61,13 +78,22 @@ export async function handleRaffleCreateModal(interaction: ModalSubmitInteractio
   }
   const endAt = resolveTime(endStr, startAt);
   if (!endAt) {
-    return interaction.reply({ content: "Couldn't read the end. Try `24h`, `2d`, or `2026-06-26 17:00`.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "Couldn't read the end. Try `24h`, `2d`, or `2026-06-26 17:00`.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
   if (endAt.getTime() <= startAt.getTime()) {
-    return interaction.reply({ content: "End must be after the start.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "End must be after the start.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
   if (endAt.getTime() <= now.getTime()) {
-    return interaction.reply({ content: "End must be in the future.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "End must be in the future.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   const guild = await prisma.guild.findUnique({
@@ -90,7 +116,8 @@ export async function handleRaffleCreateModal(interaction: ModalSubmitInteractio
     spots,
     startAt,
     endAt,
-    postChannelId: guild?.defaultRaffleChannelId ?? interaction.channelId ?? null,
+    postChannelId:
+      guild?.defaultRaffleChannelId ?? interaction.channelId ?? null,
     announceChannelId: guild?.defaultAnnounceChannelId ?? null,
     proofChannelId: guild?.defaultProofChannelId ?? null,
     roles: [],
@@ -99,6 +126,7 @@ export async function handleRaffleCreateModal(interaction: ModalSubmitInteractio
     collectWallets: true,
     hideEntries: false,
     requireWallet: false,
+    holdResults: false,
     startPing: "everyone",
     requirements: null,
     bannerUrl: takeBanner(interaction.user.id),
@@ -106,7 +134,10 @@ export async function handleRaffleCreateModal(interaction: ModalSubmitInteractio
   });
 
   const draft = getPending(nonce)!;
-  return interaction.reply({ ...buildPanel(nonce, draft), flags: MessageFlags.Ephemeral });
+  return interaction.reply({
+    ...buildPanel(nonce, draft),
+    flags: MessageFlags.Ephemeral,
+  });
 }
 
 /** A panel select (channel / role / chain) changed. */
@@ -157,7 +188,11 @@ export async function handleRaffleWizardButton(interaction: ButtonInteraction) {
 
   if (parsed.action === Actions.RaffleCancel) {
     takePending(nonce);
-    return interaction.update({ content: "Raffle setup cancelled.", embeds: [], components: [] });
+    return interaction.update({
+      content: "Raffle setup cancelled.",
+      embeds: [],
+      components: [],
+    });
   }
 
   const draft = getPending(nonce);
@@ -165,7 +200,9 @@ export async function handleRaffleWizardButton(interaction: ButtonInteraction) {
 
   if (parsed.action === Actions.RaffleToggleMatch) {
     draft.roleMatchMode =
-      draft.roleMatchMode === RoleMatchMode.ALL ? RoleMatchMode.ANY : RoleMatchMode.ALL;
+      draft.roleMatchMode === RoleMatchMode.ALL
+        ? RoleMatchMode.ANY
+        : RoleMatchMode.ALL;
     return interaction.update(buildPanel(nonce, draft));
   }
 
@@ -179,9 +216,18 @@ export async function handleRaffleWizardButton(interaction: ButtonInteraction) {
     return interaction.update(buildPanel(nonce, draft));
   }
 
+  if (parsed.action === Actions.RaffleToggleResults) {
+    draft.holdResults = !draft.holdResults;
+    return interaction.update(buildPanel(nonce, draft));
+  }
+
   if (parsed.action === Actions.RaffleCyclePing) {
     draft.startPing =
-      draft.startPing === "everyone" ? "here" : draft.startPing === "here" ? "none" : "everyone";
+      draft.startPing === "everyone"
+        ? "here"
+        : draft.startPing === "here"
+          ? "none"
+          : "everyone";
     return interaction.update(buildPanel(nonce, draft));
   }
 
@@ -195,9 +241,15 @@ export async function handleRaffleWizardButton(interaction: ButtonInteraction) {
 }
 
 /** Open the optional extras modal (banner, link, tasks, anti-alt). */
-async function showOptionsModal(interaction: ButtonInteraction, nonce: string, draft: PendingRaffle) {
+async function showOptionsModal(
+  interaction: ButtonInteraction,
+  nonce: string,
+  draft: PendingRaffle,
+) {
   const req = (draft.requirements ?? {}) as EntryRequirements;
-  const tasksText = (req.tasks ?? []).map((t) => `${t.label} | ${t.url}`).join("\n");
+  const tasksText = (req.tasks ?? [])
+    .map((t) => `${t.label} | ${t.url}`)
+    .join("\n");
 
   const modal = new ModalBuilder()
     .setCustomId(buildId(Actions.SubmitRaffleOptions, nonce))
@@ -237,7 +289,9 @@ async function showOptionsModal(interaction: ButtonInteraction, nonce: string, d
           .setStyle(TextInputStyle.Paragraph)
           .setRequired(false)
           .setValue(tasksText)
-          .setPlaceholder("https://x.com/ProjectX/status/123\nComment KUON under this post"),
+          .setPlaceholder(
+            "https://x.com/ProjectX/status/123\nComment KUON under this post",
+          ),
       ),
       row(
         new TextInputBuilder()
@@ -258,15 +312,22 @@ async function showOptionsModal(interaction: ButtonInteraction, nonce: string, d
 }
 
 /** Save the extras modal back into the draft. */
-export async function handleRaffleOptionsModal(interaction: ModalSubmitInteraction) {
+export async function handleRaffleOptionsModal(
+  interaction: ModalSubmitInteraction,
+) {
   const parsed = parseId(interaction.customId);
   const nonce = parsed?.args[0] ?? "";
   const draft = getPending(nonce);
   if (!draft) {
-    return interaction.reply({ content: "This setup expired. Run `/raffle create` again.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "This setup expired. Run `/raffle create` again.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
-  const description = interaction.fields.getTextInputValue("description").trim();
+  const description = interaction.fields
+    .getTextInputValue("description")
+    .trim();
   const banner = interaction.fields.getTextInputValue("banner").trim();
   const link = interaction.fields.getTextInputValue("link").trim();
   const tasksRaw = interaction.fields.getTextInputValue("tasks");
@@ -282,12 +343,16 @@ export async function handleRaffleOptionsModal(interaction: ModalSubmitInteracti
   draft.externalUrl = isHttpUrl(link) ? link : null;
 
   const tasks = parseTasks(tasksRaw);
-  const req: EntryRequirements = { ...((draft.requirements ?? {}) as EntryRequirements) };
+  const req: EntryRequirements = {
+    ...((draft.requirements ?? {}) as EntryRequirements),
+  };
   if (tasks.length) req.tasks = tasks;
   else delete req.tasks;
-  if (Number.isFinite(minAccount) && minAccount > 0) req.minAccountAgeDays = minAccount;
+  if (Number.isFinite(minAccount) && minAccount > 0)
+    req.minAccountAgeDays = minAccount;
   else delete req.minAccountAgeDays;
-  if (Number.isFinite(minServer) && minServer > 0) req.minServerAgeDays = minServer;
+  if (Number.isFinite(minServer) && minServer > 0)
+    req.minServerAgeDays = minServer;
   else delete req.minServerAgeDays;
   draft.requirements = Object.keys(req).length ? req : null;
 
@@ -297,7 +362,9 @@ export async function handleRaffleOptionsModal(interaction: ModalSubmitInteracti
     draft.bannerUrl ? "• Banner set" : null,
     draft.externalUrl ? "• Link set" : null,
     tasks.length ? `• ${tasks.length} task button(s)` : null,
-    req.minAccountAgeDays ? `• Min account age ${req.minAccountAgeDays}d` : null,
+    req.minAccountAgeDays
+      ? `• Min account age ${req.minAccountAgeDays}d`
+      : null,
     req.minServerAgeDays ? `• Min server age ${req.minServerAgeDays}d` : null,
     "",
     "Return to the setup panel above and click **Publish Raffle**.",
@@ -356,7 +423,8 @@ function parseTasks(raw: string): { label: string; url?: string }[] {
 
   const tweet = /(?:x|twitter)\.com\/([A-Za-z0-9_]+)\/status\/(\d+)/iu;
   const profile = /(?:x|twitter)\.com\/([A-Za-z0-9_]+)\/?(?:\?.*)?$/iu;
-  const discord = /(?:discord\.gg|discord(?:app)?\.com\/invite)\/[A-Za-z0-9-]+/iu;
+  const discord =
+    /(?:discord\.gg|discord(?:app)?\.com\/invite)\/[A-Za-z0-9-]+/iu;
 
   for (const line of (raw ?? "").split("\n")) {
     const trimmed = line.trim();
@@ -382,12 +450,18 @@ function parseTasks(raw: string): { label: string; url?: string }[] {
       const id = tw[2];
       addLink("Like", `https://twitter.com/intent/like?tweet_id=${id}`);
       addLink("Retweet", `https://twitter.com/intent/retweet?tweet_id=${id}`);
-      addLink(`Follow @${user}`, `https://twitter.com/intent/follow?screen_name=${user}`);
+      addLink(
+        `Follow @${user}`,
+        `https://twitter.com/intent/follow?screen_name=${user}`,
+      );
       continue;
     }
     const pr = profile.exec(value);
     if (pr && !/\/(home|search|explore|i)\b/iu.test(value)) {
-      addLink(label ?? `Follow @${pr[1]}`, `https://twitter.com/intent/follow?screen_name=${pr[1]}`);
+      addLink(
+        label ?? `Follow @${pr[1]}`,
+        `https://twitter.com/intent/follow?screen_name=${pr[1]}`,
+      );
       continue;
     }
     if (discord.test(value)) {
@@ -399,21 +473,33 @@ function parseTasks(raw: string): { label: string; url?: string }[] {
   return out;
 }
 
-async function publish(interaction: ButtonInteraction, nonce: string, draft: PendingRaffle) {
+async function publish(
+  interaction: ButtonInteraction,
+  nonce: string,
+  draft: PendingRaffle,
+) {
   if (!draft.postChannelId) {
-    return interaction.reply({ content: "Pick a channel to post the raffle in first.", flags: MessageFlags.Ephemeral });
+    return interaction.reply({
+      content: "Pick a channel to post the raffle in first.",
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   // Pre-flight: make sure we can actually post before creating anything, so we
   // never leave an orphaned raffle that failed to post.
-  const channel = await fetchTextChannel(interaction.client, draft.postChannelId);
+  const channel = await fetchTextChannel(
+    interaction.client,
+    draft.postChannelId,
+  );
   if (!channel) {
     return interaction.reply({
       content: `I can't see <#${draft.postChannelId}>. Pick a text channel I have access to, then Publish again.`,
       flags: MessageFlags.Ephemeral,
     });
   }
-  const me = channel.guild.members.me ?? (await channel.guild.members.fetchMe().catch(() => null));
+  const me =
+    channel.guild.members.me ??
+    (await channel.guild.members.fetchMe().catch(() => null));
   const missing = missingPostPermissions(channel, me);
   if (missing.length > 0) {
     return interaction.reply({
@@ -424,7 +510,11 @@ async function publish(interaction: ButtonInteraction, nonce: string, draft: Pen
     });
   }
 
-  await interaction.update({ content: "Creating raffle…", embeds: [], components: [] });
+  await interaction.update({
+    content: "Creating raffle…",
+    embeds: [],
+    components: [],
+  });
   takePending(nonce);
 
   try {
@@ -450,6 +540,7 @@ async function publish(interaction: ButtonInteraction, nonce: string, draft: Pen
       walletChains: draft.walletChains,
       hideEntries: draft.hideEntries,
       requireWallet: draft.requireWallet,
+      holdResults: draft.holdResults,
       startPing: draft.startPing,
       roles: draft.roles,
     });
@@ -468,11 +559,16 @@ async function publish(interaction: ButtonInteraction, nonce: string, draft: Pen
         header,
         `Status: **${raffle.status}** · Starts ${discordRelative(draft.startAt)} · Ends ${discordRelative(draft.endAt)}`,
         `Winners announced in <#${draft.announceChannelId ?? draft.postChannelId}>.`,
+        draft.holdResults
+          ? "Results: held for team review; use `/raffle reroll` before `/raffle publish-results`."
+          : "Results: published automatically when the raffle ends.",
       ].join("\n"),
     });
   } catch (err) {
     logger.error({ err }, "raffle publish failed");
-    return interaction.editReply({ content: "Something went wrong creating the raffle. Please try again." });
+    return interaction.editReply({
+      content: "Something went wrong creating the raffle. Please try again.",
+    });
   }
 }
 
@@ -491,8 +587,20 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
       ].join("\n"),
     )
     .addFields(
-      { name: "Post in", value: draft.postChannelId ? `<#${draft.postChannelId}>` : "_choose below_", inline: true },
-      { name: "Announce", value: draft.announceChannelId ? `<#${draft.announceChannelId}>` : "_= post channel_", inline: true },
+      {
+        name: "Post in",
+        value: draft.postChannelId
+          ? `<#${draft.postChannelId}>`
+          : "_choose below_",
+        inline: true,
+      },
+      {
+        name: "Announce",
+        value: draft.announceChannelId
+          ? `<#${draft.announceChannelId}>`
+          : "_= post channel_",
+        inline: true,
+      },
       {
         name: "Network(s)",
         value: draft.walletChains.map(chainLabel).join(", ") || "Ethereum",
@@ -500,12 +608,17 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
       },
       {
         name: "Eligible roles",
-        value: draft.roles.length ? draft.roles.map((r) => `<@&${r.roleId}>`).join(" ") : "Everyone",
+        value: draft.roles.length
+          ? draft.roles.map((r) => `<@&${r.roleId}>`).join(" ")
+          : "Everyone",
         inline: false,
       },
       {
         name: "Match mode",
-        value: draft.roleMatchMode === RoleMatchMode.ALL ? "Must hold **all** roles" : "**Any** role qualifies",
+        value:
+          draft.roleMatchMode === RoleMatchMode.ALL
+            ? "Must hold **all** roles"
+            : "**Any** role qualifies",
         inline: true,
       },
       {
@@ -542,12 +655,15 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
     .setPlaceholder("Eligible roles (none = everyone)")
     .setMinValues(0)
     .setMaxValues(5);
-  if (draft.roles.length) roleSelect.setDefaultRoles(draft.roles.map((r) => r.roleId));
+  if (draft.roles.length)
+    roleSelect.setDefaultRoles(draft.roles.map((r) => r.roleId));
 
   const toggleRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(buildId(Actions.RaffleToggleMatch, nonce))
-      .setLabel(draft.roleMatchMode === RoleMatchMode.ALL ? "Match: ALL" : "Match: ANY")
+      .setLabel(
+        draft.roleMatchMode === RoleMatchMode.ALL ? "Match: ALL" : "Match: ANY",
+      )
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(buildId(Actions.RaffleToggleHide, nonce))
@@ -556,7 +672,15 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
     new ButtonBuilder()
       .setCustomId(buildId(Actions.RaffleToggleWallet, nonce))
       .setLabel(draft.requireWallet ? "Wallet: Required" : "Wallet: Optional")
-      .setStyle(draft.requireWallet ? ButtonStyle.Success : ButtonStyle.Secondary),
+      .setStyle(
+        draft.requireWallet ? ButtonStyle.Success : ButtonStyle.Secondary,
+      ),
+    new ButtonBuilder()
+      .setCustomId(buildId(Actions.RaffleToggleResults, nonce))
+      .setLabel(draft.holdResults ? "Results: Held" : "Results: Auto")
+      .setStyle(
+        draft.holdResults ? ButtonStyle.Success : ButtonStyle.Secondary,
+      ),
     new ButtonBuilder()
       .setCustomId(buildId(Actions.RaffleCyclePing, nonce))
       .setLabel(pingLabel(draft.startPing))
@@ -582,8 +706,12 @@ function buildPanel(nonce: string, draft: PendingRaffle) {
   return {
     embeds: [embed],
     components: [
-      new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(postSelect),
-      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(chainsSelect),
+      new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
+        postSelect,
+      ),
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+        chainsSelect,
+      ),
       new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(roleSelect),
       toggleRow,
       actionRow,

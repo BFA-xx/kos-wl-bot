@@ -253,7 +253,17 @@ async function showEntries(ctx: Context): Promise<void> {
   }
   const entries = await prisma.participant.findMany({
     where: { userId: identity.legacyUserId },
-    include: { raffle: { select: { id: true, title: true, status: true } } },
+    include: {
+      raffle: {
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          holdResults: true,
+          resultsPublishedAt: true,
+        },
+      },
+    },
     orderBy: { enteredAt: "desc" },
     take: 10,
   });
@@ -270,6 +280,12 @@ async function showEntries(ctx: Context): Promise<void> {
       userId: identity.legacyUserId,
       replaced: false,
       raffleId: { in: entries.map((entry) => entry.raffle.id) },
+      raffle: {
+        OR: [
+          { holdResults: false },
+          { holdResults: true, resultsPublishedAt: { not: null } },
+        ],
+      },
     },
     select: { raffleId: true },
   });
@@ -293,9 +309,13 @@ async function showEntries(ctx: Context): Promise<void> {
       ...entries.map((entry) => {
         const outcome = won.has(entry.raffle.id)
           ? "🏆 won"
-          : entry.raffle.status === "ENDED"
-            ? "not selected"
-            : entry.raffle.status.toLowerCase();
+          : entry.raffle.status === "ENDED" &&
+              entry.raffle.holdResults &&
+              !entry.raffle.resultsPublishedAt
+            ? "results under review"
+            : entry.raffle.status === "ENDED"
+              ? "not selected"
+              : entry.raffle.status.toLowerCase();
         return `#${entry.raffle.id} ${escapeTelegramHtml(entry.raffle.title)} — ${outcome}`;
       }),
     ].join("\n"),

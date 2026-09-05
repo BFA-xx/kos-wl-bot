@@ -152,11 +152,24 @@ export async function recordWallet(params: {
     },
     select: {
       id: true,
-      raffle: { select: { guildId: true, walletChains: true } },
+      raffle: {
+        select: {
+          guildId: true,
+          walletChains: true,
+          holdResults: true,
+          resultsPublishedAt: true,
+        },
+      },
     },
   });
   if (!winner) {
     return { ok: false, error: "You are not a current winner of this raffle." };
+  }
+  if (winner.raffle.holdResults && !winner.raffle.resultsPublishedAt) {
+    return {
+      ok: false,
+      error: "The team is still reviewing this raffle's results.",
+    };
   }
   if (
     winner.raffle.walletChains.length > 0 &&

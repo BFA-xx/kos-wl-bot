@@ -33,6 +33,8 @@ export async function syncCollaborationState(
             select: {
               id: true,
               status: true,
+              holdResults: true,
+              resultsPublishedAt: true,
               walletChains: true,
               winners: {
                 where: { replaced: false },
@@ -55,6 +57,7 @@ export async function syncCollaborationState(
   const resolved = new Set<string>();
 
   for (const link of collaboration.raffles) {
+    if (link.raffle.holdResults && !link.raffle.resultsPublishedAt) continue;
     for (const winner of link.raffle.winners) {
       if (resolved.has(winner.userId)) continue;
       const current = existingByUser.get(winner.userId);
@@ -107,7 +110,9 @@ export async function syncCollaborationState(
   });
   const allEnded = collaboration.raffles.every(
     (link) =>
-      link.raffle.status === "ENDED" || link.raffle.status === "CANCELLED",
+      link.raffle.status === "CANCELLED" ||
+      (link.raffle.status === "ENDED" &&
+        (!link.raffle.holdResults || Boolean(link.raffle.resultsPublishedAt))),
   );
   const required = Math.max(collaboration.whitelistAllocation, wallets.length);
   const collected = wallets.filter(

@@ -23,7 +23,11 @@ import {
   getRaffle,
   getGuildStats,
 } from "../services/raffleService.js";
-import { closeAndDraw, rerollWinners } from "../services/winnerService.js";
+import {
+  closeAndDraw,
+  publishRaffleResults,
+  rerollWinners,
+} from "../services/winnerService.js";
 import { getWinnerWallets } from "../services/walletService.js";
 import { stashBanner } from "../services/pendingRaffles.js";
 import { buildId, Actions } from "../utils/ids.js";
@@ -113,6 +117,11 @@ export const raffleCommand: Command = {
             .setDescription(
               "Hide (true) or show (false) the entry count on the post",
             ),
+        )
+        .addBooleanOption((o) =>
+          o
+            .setName("hold_results")
+            .setDescription("Hold results for team review before publishing"),
         ),
     )
     // ---- delete ----
@@ -172,6 +181,19 @@ export const raffleCommand: Command = {
             .setName("count")
             .setDescription("How many to replace (multiple mode)")
             .setMinValue(1),
+        ),
+    )
+    // ---- publish results ----
+    .addSubcommand((sub) =>
+      sub
+        .setName("publish-results")
+        .setDescription("Publish the final results of a held raffle")
+        .addIntegerOption((o) =>
+          o
+            .setName("id")
+            .setDescription("Raffle ID")
+            .setRequired(true)
+            .setAutocomplete(true),
         ),
     )
     // ---- list ----
@@ -259,6 +281,8 @@ export const raffleCommand: Command = {
         return handleEnd(interaction);
       case "reroll":
         return handleReroll(interaction);
+      case "publish-results":
+        return handlePublishResults(interaction);
       case "list":
         return handleList(interaction);
       case "stats":
@@ -398,6 +422,7 @@ async function handleEdit(interaction: ChatInputCommandInteraction) {
   const banner = o.getAttachment("banner");
 
   const hideEntries = o.getBoolean("hide_entries");
+  const holdResults = o.getBoolean("hold_results");
   if (project) data.projectName = project;
   if (title) data.title = title;
   if (description !== null) data.description = description || null;
@@ -413,6 +438,7 @@ async function handleEdit(interaction: ChatInputCommandInteraction) {
     }
   }
   if (hideEntries !== null) data.hideEntries = hideEntries;
+  if (holdResults !== null) data.holdResults = holdResults;
 
   // Time edits: recompute start/end and the live status so the schedule stays
   // correct (e.g. moving start to the future flips a LIVE raffle to UPCOMING).
@@ -489,7 +515,9 @@ async function handleEnd(interaction: ChatInputCommandInteraction) {
     );
   }
   await interaction.editReply(
-    `${KOS.emoji.check} Ended raffle #${id} and drew winners. Proof delivered.`,
+    raffle.holdResults
+      ? `${KOS.emoji.check} Ended raffle #${id} and drew provisional winners privately. Use \`/raffle reroll\` if needed, then \`/raffle publish-results\`.`
+      : `${KOS.emoji.check} Ended raffle #${id} and drew winners. Proof delivered.`,
   );
 }
 
@@ -524,10 +552,35 @@ async function handleReroll(interaction: ChatInputCommandInteraction) {
     );
   }
   await interaction.editReply(
-    `${KOS.emoji.check} Rerolled ${result.replaced.length} winner(s). New: ${
+    `${KOS.emoji.check} ${raffle.holdResults && !raffle.resultsPublishedAt ? "Privately rerolled" : "Rerolled"} ${result.replaced.length} winner(s). New: ${
       result.added.map((w) => `<@${w.userId}>`).join(", ") ||
       "none (pool exhausted)"
     }`,
+  );
+}
+
+async function handlePublishResults(interaction: ChatInputCommandInteraction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const id = interaction.options.getInteger("id", true);
+  const raffle = await getRaffle(id);
+  if (!raffle || raffle.guildId !== interaction.guildId) {
+    return interaction.editReply("Raffle not found.");
+  }
+  if (raffle.status !== RaffleStatus.ENDED || !raffle.holdResults) {
+    return interaction.editReply("That raffle is not a held ended raffle.");
+  }
+  if (raffle.resultsPublishedAt) {
+    return interaction.editReply("Final results have already been published.");
+  }
+  const published = await publishRaffleResults(
+    interaction.client,
+    id,
+    interaction.user.id,
+  );
+  await interaction.editReply(
+    published
+      ? `${KOS.emoji.check} Published final results for raffle #${id}.`
+      : "Results could not be published — another worker may have handled it.",
   );
 }
 

@@ -37,6 +37,8 @@ const raffleSelect = {
   startAt: true,
   endAt: true,
   endedAt: true,
+  holdResults: true,
+  resultsPublishedAt: true,
   createdById: true,
   externalUrl: true,
   walletChains: true,
@@ -65,6 +67,15 @@ async function loadHistoricalRaffles(guildIds: string[]) {
     where: {
       guildId: { in: guildIds },
       status: { in: ["ENDED", "CANCELLED"] },
+      OR: [
+        { status: "CANCELLED" },
+        { status: "ENDED", holdResults: false },
+        {
+          status: "ENDED",
+          holdResults: true,
+          resultsPublishedAt: { not: null },
+        },
+      ],
       collaborationLink: { is: null },
     },
     orderBy: { id: "asc" },

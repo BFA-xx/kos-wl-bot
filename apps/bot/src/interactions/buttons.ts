@@ -380,11 +380,22 @@ async function handleOpenWalletForm(
 ) {
   const raffle = await prisma.raffle.findUnique({
     where: { id: raffleId },
-    select: { walletChains: true, projectName: true },
+    select: {
+      walletChains: true,
+      projectName: true,
+      holdResults: true,
+      resultsPublishedAt: true,
+    },
   });
   if (!raffle) {
     return interaction.reply({
       content: "This raffle no longer exists.",
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+  if (raffle.holdResults && !raffle.resultsPublishedAt) {
+    return interaction.reply({
+      content: "The team is still reviewing this raffle's results.",
       flags: MessageFlags.Ephemeral,
     });
   }

@@ -30,6 +30,7 @@ export interface PendingRaffle {
   collectWallets: boolean;
   hideEntries: boolean;
   requireWallet: boolean;
+  holdResults: boolean;
   startPing: string;
   requirements: EntryRequirements | null;
   bannerUrl: string | null;

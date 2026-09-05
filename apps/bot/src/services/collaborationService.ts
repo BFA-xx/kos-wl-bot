@@ -448,6 +448,8 @@ async function syncCollaboration(collaborationId: string): Promise<void> {
             select: {
               id: true,
               status: true,
+              holdResults: true,
+              resultsPublishedAt: true,
               walletChains: true,
               winners: {
                 where: { replaced: false },
@@ -468,6 +470,7 @@ async function syncCollaboration(collaborationId: string): Promise<void> {
   );
   const resolved = new Set<string>();
   for (const link of collaboration.raffles) {
+    if (link.raffle.holdResults && !link.raffle.resultsPublishedAt) continue;
     for (const winner of link.raffle.winners) {
       if (resolved.has(winner.userId)) continue;
       const current = existingByUser.get(winner.userId);
@@ -518,8 +521,11 @@ async function syncCollaboration(collaborationId: string): Promise<void> {
     where: { collaborationId: collaboration.id },
     select: { status: true },
   });
-  const allEnded = collaboration.raffles.every((link) =>
-    ["ENDED", "CANCELLED"].includes(link.raffle.status),
+  const allEnded = collaboration.raffles.every(
+    (link) =>
+      link.raffle.status === "CANCELLED" ||
+      (link.raffle.status === "ENDED" &&
+        (!link.raffle.holdResults || Boolean(link.raffle.resultsPublishedAt))),
   );
   const required = Math.max(collaboration.whitelistAllocation, wallets.length);
   const collected = wallets.filter(

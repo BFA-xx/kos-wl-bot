@@ -38,8 +38,8 @@ interface DrawnWinner {
 
 /**
  * Close a raffle and draw winners. Idempotent: if the raffle is already
- * ENDED/CANCELLED it does nothing. Runs the full completion pipeline:
- * draw → persist → announce → wallet DMs → proof.
+ * ENDED/CANCELLED it does nothing. Held raffles stop after the private draw;
+ * standard raffles continue through the result-publishing pipeline.
  */
 export async function closeAndDraw(
   client: Client,
@@ -130,28 +130,6 @@ export async function closeAndDraw(
           participantId: w.participantId,
         })),
       });
-      const reward = await tx.kosRewardDefinition.findUnique({
-        where: { event: "RAFFLE_WON" },
-      });
-      if (reward?.enabled) {
-        const identities = await tx.kosIdentity.findMany({
-          where: { legacyUserId: { in: drawn.map((winner) => winner.userId) } },
-          select: { id: true, legacyUserId: true },
-        });
-        if (identities.length) {
-          await tx.kosPointTransaction.createMany({
-            data: identities.map((identity) => ({
-              identityId: identity.id,
-              event: "RAFFLE_WON",
-              amount: reward.points,
-              reason: `Won KOS raffle #${raffleId}`,
-              source: "kos_raffle_winner",
-              referenceId: `${raffleId}:${identity.legacyUserId}`,
-            })),
-            skipDuplicates: true,
-          });
-        }
-      }
     }
     return true;
   });
@@ -174,11 +152,105 @@ export async function closeAndDraw(
       drawSeedHash: hash,
       spots: raffle.spots,
       weighted: raffle.useRoleWeights,
+      heldForReview: raffle.holdResults,
       totalWeight: pool.reduce((sum, p) => sum + Math.max(1, p.weight), 0),
     },
   });
 
-  const eventMarker = drawnAt.toISOString();
+  // Lock the entry controls immediately. A held raffle shows that its result is
+  // under team review without exposing the provisional winners.
+  await refreshRaffleMessage(client, raffleId).catch(() => undefined);
+  if (raffle.holdResults) {
+    await audit({
+      guildId: raffle.guildId,
+      raffleId,
+      category: LogCategory.WINNER,
+      action: "RAFFLE_RESULTS_HELD",
+      message: "Provisional winners drawn and held for team review",
+      actorId: actorId ?? null,
+    });
+    return true;
+  }
+
+  await publishRaffleResults(client, raffleId, actorId);
+  return true;
+}
+
+/**
+ * Release an ended raffle's current winners to every member-facing surface.
+ * The DB claim makes this idempotent, so scheduler retries or repeated command
+ * clicks cannot publish duplicate announcements.
+ */
+export async function publishRaffleResults(
+  client: Client,
+  raffleId: number,
+  actorId?: string,
+): Promise<boolean> {
+  const raffle = await getRaffle(raffleId);
+  if (!raffle || raffle.status !== RaffleStatus.ENDED) return false;
+
+  const publishedAt = new Date();
+  const winners = await prisma.$transaction(async (tx) => {
+    const transition = await tx.raffle.updateMany({
+      where: {
+        id: raffleId,
+        status: RaffleStatus.ENDED,
+        resultsPublishedAt: null,
+      },
+      data: {
+        resultsPublishedAt: publishedAt,
+        resultsPublishRequestedAt: null,
+        resultsPublishRequestedBy: null,
+      },
+    });
+    if (transition.count === 0) return null;
+
+    const activeWinners = await tx.winner.findMany({
+      where: { raffleId, replaced: false },
+      orderBy: { position: "asc" },
+      select: { userId: true, username: true },
+    });
+    const reward = await tx.kosRewardDefinition.findUnique({
+      where: { event: "RAFFLE_WON" },
+    });
+    if (reward?.enabled && activeWinners.length > 0) {
+      const identities = await tx.kosIdentity.findMany({
+        where: {
+          legacyUserId: {
+            in: activeWinners.map((winner) => winner.userId),
+          },
+        },
+        select: { id: true, legacyUserId: true },
+      });
+      if (identities.length > 0) {
+        await tx.kosPointTransaction.createMany({
+          data: identities.map((identity) => ({
+            identityId: identity.id,
+            event: "RAFFLE_WON",
+            amount: reward.points,
+            reason: `Won KOS raffle #${raffleId}`,
+            source: "kos_raffle_winner",
+            referenceId: `${raffleId}:${identity.legacyUserId}`,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+    return activeWinners;
+  });
+  if (!winners) return false;
+
+  await audit({
+    guildId: raffle.guildId,
+    raffleId,
+    category: LogCategory.WINNER,
+    action: "RAFFLE_RESULTS_PUBLISHED",
+    message: `Published ${winners.length} final winner(s)`,
+    actorId: actorId ?? null,
+    metadata: { heldForReview: raffle.holdResults },
+  });
+
+  const eventMarker = publishedAt.toISOString();
   await enqueueTelegramRaffleEvent(prisma, {
     raffleId,
     event: "RAFFLE_COMPLETED",
@@ -194,26 +266,30 @@ export async function closeAndDraw(
     logger.warn({ err, raffleId }, "Telegram winner event queue failed"),
   );
 
+  const participants = await prisma.participant.findMany({
+    where: { raffleId },
+    select: { userId: true },
+  });
   // Web-parity notifications: winners get a WIN, other entrants a RESULT.
   await notifyRaffleResults(
     raffleId,
     raffle.guildId,
     raffle.projectName,
-    drawn,
+    winners,
     participants,
   ).catch((err) =>
     logger.warn({ err, raffleId }, "result notifications failed"),
   );
 
-  // Lock the live embed (buttons disabled, status ENDED).
+  // Replace the held-review message, if any, with the final ended state.
   await refreshRaffleMessage(client, raffleId).catch(() => undefined);
 
   // Announce winners.
-  const messageLink = await announceWinners(client, raffleId, drawn);
+  const messageLink = await announceWinners(client, raffleId, winners);
 
   // Wallet collection DMs.
-  if (raffle.collectWallets && drawn.length > 0) {
-    await dmWinnersForWallets(client, raffle, drawn).catch((err) =>
+  if (raffle.collectWallets && winners.length > 0) {
+    await dmWinnersForWallets(client, raffle, winners).catch((err) =>
       logger.warn({ err, raffleId }, "wallet DM step failed"),
     );
   }
@@ -414,29 +490,31 @@ export async function rerollWinners(
           fromReroll: true,
         },
       });
-      const identity = await tx.kosIdentity.findUnique({
-        where: { legacyUserId: repl.userId },
-        select: { id: true },
-      });
-      const reward = identity
-        ? await tx.kosRewardDefinition.findUnique({
-            where: { event: "RAFFLE_WON" },
-          })
-        : null;
-      if (identity && reward?.enabled) {
-        await tx.kosPointTransaction.createMany({
-          data: [
-            {
-              identityId: identity.id,
-              event: "RAFFLE_WON",
-              amount: reward.points,
-              reason: `Won KOS raffle #${raffleId} by reroll`,
-              source: "kos_raffle_winner",
-              referenceId: `${raffleId}:${repl.userId}`,
-            },
-          ],
-          skipDuplicates: true,
+      if (raffle.resultsPublishedAt) {
+        const identity = await tx.kosIdentity.findUnique({
+          where: { legacyUserId: repl.userId },
+          select: { id: true },
         });
+        const reward = identity
+          ? await tx.kosRewardDefinition.findUnique({
+              where: { event: "RAFFLE_WON" },
+            })
+          : null;
+        if (identity && reward?.enabled) {
+          await tx.kosPointTransaction.createMany({
+            data: [
+              {
+                identityId: identity.id,
+                event: "RAFFLE_WON",
+                amount: reward.points,
+                reason: `Won KOS raffle #${raffleId} by reroll`,
+                source: "kos_raffle_winner",
+                referenceId: `${raffleId}:${repl.userId}`,
+              },
+            ],
+            skipDuplicates: true,
+          });
+        }
       }
       added.push({ userId: repl.userId, username: repl.username });
     }
@@ -462,12 +540,13 @@ export async function rerollWinners(
       removed: replaced.map((w) => w.userId),
       added: added.map((w) => w.userId),
       weighted: raffle.useRoleWeights,
+      resultsPublished: Boolean(raffle.resultsPublishedAt),
       totalWeight: pool.reduce((sum, p) => sum + Math.max(1, p.weight), 0),
     },
   });
 
   // Notify freshly drawn replacement winners on the web too.
-  if (added.length > 0) {
+  if (raffle.resultsPublishedAt && added.length > 0) {
     await notifyRaffleResults(
       raffleId,
       raffle.guildId,
@@ -480,7 +559,7 @@ export async function rerollWinners(
   }
 
   // Announce reroll + wallet DM new winners + refresh proof.
-  if (added.length > 0) {
+  if (raffle.resultsPublishedAt && added.length > 0) {
     const channelId = raffle.announceChannelId ?? raffle.channelId;
     const channel = channelId
       ? await fetchTextChannel(client, channelId)
@@ -500,9 +579,11 @@ export async function rerollWinners(
     }
   }
 
-  await generateAndDeliverProof(client, raffleId, null).catch((err) =>
-    logger.warn({ err, raffleId }, "proof refresh after reroll failed"),
-  );
+  if (raffle.resultsPublishedAt) {
+    await generateAndDeliverProof(client, raffleId, null).catch((err) =>
+      logger.warn({ err, raffleId }, "proof refresh after reroll failed"),
+    );
+  }
 
   return {
     replaced: replaced.map((w) => ({

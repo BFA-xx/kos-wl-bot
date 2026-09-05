@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { raffleResultsVisible } from "@kos/db";
 import { prisma } from "@/lib/db";
 import { PUBLIC_RAFFLE_STATUSES } from "@/lib/raffle-share";
 
@@ -38,6 +39,10 @@ export const getPublicRaffle = cache(async (id: number) => {
     },
   });
   if (!raffle) return null;
+
+  if (!raffleResultsVisible(raffle)) {
+    raffle.winners = [];
+  }
 
   const organization = await prisma.organization.findFirst({
     where: {

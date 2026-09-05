@@ -97,6 +97,7 @@ export async function PATCH(
     if ("hideEntries" in b) data.hideEntries = Boolean(b.hideEntries);
     if ("requireWallet" in b) data.requireWallet = Boolean(b.requireWallet);
     if ("useRoleWeights" in b) data.useRoleWeights = Boolean(b.useRoleWeights);
+    if ("holdResults" in b) data.holdResults = Boolean(b.holdResults);
     if (["everyone", "here", "none"].includes(b.startPing))
       data.startPing = b.startPing;
     if (b.roleMatchMode === "ALL" || b.roleMatchMode === "ANY")

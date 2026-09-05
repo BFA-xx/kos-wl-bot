@@ -154,6 +154,7 @@ export default async function RaffleDetailPage({
                 hideEntries: raffle.hideEntries,
                 requireWallet: raffle.requireWallet,
                 useRoleWeights: raffle.useRoleWeights,
+                holdResults: raffle.holdResults,
                 startPing: raffle.startPing,
                 roleMatchMode: raffle.roleMatchMode,
                 walletChains: raffle.walletChains,
@@ -400,9 +401,22 @@ export default async function RaffleDetailPage({
       ) : null}
 
       <div className="mt-4">
+        {raffle.status === "ENDED" &&
+        raffle.holdResults &&
+        !raffle.resultsPublishedAt ? (
+          <div className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-500/[0.08] px-4 py-3 text-sm text-amber-100">
+            Results are held for team review. You can reroll privately, then
+            publish the final results when ready.
+          </div>
+        ) : null}
         <RaffleActions
           raffleId={raffle.id}
           status={raffle.status}
+          holdResults={raffle.holdResults}
+          resultsPublishedAt={raffle.resultsPublishedAt?.toISOString() ?? null}
+          resultsPublishRequestedAt={
+            raffle.resultsPublishRequestedAt?.toISOString() ?? null
+          }
           winnerSheet={winnerSheet}
           canReleaseTeamWallets={
             (access.isOwner || access.member?.role.name === "Admin") &&

@@ -262,6 +262,14 @@ model Raffle {
   /// at entry and the final draw uses the weighted verifiable sampler.
   useRoleWeights Boolean @default(false)
 
+  /// Draw winners at close, but keep them private until a team member publishes.
+  holdResults               Boolean   @default(false)
+  /// Set once the final winners have been released to members and integrations.
+  resultsPublishedAt        DateTime?
+  /// Dashboard-to-bot request for publishing held results.
+  resultsPublishRequestedAt DateTime?
+  resultsPublishRequestedBy String?
+
   entryCount Int @default(0)
 
   /// When true, the live embed hides the entry count / entrant list.
@@ -312,6 +320,7 @@ model Raffle {
   @@index([guildId, status])
   @@index([status, endAt])
   @@index([status, startAt])
+  @@index([resultsPublishRequestedAt])
   @@map("raffles")
 }
 

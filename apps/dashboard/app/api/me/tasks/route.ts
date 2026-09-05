@@ -82,6 +82,8 @@ export async function GET(req: NextRequest) {
         spots: true,
         entryCount: true,
         hideEntries: true,
+        holdResults: true,
+        resultsPublishedAt: true,
         bannerUrl: true,
         requirements: true,
         participants: {
@@ -182,6 +184,9 @@ export async function GET(req: NextRequest) {
         spots: raffle.spots,
         entryCount: raffle.hideEntries ? null : raffle.entryCount,
         bannerUrl: raffle.bannerUrl,
+        resultsPending: Boolean(
+          raffle.holdResults && !raffle.resultsPublishedAt,
+        ),
         entered: raffle.participants.length > 0,
         enteredAt: raffle.participants[0]?.enteredAt ?? null,
         tasks: [

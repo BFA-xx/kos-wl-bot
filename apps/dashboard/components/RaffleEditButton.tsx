@@ -27,6 +27,7 @@ export interface EditableRaffle {
   hideEntries: boolean;
   requireWallet: boolean;
   useRoleWeights: boolean;
+  holdResults: boolean;
   startPing: string;
   roleMatchMode: string;
   walletChains: string[];
@@ -94,6 +95,7 @@ function EditModal({
   const [hideEntries, setHideEntries] = useState(raffle.hideEntries);
   const [requireWallet, setRequireWallet] = useState(raffle.requireWallet);
   const [useRoleWeights, setUseRoleWeights] = useState(raffle.useRoleWeights);
+  const [holdResults, setHoldResults] = useState(raffle.holdResults);
   const [startPing, setStartPing] = useState(raffle.startPing);
   const [roleMatchMode, setRoleMatchMode] = useState(raffle.roleMatchMode);
   const [chains, setChains] = useState<string[]>(raffle.walletChains);
@@ -157,6 +159,7 @@ function EditModal({
         hideEntries,
         requireWallet,
         useRoleWeights,
+        holdResults,
         startPing,
         roleMatchMode,
         walletChains: chains,
@@ -493,7 +496,21 @@ function EditModal({
                 />{" "}
                 Weighted draw
               </label>
+              <label className="flex min-h-11 items-center gap-2 rounded-xl border border-amber-400/20 bg-amber-500/[0.06] px-3 py-2.5 text-amber-100">
+                <input
+                  type="checkbox"
+                  checked={holdResults}
+                  onChange={(e) => setHoldResults(e.target.checked)}
+                />{" "}
+                Hold results for team review
+              </label>
             </div>
+            {holdResults ? (
+              <p className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
+                The raffle will draw winners privately when it ends. A team
+                member can reroll before publishing the final result.
+              </p>
+            ) : null}
             {useRoleWeights ? (
               <p className="rounded-2xl border border-blue-400/20 bg-blue-500/10 px-3 py-2 text-xs text-blue-100/90">
                 {weightedRoleCount > 0

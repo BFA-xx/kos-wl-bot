@@ -17,6 +17,14 @@ export interface RaffleParticipantMutation {
   entryCount: number | null;
 }
 
+/** Held winners stay private until the team has explicitly published them. */
+export function raffleResultsVisible(raffle: {
+  holdResults: boolean;
+  resultsPublishedAt: Date | null;
+}): boolean {
+  return !raffle.holdResults || raffle.resultsPublishedAt !== null;
+}
+
 /**
  * The authoritative participant insert and counter mutation shared by every
  * interaction surface. Provider adapters own eligibility and side effects.
