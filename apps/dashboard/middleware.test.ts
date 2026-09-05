@@ -45,6 +45,29 @@ describe("dashboard middleware integration boundaries", () => {
     expect(response.status).toBe(401);
   });
 
+  // The Discord bot is a server with no kos_session cookie. Gated here,
+  // /raffle export could never reach the dashboard to build a winner sheet.
+  it("passes the bot's winner-sheet call to its bearer-token route", async () => {
+    const response = await middleware(
+      new NextRequest("https://raffle.koslabs.app/api/internal/winner-sheet", {
+        method: "POST",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("still gates the session-authenticated sheet route", async () => {
+    // The dashboard's own per-raffle sheet endpoint identifies the user from
+    // their session and must stay behind it.
+    const response = await middleware(
+      new NextRequest("https://raffle.koslabs.app/api/kos/raffles/12/sheet"),
+    );
+
+    expect(response.status).toBe(401);
+  });
+
   it("keeps unrelated APIs behind dashboard session auth", async () => {
     const response = await middleware(
       new NextRequest("https://raffle.koslabs.app/api/kos/overview"),
