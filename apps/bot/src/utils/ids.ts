@@ -90,4 +90,6 @@ export const Actions = {
   TeamWalletMode: "twf_mode",
   TeamWalletConfirm: "twf_ok",
   TeamWalletCancel: "twf_x",
+  TeamWalletSetOpen: "twf_set",
+  TeamWalletSetSubmit: "twf_setn",
 } as const;

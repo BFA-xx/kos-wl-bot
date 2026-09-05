@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildId } from "../utils/ids.js";
 import {
+  buildCountModal,
   clampCount,
   decodeState,
   encodeState,
   isTeamWalletFillAction,
+  parseTypedCount,
 } from "./teamWalletFill.js";
 
 test("panel state survives a custom-id round trip", () => {
@@ -48,4 +50,44 @@ test("claims only its own component actions", () => {
   assert.ok(!isTeamWalletFillAction("enter"));
   assert.ok(!isTeamWalletFillAction("v_start"));
   assert.ok(!isTeamWalletFillAction("rf_pub"));
+});
+
+test("accepts a typed count and rejects anything that is not one", () => {
+  assert.equal(parseTypedCount("61"), 61);
+  assert.equal(parseTypedCount("  7 "), 7, "surrounding space is fine");
+  assert.equal(
+    parseTypedCount("1,200"),
+    1200,
+    "thousands separators tolerated",
+  );
+  assert.equal(
+    parseTypedCount("0"),
+    0,
+    "zero parses; clamping decides its fate",
+  );
+
+  assert.equal(parseTypedCount(""), null);
+  assert.equal(parseTypedCount("abc"), null);
+  assert.equal(parseTypedCount("5.5"), null, "not a whole number");
+  assert.equal(parseTypedCount("-3"), null, "negatives are not digits");
+  assert.equal(parseTypedCount("1e3"), null, "no exponent notation");
+  assert.equal(
+    parseTypedCount("999999"),
+    null,
+    "beyond the field's max length",
+  );
+});
+
+test("a typed number over availability is clamped, not rejected", () => {
+  // Typing 500 into a pool of 62 should fill 62 rather than erroring.
+  assert.equal(clampCount(parseTypedCount("500")!, 62), 62);
+});
+
+test("the count modal round-trips its panel state", () => {
+  const state = { raffleId: 186, count: 61, mode: "RANDOM" as const };
+  const modal = buildCountModal(state).toJSON();
+  const args = modal.custom_id.split(":").slice(2);
+  assert.deepEqual(decodeState(args), state);
+  assert.ok(modal.custom_id.length <= 100);
+  assert.equal(modal.title.length <= 45, true);
 });

@@ -4,9 +4,13 @@ import {
   ButtonStyle,
   EmbedBuilder,
   MessageFlags,
+  ModalBuilder,
   StringSelectMenuBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
+  type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
 } from "discord.js";
 import { KOS } from "../theme.js";
@@ -145,7 +149,9 @@ export function buildFillComponents(preview: FillPreview, count: number) {
       ),
   );
 
-  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+  // Adjusters and the commit sit on separate rows so Reserve is never a
+  // neighbouring click to +1 when the count is large.
+  const adjustRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(buildId(Actions.TeamWalletDec, ...state))
       .setLabel("−1")
@@ -158,9 +164,16 @@ export function buildFillComponents(preview: FillPreview, count: number) {
       .setDisabled(atCeiling),
     new ButtonBuilder()
       .setCustomId(buildId(Actions.TeamWalletMax, ...state))
-      .setLabel("Max")
+      .setLabel(`Max (${preview.maxSelectable})`)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(atCeiling),
+    new ButtonBuilder()
+      .setCustomId(buildId(Actions.TeamWalletSetOpen, ...state))
+      .setLabel("Set number…")
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  const commitRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(buildId(Actions.TeamWalletConfirm, ...state))
       .setLabel(`Reserve ${count}`)
@@ -172,7 +185,7 @@ export function buildFillComponents(preview: FillPreview, count: number) {
       .setStyle(ButtonStyle.Secondary),
   );
 
-  return [modeRow, buttonRow];
+  return [modeRow, adjustRow, commitRow];
 }
 
 function shortAddress(address: string): string {
@@ -228,6 +241,22 @@ export async function handleTeamWalletFillComponent(
       embeds: [],
       components: [],
     });
+  }
+
+  if (action === Actions.TeamWalletSetOpen) {
+    const current = decodeState(args);
+    if (!current) {
+      return interaction.update({
+        content: "That panel is no longer valid. Run `/raffle fill` again.",
+        embeds: [],
+        components: [],
+      });
+    }
+    // A modal must be the first response to the interaction — it cannot follow
+    // a defer — so this branch returns before the deferUpdate below.
+    return (interaction as ButtonInteraction).showModal(
+      buildCountModal(current),
+    );
   }
 
   const state =
@@ -328,6 +357,97 @@ export async function handleTeamWalletFillComponent(
   });
 }
 
+/** Typing a number beats clicking +1 sixty times. */
+export function buildCountModal(state: PanelState): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(buildId(Actions.TeamWalletSetSubmit, ...encodeState(state)))
+    .setTitle(`Team wallets — raffle #${state.raffleId}`.slice(0, 45))
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("count")
+          .setLabel("How many team wallets?")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMaxLength(5)
+          .setValue(String(state.count)),
+      ),
+    );
+}
+
+/** Parse a typed count. Returns null for anything not a whole number. */
+export function parseTypedCount(raw: string): number | null {
+  const trimmed = raw.trim().replace(/[\s,]/gu, "");
+  if (!/^\d{1,5}$/u.test(trimmed)) return null;
+  const value = Number(trimmed);
+  return Number.isSafeInteger(value) ? value : null;
+}
+
+export async function handleTeamWalletCountModal(
+  interaction: ModalSubmitInteraction,
+  args: string[],
+): Promise<unknown> {
+  if (!(await isKOSManager(interaction))) {
+    return interaction.reply({
+      content: "Only raffle managers can fill team wallets.",
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+  const state = decodeState(args);
+  const typed = parseTypedCount(
+    interaction.fields.getTextInputValue("count") ?? "",
+  );
+  if (!state) {
+    return interaction.reply({
+      content: "That panel is no longer valid. Run `/raffle fill` again.",
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+  if (typed === null) {
+    return interaction.reply({
+      content: `${KOS.emoji.warn} That is not a whole number. The panel is unchanged.`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  await interaction.deferUpdate();
+  const outcome = await previewFill({
+    raffleId: state.raffleId,
+    guildId: interaction.guildId!,
+    actorId: interaction.user.id,
+  });
+  if (!outcome.ok) {
+    return interaction.editReply({
+      content: `${KOS.emoji.warn} ${outcome.reason}`,
+      embeds: [],
+      components: [],
+    });
+  }
+  const capped = clampCount(typed, outcome.data.maxSelectable);
+  const repriced = await previewFill({
+    raffleId: state.raffleId,
+    guildId: interaction.guildId!,
+    actorId: interaction.user.id,
+    count: capped,
+    selectionMode: state.mode,
+  });
+  if (!repriced.ok) {
+    return interaction.editReply({
+      content: `${KOS.emoji.warn} ${repriced.reason}`,
+      embeds: [],
+      components: [],
+    });
+  }
+  return interaction.editReply({
+    content:
+      capped === typed
+        ? ""
+        : `${KOS.emoji.warn} Only ${capped} available — using that instead of ${typed}.`,
+    embeds: [buildFillEmbed(repriced.data, capped)],
+    components: buildFillComponents(repriced.data, capped),
+  });
+}
+
 function failure(reason: string): string {
   return `${KOS.emoji.warn} ${reason}`;
 }
@@ -339,6 +459,7 @@ export function isTeamWalletFillAction(action: string): boolean {
     action === Actions.TeamWalletMax ||
     action === Actions.TeamWalletMode ||
     action === Actions.TeamWalletConfirm ||
-    action === Actions.TeamWalletCancel
+    action === Actions.TeamWalletCancel ||
+    action === Actions.TeamWalletSetOpen
   );
 }

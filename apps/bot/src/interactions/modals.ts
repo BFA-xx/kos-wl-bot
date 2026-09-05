@@ -14,6 +14,7 @@ import {
   handleVerificationModal,
   isVerificationModalAction,
 } from "./verificationModalHandler.js";
+import { handleTeamWalletCountModal } from "./teamWalletFill.js";
 
 export async function handleModal(
   interaction: ModalSubmitInteraction,
@@ -24,6 +25,9 @@ export async function handleModal(
     return handleVerificationModal(interaction, parsed.action, parsed.args);
   }
 
+  if (parsed.action === Actions.TeamWalletSetSubmit) {
+    return handleTeamWalletCountModal(interaction, parsed.args);
+  }
   if (parsed.action === Actions.SubmitRaffleCreate) {
     return handleRaffleCreateModal(interaction);
   }
