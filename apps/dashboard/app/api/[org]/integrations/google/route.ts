@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { AccessError, logAudit, requireOrgAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
-import { googleOAuthConfig } from "@/lib/google";
+import { googleOAuthConfig, grantsDriveAccess } from "@/lib/google";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,6 +21,7 @@ export async function GET(
       select: {
         googleEmail: true,
         editorEmails: true,
+        scope: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -31,6 +32,7 @@ export async function GET(
         ? {
             email: connection.googleEmail,
             editorEmails: connection.editorEmails,
+            hasDriveAccess: grantsDriveAccess(connection.scope),
             connectedAt: connection.updatedAt.toISOString(),
           }
         : null,

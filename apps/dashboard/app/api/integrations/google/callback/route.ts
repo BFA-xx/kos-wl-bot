@@ -55,10 +55,15 @@ export async function GET(req: NextRequest) {
   try {
     exchanged = await exchangeGoogleCode(config, code);
   } catch (err) {
-    return done(
-      orgSlug,
-      err instanceof GoogleError ? "exchange_failed" : "error",
-    );
+    if (err instanceof GoogleError) {
+      // A grant without drive.file is a different problem with a different
+      // fix, and it is the one people actually hit — say so specifically.
+      return done(
+        orgSlug,
+        err.status === 403 ? "missing_scope" : "exchange_failed",
+      );
+    }
+    return done(orgSlug, "error");
   }
 
   const fields = {

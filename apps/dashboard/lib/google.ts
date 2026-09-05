@@ -26,6 +26,21 @@ const DRIVE_API = "https://www.googleapis.com/drive/v3/files";
  * this app created and nothing else in the user's Drive. It also covers the
  * Sheets API calls below, so no broader `spreadsheets` scope is needed.
  */
+export const DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+
+/**
+ * Whether a grant actually carries permission to create files.
+ *
+ * Google's consent screen offers a checkbox per non-sensitive permission, and
+ * a scope not registered on the project's Data Access page is dropped without
+ * comment — so an account can come back "connected" with nothing but sign-in.
+ * Every path that needs Drive checks this rather than discovering it as a 403
+ * halfway through building a sheet.
+ */
+export function grantsDriveAccess(scope: string | null | undefined): boolean {
+  return (scope ?? "").split(/\s+/u).includes(DRIVE_FILE_SCOPE);
+}
+
 export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/drive.file",
   "openid",
@@ -151,6 +166,12 @@ export async function exchangeGoogleCode(
   if (!identity) {
     throw new GoogleError(400, "Google did not return an account identity.");
   }
+  if (!grantsDriveAccess(token.scope)) {
+    throw new GoogleError(
+      403,
+      "Google did not grant permission to create files. Tick the Google Drive permission on the consent screen, and make sure drive.file is listed under Data Access in the Cloud console.",
+    );
+  }
   return {
     refreshToken: token.refresh_token,
     accessToken: token.access_token,
@@ -198,6 +219,12 @@ export async function accessTokenForOrg(
     throw new GoogleError(
       409,
       "No Google account is connected. Connect one in Settings → Google Sheets.",
+    );
+  }
+  if (!grantsDriveAccess(connection.scope)) {
+    throw new GoogleError(
+      409,
+      `${connection.googleEmail} is connected but did not grant permission to create files. Reconnect it in Settings → Google Sheets and allow Google Drive access.`,
     );
   }
   const credentials = googleClientCredentials();

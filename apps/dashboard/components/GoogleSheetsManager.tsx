@@ -13,6 +13,7 @@ interface GoogleStatus {
   connection: {
     email: string;
     editorEmails: string[];
+    hasDriveAccess: boolean;
     connectedAt: string;
   } | null;
 }
@@ -20,6 +21,8 @@ interface GoogleStatus {
 const CALLBACK_MESSAGES: Record<string, string> = {
   connected: "Google account connected.",
   cancelled: "Google sign-in was cancelled.",
+  missing_scope:
+    "Google signed you in but did not grant permission to create files, so no sheet could be built. Connect again and tick the Google Drive permission — and check drive.file is listed under Data Access in the Cloud console.",
   invalid_state:
     "That sign-in link expired before it came back. Start the connection again.",
   no_code: "Google did not return an authorization code.",
@@ -122,6 +125,14 @@ export function GoogleSheetsManager() {
         ownership. Anyone with the link can view; only the accounts below can
         edit.
       </p>
+
+      {connection && !connection.hasDriveAccess ? (
+        <p className="rounded-2xl border border-amber-400/25 bg-amber-500/[0.08] px-4 py-3 text-sm leading-6 text-amber-200">
+          <strong>{connection.email}</strong> is signed in but did not grant
+          permission to create files, so winner sheets cannot be built. Click
+          Reconnect and tick the Google Drive permission on the consent screen.
+        </p>
+      ) : null}
 
       {connection ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
