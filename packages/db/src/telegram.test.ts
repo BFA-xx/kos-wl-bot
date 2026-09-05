@@ -52,6 +52,7 @@ test("normalizes Telegram raffle defaults conservatively", () => {
     winnerVisibility: "PUBLIC",
     autoAnnouncements: true,
     raffleTopicId: null,
+    welcomeMessageId: null,
     welcomeTopicId: null,
   });
   assert.deepEqual(
@@ -67,6 +68,7 @@ test("normalizes Telegram raffle defaults conservatively", () => {
       winnerVisibility: "ADMIN_ONLY",
       autoAnnouncements: false,
       raffleTopicId: null,
+      welcomeMessageId: null,
       welcomeTopicId: null,
     },
   );
@@ -192,6 +194,27 @@ test("treats only a positive integer as a welcome topic", () => {
   );
   assert.equal(
     telegramRaffleDefaults({ welcomeTopicId: "general" }).welcomeTopicId,
+    null,
+  );
+});
+
+test("welcome message id survives a round trip through the settings blob", () => {
+  assert.equal(telegramRaffleDefaults({}).welcomeMessageId, null);
+  assert.equal(
+    telegramRaffleDefaults({ welcomeMessageId: "482" }).welcomeMessageId,
+    "482",
+  );
+  // A number, an empty string or junk all mean "nothing standing".
+  assert.equal(
+    telegramRaffleDefaults({ welcomeMessageId: 482 }).welcomeMessageId,
+    null,
+  );
+  assert.equal(
+    telegramRaffleDefaults({ welcomeMessageId: "" }).welcomeMessageId,
+    null,
+  );
+  assert.equal(
+    telegramRaffleDefaults({ welcomeMessageId: null }).welcomeMessageId,
     null,
   );
 });

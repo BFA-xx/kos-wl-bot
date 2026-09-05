@@ -6,6 +6,7 @@ if (!token) throw new Error("TELEGRAM_BOT_TOKEN or BOT_TOKEN is required");
 
 const privateCommands = [
   { command: "start", description: "Start or continue KOS onboarding" },
+  { command: "discordcode", description: "Get the KOS Discord entry code" },
   { command: "menu", description: "Open the KOS menu" },
   { command: "profile", description: "View your KOS profile" },
   { command: "status", description: "Check community access approval" },

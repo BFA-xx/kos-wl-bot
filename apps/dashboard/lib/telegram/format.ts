@@ -56,12 +56,14 @@ export type TelegramStartPayload =
   | { kind: "welcome"; communityId: string }
   | { kind: "raffle"; raffleId: number }
   | { kind: "invite"; code: string }
+  | { kind: "discord-code" }
   | { kind: "invalid" };
 
 export function parseTelegramStartPayload(value: string): TelegramStartPayload {
   const payload = value.trim();
   if (!payload) return { kind: "home" };
   if (payload === "onboarding") return { kind: "onboarding" };
+  if (payload === "dcode") return { kind: "discord-code" };
 
   const link = payload.match(/^link_([A-Za-z0-9_-]{24,64})$/u);
   if (link) return { kind: "link", secret: link[1] };

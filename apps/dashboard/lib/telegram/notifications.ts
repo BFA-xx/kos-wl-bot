@@ -1,6 +1,7 @@
 import { type Bot, type Context, InlineKeyboard } from "grammy";
 import { ensureTelegramIdentity } from "@/lib/telegram/identity";
 import { prisma } from "@/lib/db";
+import { editOrReply } from "@/lib/telegram/edit-or-reply";
 import {
   KOS_NOTIFICATION_KEYS as PREFERENCE_KEYS,
   KOS_NOTIFICATION_LABELS as LABELS,
@@ -33,14 +34,12 @@ export async function showTelegramNotificationPreferences(
       .row();
   }
   keyboard.text("Back", "nav:menu");
-  const options = { reply_markup: keyboard };
-  if (edit && ctx.callbackQuery?.message) {
-    await ctx
-      .editMessageText("KOS notification preferences", options)
-      .catch(async () => ctx.reply("KOS notification preferences", options));
-    return;
-  }
-  await ctx.reply("KOS notification preferences", options);
+  await editOrReply(
+    ctx,
+    "KOS notification preferences",
+    { reply_markup: keyboard },
+    edit,
+  );
 }
 
 export function registerTelegramNotificationHandlers(bot: Bot): void {

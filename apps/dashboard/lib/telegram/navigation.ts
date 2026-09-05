@@ -1,6 +1,8 @@
 import { type Bot, type Context, InlineKeyboard } from "grammy";
 import { telegramDisplayName } from "@kos/db";
 import { prisma } from "@/lib/db";
+import { editOrReply } from "@/lib/telegram/edit-or-reply";
+import { sendDiscordCodePrivately } from "@/lib/telegram/discord-link";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
   dashboardOrigin,
@@ -67,13 +69,7 @@ async function render(
     reply_markup: keyboard,
     link_preview_options: { is_disabled: true },
   };
-  if (edit && ctx.callbackQuery?.message) {
-    await ctx.editMessageText(text, options).catch(async () => {
-      await ctx.reply(text, options);
-    });
-    return;
-  }
-  await ctx.reply(text, options);
+  await editOrReply(ctx, text, options, edit);
 }
 
 async function showMenu(ctx: Context, edit = false): Promise<void> {
@@ -789,6 +785,10 @@ async function handleStart(ctx: Context): Promise<void> {
   }
 
   const identity = await ensureTelegramIdentity(ctx.from);
+  if (payload.kind === "discord-code") {
+    await sendDiscordCodePrivately(ctx);
+    return;
+  }
   if (payload.kind === "raffle") {
     await showTelegramRaffle(ctx, payload.raffleId);
     return;

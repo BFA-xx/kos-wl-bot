@@ -1546,6 +1546,11 @@ model TelegramCommunity {
   featureFlags          String[]                @default([])
   permissions           String[]                @default([])
   defaultRaffleSettings Json?
+  /// Public Discord invite the bot hands out on request.
+  discordInviteUrl      String?
+  /// Entry code for a gated Discord. Never posted in the group, and set by an
+  /// admin at runtime so it is not committed to this public repository.
+  discordAccessCode     String?
   botVerifiedAt         DateTime?
   createdById           String
   createdAt             DateTime                @default(now())
