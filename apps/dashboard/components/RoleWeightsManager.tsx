@@ -7,6 +7,7 @@ import { useCan, useOrg } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const MAX_ROLE_WEIGHT = 50;
 
 interface GuildRow {
   guildId: string;
@@ -82,7 +83,10 @@ export function RoleWeightsManager() {
         guildId: effectiveGuildId,
         roleId: role.id,
         roleName: role.name,
-        multiplier: Math.max(1, Math.min(10, Math.round(local[role.id] ?? 1))),
+        multiplier: Math.max(
+          1,
+          Math.min(MAX_ROLE_WEIGHT, Math.round(local[role.id] ?? 1)),
+        ),
       }))
       .filter((w) => w.multiplier > 1);
     const otherGuildWeights = weights.filter(
@@ -158,7 +162,7 @@ export function RoleWeightsManager() {
           <div className="grid gap-2">
             {roles.slice(0, 80).map((role) => {
               const value = local[role.id] ?? 1;
-              const pct = ((value - 1) / 9) * 100;
+              const pct = ((value - 1) / (MAX_ROLE_WEIGHT - 1)) * 100;
               return (
                 <div
                   key={role.id}
@@ -180,7 +184,7 @@ export function RoleWeightsManager() {
                   <input
                     type="range"
                     min={1}
-                    max={10}
+                    max={MAX_ROLE_WEIGHT}
                     step={1}
                     value={value}
                     disabled={!canEdit}
