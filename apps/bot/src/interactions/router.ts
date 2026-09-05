@@ -14,6 +14,10 @@ import {
   handleVerificationSelect,
   isVerificationSelectAction,
 } from "./verificationSelectHandler.js";
+import {
+  handleTeamWalletFillComponent,
+  isTeamWalletFillAction,
+} from "./teamWalletFill.js";
 
 /** Single entry point for every interaction the bot receives. */
 export async function handleInteraction(
@@ -38,6 +42,18 @@ export async function handleInteraction(
       interaction.isStringSelectMenu()
     ) {
       const parsed = parseId(interaction.customId);
+      if (
+        parsed &&
+        isTeamWalletFillAction(parsed.action) &&
+        interaction.isStringSelectMenu()
+      ) {
+        await handleTeamWalletFillComponent(
+          interaction,
+          parsed.action,
+          parsed.args,
+        );
+        return;
+      }
       if (
         parsed &&
         isVerificationSelectAction(parsed.action) &&

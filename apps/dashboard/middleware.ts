@@ -27,13 +27,16 @@ export async function middleware(req: NextRequest) {
     pathname === "/api/connect/x/callback" ||
     pathname === "/connect/x/telegram";
 
-  // The Discord bot asking for a winner sheet on behalf of a raffle manager.
-  // It is a server, not a browser, so it has no kos_session cookie; the route
-  // authenticates it with a BOT_API_TOKEN bearer compared in constant time and
-  // refuses outright when that token is unset. Same reasoning as the feed
-  // above — without this the middleware answers before the route runs and
-  // /raffle export can never reach it.
-  const isBotWinnerSheet = pathname === "/api/internal/winner-sheet";
+  // Routes the Discord bot calls on behalf of a raffle manager. The bot is a
+  // server, not a browser, so it has no kos_session cookie; gated here, the
+  // middleware answers before the route runs and the command can never reach
+  // it. Same reasoning as the member feed above.
+  //
+  // CONTRACT for anything added under /api/internal/: it is NOT behind the
+  // dashboard session and must authenticate itself — every route here compares
+  // a BOT_API_TOKEN bearer in constant time and refuses outright when that
+  // token is unset. Do not put a session-authenticated route under this prefix.
+  const isBotInternal = pathname.startsWith("/api/internal/");
 
   if (
     pathname.startsWith("/login") ||
@@ -41,7 +44,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/api/auth") ||
     pathname === "/api/integrations/telegram/webhook" ||
     isXLinkFlow ||
-    isBotWinnerSheet ||
+    isBotInternal ||
     isDiscordMemberFeed ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico" ||

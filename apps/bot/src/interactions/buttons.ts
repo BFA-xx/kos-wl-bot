@@ -30,6 +30,10 @@ import {
   handleVerificationButton,
   isVerificationButtonAction,
 } from "./verificationButtonHandler.js";
+import {
+  handleTeamWalletFillComponent,
+  isTeamWalletFillAction,
+} from "./teamWalletFill.js";
 
 /** Shared per-user enter/leave rate limiter (anti-spam). */
 export const entryLimiter = new RateLimiter(
@@ -42,6 +46,13 @@ export async function handleButton(
 ): Promise<unknown> {
   const parsed = parseId(interaction.customId);
   if (!parsed) return;
+  if (isTeamWalletFillAction(parsed.action)) {
+    return handleTeamWalletFillComponent(
+      interaction,
+      parsed.action,
+      parsed.args,
+    );
+  }
   if (isVerificationButtonAction(parsed.action)) {
     return handleVerificationButton(interaction, parsed.action, parsed.args);
   }

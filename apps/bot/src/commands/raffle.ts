@@ -33,6 +33,7 @@ import {
   requestWinnerSheet,
   winnerSheetsEnabled,
 } from "../services/winnerSheetService.js";
+import { openTeamWalletFill } from "../interactions/teamWalletFill.js";
 
 export const raffleCommand: Command = {
   managerOnly: true,
@@ -227,6 +228,20 @@ export const raffleCommand: Command = {
               { name: "CSV file", value: "csv" },
             ),
         ),
+    )
+
+    // ---- fill (Team Wallet Pool) ----
+    .addSubcommand((sub) =>
+      sub
+        .setName("fill")
+        .setDescription("Fill remaining spots from the Team Wallet Pool")
+        .addIntegerOption((o) =>
+          o
+            .setName("id")
+            .setDescription("Raffle ID")
+            .setRequired(true)
+            .setAutocomplete(true),
+        ),
     ),
 
   async execute(interaction: ChatInputCommandInteraction) {
@@ -250,6 +265,8 @@ export const raffleCommand: Command = {
         return handleStats(interaction);
       case "export":
         return handleExport(interaction);
+      case "fill":
+        return openTeamWalletFill(interaction);
       default:
         await interaction.reply({
           content: "Unknown subcommand.",

@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
-import { Prisma, type TeamWalletSelectionMode } from "@prisma/client";
-import { prisma } from "@/lib/db";
+import { type TeamWalletSelectionMode } from "@prisma/client";
 import { logAudit, requireOrgAccess, withAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
-import { communityRaffleWalletRows } from "@/lib/raffle-wallet-export";
 import {
-  eligibleTeamWallets,
-  ensureDefaultTeamWalletPool,
-} from "@/lib/team-wallet-server";
-import { selectTeamWallets } from "@/lib/team-wallet-pool";
+  TeamWalletFillError,
+  commitTeamWalletFill,
+  previewTeamWalletFill,
+} from "@/lib/team-wallet-fill";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,6 +20,13 @@ const MODES = new Set<TeamWalletSelectionMode>([
 function requestedSelectionMode(value: unknown) {
   const mode = String(value ?? "") as TeamWalletSelectionMode;
   return mode && MODES.has(mode) ? mode : null;
+}
+
+function fillError(err: unknown) {
+  if (err instanceof TeamWalletFillError) {
+    return NextResponse.json({ error: err.message }, { status: err.status });
+  }
+  throw err;
 }
 
 export const GET = withAccess(async (request, { params }) => {
@@ -54,101 +59,18 @@ export const GET = withAccess(async (request, { params }) => {
     );
   }
 
-  const raffle = await prisma.raffle.findFirst({
-    where: { id: raffleId, guildId: { in: guildIds } },
-    select: {
-      id: true,
-      projectName: true,
-      title: true,
-      status: true,
-      spots: true,
-      walletChains: true,
-    },
-  });
-  if (!raffle) {
-    return NextResponse.json({ error: "Raffle not found." }, { status: 404 });
-  }
-  if (raffle.status !== "ENDED" && raffle.status !== "CANCELLED") {
+  try {
     return NextResponse.json(
-      { error: "Team wallets can only be filled after a raffle ends." },
-      { status: 409 },
+      await previewTeamWalletFill(
+        { organizationId: org.id, guildIds, raffleId },
+        requestedCount,
+        requestedMode,
+      ),
     );
+  } catch (err) {
+    return fillError(err);
   }
-
-  const pool = await ensureDefaultTeamWalletPool(org.id);
-  const [community, existingReservations, members] = await Promise.all([
-    communityRaffleWalletRows(raffle.id, raffle.walletChains),
-    prisma.teamWalletUsage.count({
-      where: { raffleId: raffle.id, status: "RESERVED" },
-    }),
-    prisma.teamWalletPoolMember.findMany({
-      where: { poolId: pool.id },
-      select: { userId: true, priority: true },
-    }),
-  ]);
-  const remaining = Math.max(
-    0,
-    raffle.spots - community.length - existingReservations,
-  );
-  const candidates = await eligibleTeamWallets({
-    poolId: pool.id,
-    raffleId: raffle.id,
-    walletChains: raffle.walletChains,
-    communityAddressHashes: community.map((row) => row.addressHash),
-  });
-  // Spots are held back for the team on purpose, so a raffle that already drew
-  // as many community winners as it has spots must still accept team wallets.
-  // What the pool actually has is the only hard cap; the spot count is
-  // reported alongside so the fill can be seen to go over, not blocked by it.
-  const maxSelectable = candidates.length;
-  if (requestedCount !== null && requestedCount > maxSelectable) {
-    return NextResponse.json(
-      {
-        error: `Only ${maxSelectable} team wallet${maxSelectable === 1 ? " is" : "s are"} selectable right now.`,
-      },
-      { status: 409 },
-    );
-  }
-  const selectionMode = requestedMode ?? pool.selectionMode;
-  // Default to closing the gap when there is one. Once the raffle is full,
-  // start at one rather than proposing the entire pool.
-  const selectedCount =
-    requestedCount ?? Math.min(remaining > 0 ? remaining : 1, maxSelectable);
-  const selection = selectTeamWallets({
-    candidates,
-    members,
-    needed: selectedCount,
-    mode: selectionMode,
-    lastSelectedOwnerId: pool.lastSelectedOwnerId,
-  });
-
-  return NextResponse.json({
-    raffle: {
-      id: raffle.id,
-      projectName: raffle.projectName,
-      title: raffle.title,
-      status: raffle.status,
-    },
-    selectionMode,
-    requiredWallets: raffle.spots,
-    communityWallets: community.length,
-    teamWalletsReserved: existingReservations,
-    remainingWalletsNeeded: remaining,
-    availableWallets: candidates.length,
-    maxSelectable,
-    selectedCount: selection.selected.length,
-    selectedWallets: selection.selected.map((wallet) => ({
-      id: wallet.id,
-      address: wallet.address,
-      ownerId: wallet.ownerId,
-      ownerName: wallet.ownerName,
-      chain: wallet.chain,
-      version: wallet.updatedAt.toISOString(),
-    })),
-  });
 });
-
-class SelectionConflict extends Error {}
 
 interface RequestedWallet {
   id: string;
@@ -195,190 +117,22 @@ export const POST = withAccess(async (request, { params }) => {
       { status: 400 },
     );
   }
-  const pool = await ensureDefaultTeamWalletPool(org.id);
 
-  let result:
-    | {
-        ok: true;
-        selected: number;
-        community: number;
-        remaining: number;
-        mode: TeamWalletSelectionMode;
-      }
-    | { ok: false; status: number; error: string }
-    | null = null;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      result = await prisma.$transaction(
-        async (tx) => {
-          const raffle = await tx.raffle.findFirst({
-            where: { id: raffleId, guildId: { in: guildIds } },
-            select: {
-              id: true,
-              projectName: true,
-              status: true,
-              spots: true,
-              walletChains: true,
-            },
-          });
-          if (!raffle) {
-            return {
-              ok: false as const,
-              status: 404,
-              error: "Raffle not found.",
-            };
-          }
-          if (raffle.status !== "ENDED") {
-            return {
-              ok: false as const,
-              status: 409,
-              error: "Team wallets can only be filled after a raffle ends.",
-            };
-          }
-          const currentPool = await tx.teamWalletPool.findUnique({
-            where: { id: pool.id },
-          });
-          if (!currentPool) {
-            return {
-              ok: false as const,
-              status: 404,
-              error: "Team Wallet Pool not found.",
-            };
-          }
-
-          // Serialize confirmations that contain any of the same wallets. The
-          // version check below rejects a concurrently-used preview.
-          await tx.$queryRaw(
-            Prisma.sql`SELECT "id" FROM "team_wallets" WHERE "id" IN (${Prisma.join(
-              requestedWallets.map((wallet) => wallet.id),
-            )}) ORDER BY "id" FOR UPDATE`,
-          );
-
-          const community = await communityRaffleWalletRows(
-            raffle.id,
-            raffle.walletChains,
-            tx,
-          );
-          const existingReservations = await tx.teamWalletUsage.count({
-            where: { raffleId: raffle.id, status: "RESERVED" },
-          });
-          const remaining = Math.max(
-            0,
-            raffle.spots - community.length - existingReservations,
-          );
-          // No spot-count ceiling here either — see the GET handler. Every
-          // requested wallet is still checked against current availability
-          // below, which is what actually bounds a fill.
-          const candidates = await eligibleTeamWallets({
-            poolId: currentPool.id,
-            raffleId: raffle.id,
-            walletChains: raffle.walletChains,
-            communityAddressHashes: community.map((row) => row.addressHash),
-            db: tx,
-          });
-          const byId = new Map(candidates.map((wallet) => [wallet.id, wallet]));
-          const selection = requestedWallets.map((requested) => ({
-            requested,
-            wallet: byId.get(requested.id),
-          }));
-          if (
-            selection.some(
-              ({ requested, wallet }) =>
-                !wallet || wallet.updatedAt.toISOString() !== requested.version,
-            )
-          ) {
-            return {
-              ok: false as const,
-              status: 409,
-              error:
-                "Wallet availability changed after this preview. Regenerate the selection and confirm again.",
-            };
-          }
-
-          const now = new Date();
-          const fill = await tx.raffleTeamWalletFill.create({
-            data: {
-              poolId: currentPool.id,
-              raffleId: raffle.id,
-              selectionMode: requestedMode,
-              requiredWallets: raffle.spots,
-              communityWallets: community.length,
-              selectedWallets: count,
-              createdById: user.id,
-            },
-          });
-          const selected = selection.map(({ wallet }) => wallet!);
-          const selectedIds = selected.map((wallet) => wallet.id);
-          const reserved = await tx.teamWallet.updateMany({
-            where: {
-              id: { in: selectedIds },
-              status: { not: "DISABLED" },
-              deletedAt: null,
-            },
-            data: {
-              status: "RESERVED",
-              timesUsed: { increment: 1 },
-              lastUsedAt: now,
-            },
-          });
-          if (reserved.count !== selectedIds.length)
-            throw new SelectionConflict();
-          await tx.teamWalletUsage.createMany({
-            data: selectedIds.map((walletId) => ({
-              walletId,
-              raffleId: raffle.id,
-              fillId: fill.id,
-              projectName: raffle.projectName,
-              status: "RESERVED",
-              reservedAt: now,
-            })),
-          });
-          await tx.teamWalletPool.update({
-            where: { id: currentPool.id },
-            data: {
-              selectionMode: requestedMode,
-              lastSelectedOwnerId: selected.at(-1)?.ownerId ?? null,
-            },
-          });
-          return {
-            ok: true as const,
-            selected: selected.length,
-            community: community.length,
-            remaining: Math.max(0, remaining - selected.length),
-            mode: requestedMode,
-          };
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      );
-      break;
-    } catch (error) {
-      const retryable =
-        error instanceof SelectionConflict ||
-        (error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === "P2034");
-      if (!retryable) throw error;
-      if (attempt === 2) {
-        result = {
-          ok: false,
-          status: 409,
-          error:
-            "Wallet availability changed while reserving. Regenerate the selection and try again.",
-        };
-      }
-    }
+  let result;
+  try {
+    result = await commitTeamWalletFill({
+      organizationId: org.id,
+      guildIds,
+      raffleId,
+      count,
+      selectionMode: requestedMode,
+      userId: user.id,
+      expectedWallets: requestedWallets,
+    });
+  } catch (err) {
+    return fillError(err);
   }
-  if (!result) {
-    return NextResponse.json(
-      { error: "Wallet selection could not be completed." },
-      { status: 409 },
-    );
-  }
-  if (!result.ok) {
-    return NextResponse.json(
-      { error: result.error },
-      { status: result.status },
-    );
-  }
+
   await logAudit(org.id, user.id, "RAFFLE_TEAM_WALLETS_FILLED", {
     targetType: "raffle",
     targetId: String(raffleId),

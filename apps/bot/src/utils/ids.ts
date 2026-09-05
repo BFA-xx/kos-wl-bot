@@ -83,4 +83,11 @@ export const Actions = {
   VerificationCodeRoles: "vc_roles",
   VerificationCodeDelete: "vc_delete",
   VerificationCodeCancel: "vc_cancel",
+  // Team Wallet Pool fill panel (/raffle fill).
+  TeamWalletInc: "twf_inc",
+  TeamWalletDec: "twf_dec",
+  TeamWalletMax: "twf_max",
+  TeamWalletMode: "twf_mode",
+  TeamWalletConfirm: "twf_ok",
+  TeamWalletCancel: "twf_x",
 } as const;
