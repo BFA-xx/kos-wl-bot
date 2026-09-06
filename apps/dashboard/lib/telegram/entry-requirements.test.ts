@@ -10,7 +10,7 @@ describe("Telegram raffle entry requirements", () => {
       discordOnly: false,
       gates: [
         {
-          key: "legacy-task-1",
+          key: "legacy-task-legacy:177:0:0123456789ab",
           label: "Follow the project",
           ok: false,
           reason: "Open and verify this raffle step.",
@@ -18,7 +18,7 @@ describe("Telegram raffle entry requirements", () => {
           actionUrl: "https://twitter.com/intent/follow?screen_name=Borosnfts",
         },
         {
-          key: "legacy-task-2",
+          key: "legacy-task-legacy:177:1:1123456789ab",
           label: "Like the announcement",
           ok: false,
           reason: "Open and verify this raffle step.",
@@ -27,7 +27,7 @@ describe("Telegram raffle entry requirements", () => {
             "https://twitter.com/intent/like?tweet_id=2095532476278214964",
         },
         {
-          key: "legacy-task-3",
+          key: "legacy-task-legacy:177:2:2123456789ab",
           label: "Join the partner community",
           ok: false,
           reason: "Open and verify this raffle step.",
@@ -60,18 +60,30 @@ describe("Telegram raffle entry requirements", () => {
           text: "Open on X: Join the partner community",
           url: "https://twitter.com/intent/retweet?tweet_id=2095532476278214964",
         }),
-        expect.objectContaining({ text: "Complete raffle steps" }),
+        expect.objectContaining({
+          text: "I completed: Follow the project",
+          callback_data: "tv:token-1:0:0123456789ab",
+        }),
+        expect.objectContaining({
+          text: "I completed: Like the announcement",
+          callback_data: "tv:token-1:1:1123456789ab",
+        }),
+        expect.objectContaining({
+          text: "I completed: Join the partner community",
+          callback_data: "tv:token-1:2:2123456789ab",
+        }),
         expect.objectContaining({
           text: "Retry entry",
           callback_data: "a:token-1",
         }),
       ]),
     );
-    expect(
-      result.keyboard.inline_keyboard
-        .flat()
-        .filter(({ text }) => text === "Complete raffle steps"),
-    ).toHaveLength(1);
+    expect(result.text).toContain("tap I completed below");
+    expect(result.keyboard.inline_keyboard.flat()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ text: "Complete raffle steps" }),
+      ]),
+    );
   });
 
   it("includes hard-gate actions and Discord-only guidance", () => {

@@ -42,14 +42,29 @@ function taskActionLabel(label: string, url: string): string {
   return `${prefix}${label}`.slice(0, 64);
 }
 
+function legacyTaskRef(
+  gate: Gate,
+  raffleId: number,
+): { index: number; hash: string } | null {
+  const match = /^legacy-task-legacy:(\d+):(\d+):[a-f0-9]{12}$/u.exec(
+    gate.key,
+  );
+  if (!match || Number(match[1]) !== raffleId) return null;
+  const index = Number(match[2]);
+  return Number.isSafeInteger(index) && index >= 0
+    ? { index, hash: gate.key.slice(-12) }
+    : null;
+}
+
 export function buildTelegramEntryRequirements(
   input: TelegramEntryRequirements,
 ): { text: string; keyboard: InlineKeyboard } {
   const failed = input.gates.filter(({ ok }) => !ok);
   const lines = failed.slice(0, 12).flatMap((gate, index) => {
     const actionUrl = gate.actionUrl ? safeTelegramUrl(gate.actionUrl) : null;
+    const canAttestHere = legacyTaskRef(gate, input.raffleId) !== null;
     const instruction = actionUrl
-      ? `<a href="${escapeTelegramHtml(actionUrl)}">${isXUrl(actionUrl) ? "Open this task on X" : "Open this task"}</a>, complete it, then verify it in KOS.`
+      ? `<a href="${escapeTelegramHtml(actionUrl)}">${isXUrl(actionUrl) ? "Open this task on X" : "Open this task"}</a>, complete it, then ${canAttestHere ? "tap I completed below" : "verify it in KOS"}.`
       : escapeTelegramHtml(
           (gate.reason ?? "Complete this requirement before entering.").slice(
             0,
@@ -70,14 +85,24 @@ export function buildTelegramEntryRequirements(
 
   const keyboard = new InlineKeyboard();
   for (const gate of failed.slice(0, 12)) {
-    if (!gate.actionUrl) continue;
-    const url = safeTelegramUrl(gate.actionUrl);
-    if (!url) continue;
-    keyboard.url(taskActionLabel(gate.label, url), url).row();
+    if (gate.actionUrl) {
+      const url = safeTelegramUrl(gate.actionUrl);
+      if (url) keyboard.url(taskActionLabel(gate.label, url), url).row();
+    }
+    const taskRef = legacyTaskRef(gate, input.raffleId);
+    if (taskRef) {
+      keyboard
+        .text(
+          `I completed: ${gate.label}`.slice(0, 64),
+          `tv:${input.tokenId}:${taskRef.index}:${taskRef.hash}`,
+        )
+        .row();
+    }
   }
 
   const seenUrls = new Set<string>();
   for (const gate of failed) {
+    if (legacyTaskRef(gate, input.raffleId) !== null) continue;
     if (!gate.url) continue;
     const url = safeTelegramUrl(gate.url);
     if (!url) continue;

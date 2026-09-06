@@ -20,6 +20,12 @@ import { ensureTelegramIdentity } from "@/lib/telegram/identity";
 import { awardKosPoints } from "@/lib/telegram/points";
 import { registerTelegramEngagementHandlers } from "@/lib/telegram/engagement";
 import { sendTelegramEntryRequirements } from "@/lib/telegram/entry-requirements";
+import { reconcileTelegramMembership } from "@/lib/telegram/raffle-access";
+import {
+  getLegacyRaffleTasks,
+  parseLegacyTaskId,
+} from "@/lib/legacy-raffle-tasks";
+import { attestLegacyRaffleTask } from "@/lib/legacy-raffle-task-attestation";
 
 let cachedBot: Bot | null = null;
 let botInit: Promise<unknown> | null = null;
@@ -207,6 +213,106 @@ async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
   );
 }
 
+async function attestTaskFromTelegram(
+  ctx: Context,
+  tokenId: string,
+  rawIndex: string,
+  taskHash: string,
+): Promise<void> {
+  if (!ctx.from || !ctx.callbackQuery?.message) return;
+  const callbackChat = ctx.callbackQuery.message.chat;
+  const taskIndex = Number(rawIndex);
+  if (
+    callbackChat.type !== "private" ||
+    !Number.isSafeInteger(taskIndex) ||
+    taskIndex < 0
+  ) {
+    await answer(ctx, "Open this checklist in your private KOS Bot chat.");
+    return;
+  }
+
+  const token = await prisma.integrationActionToken.findUnique({
+    where: { id: tokenId },
+    include: {
+      publication: {
+        include: {
+          community: true,
+          raffle: { include: { eligibleRoles: true } },
+        },
+      },
+    },
+  });
+  const publication = token?.publication;
+  if (
+    !token ||
+    token.action !== "TELEGRAM_ENTER" ||
+    token.expiresAt <= new Date() ||
+    !publication ||
+    publication.community.status !== "ACTIVE" ||
+    publication.raffle.status !== "LIVE"
+  ) {
+    await answer(ctx, "This raffle checklist is no longer active.");
+    return;
+  }
+
+  const identity = await ensureTelegramIdentity(ctx.from);
+  const membership = await reconcileTelegramMembership(
+    ctx,
+    publication.community,
+    ctx.from,
+    identity.id,
+  );
+  if (
+    !membership ||
+    membership.status !== "ACTIVE" ||
+    membership.approvalStatus !== "APPROVED"
+  ) {
+    await answer(ctx, "Your KOS community access must be active and approved.");
+    return;
+  }
+
+  const account = await prisma.connectedAccount.findUnique({
+    where: {
+      provider_externalId: {
+        provider: "TELEGRAM",
+        externalId: String(ctx.from.id),
+      },
+    },
+    include: { user: true },
+  });
+  if (!account) {
+    await answer(ctx, "Connect Telegram from your KOS profile first.");
+    return;
+  }
+
+  const task = getLegacyRaffleTasks(
+    publication.raffle.id,
+    publication.raffle.requirements,
+  ).find((candidate) => {
+    const parsed = parseLegacyTaskId(candidate.id);
+    return parsed?.index === taskIndex && parsed.hash === taskHash;
+  });
+  if (!task) {
+    await answer(ctx, "That raffle step is no longer available.");
+    return;
+  }
+
+  const result = await attestLegacyRaffleTask({
+    guildId: publication.raffle.guildId,
+    raffleId: publication.raffle.id,
+    userId: account.userId,
+    username: account.user.username,
+    task,
+    method: "telegram_attest",
+  });
+  await answer(
+    ctx,
+    result.created
+      ? `${task.label} marked complete. Tap Retry entry when all steps are done.`
+      : `${task.label} is already marked complete.`,
+  );
+}
+
 export function buildTelegramBot(token: string): Bot {
   const bot = new Bot(token);
   registerTelegramEngagementHandlers(bot);
@@ -226,6 +332,17 @@ export function buildTelegramBot(token: string): Bot {
   bot.callbackQuery(/^a:([A-Za-z0-9_-]+)$/u, async (ctx) => {
     await enterFromTelegram(ctx, ctx.match[1]);
   });
+  bot.callbackQuery(
+    /^tv:([A-Za-z0-9_-]+):(\d+):([a-f0-9]{12})$/u,
+    async (ctx) => {
+      await attestTaskFromTelegram(
+        ctx,
+        ctx.match[1],
+        ctx.match[2],
+        ctx.match[3],
+      );
+    },
+  );
   // Before registerTelegramRaffleHandlers: that one ends with a
   // `message:text` catch-all, and command handlers must be reachable.
   registerTelegramRaffleTopicHandlers(bot);
