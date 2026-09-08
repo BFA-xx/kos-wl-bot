@@ -41,6 +41,7 @@ export class Scheduler {
   private transitionTimer?: NodeJS.Timeout;
   private stopped = false;
   private running = false;
+  private wakeRequested = false;
   private lastHeartbeat = 0;
   private lastCollaborationSweep = 0;
   private lastTickAt: string | null = null;
@@ -66,8 +67,33 @@ export class Scheduler {
 
   stop(): void {
     this.stopped = true;
+    this.wakeRequested = false;
     if (this.transitionTimer) clearTimeout(this.transitionTimer);
     this.transitionTimer = undefined;
+    this.nextTickAt = null;
+  }
+
+  /**
+   * Interrupt an idle sleep after an in-process action creates a new deadline.
+   *
+   * Without this, a raffle created from Discord while the adaptive scheduler
+   * is asleep is invisible until the old (up to 15 minute) timer fires. The
+   * next tick then discovers the raffle, but its requested start can already
+   * be many minutes late.
+   */
+  wake(reason: string): void {
+    if (this.stopped) return;
+    this.wakeRequested = true;
+    logger.info({ reason }, "scheduler wake requested");
+
+    // A timer means the loop is sleeping, so replace it with an immediate run.
+    // With no timer, a tick or its scheduling lookup is already in progress;
+    // runLoop observes wakeRequested and performs another pass before sleeping.
+    if (!this.transitionTimer) return;
+    clearTimeout(this.transitionTimer);
+    this.transitionTimer = undefined;
+    this.nextTickAt = null;
+    void this.runLoop();
   }
 
   /**
@@ -86,14 +112,28 @@ export class Scheduler {
    */
   private async runLoop(): Promise<void> {
     if (this.stopped) return;
-    try {
-      await this.tick();
-    } catch (err) {
-      // tick() already traps its own errors; this is belt-and-braces so an
-      // unexpected throw can never leave the bot with no timer queued.
-      logger.error({ err }, "scheduler tick threw outside its own handler");
-    } finally {
-      if (!this.stopped) await this.scheduleNextTick();
+    do {
+      this.wakeRequested = false;
+      try {
+        await this.tick();
+      } catch (err) {
+        // tick() already traps its own errors; this is belt-and-braces so an
+        // unexpected throw can never leave the bot with no timer queued.
+        logger.error({ err }, "scheduler tick threw outside its own handler");
+      }
+    } while (!this.stopped && this.wakeRequested);
+
+    if (this.stopped) return;
+    await this.scheduleNextTick();
+
+    // A wake can arrive while scheduleNextTick is querying the next boundary.
+    // Discard the just-created timer and recompute from a fresh tick in that
+    // case, rather than allowing two loops or losing the wake request.
+    if (this.wakeRequested && !this.stopped) {
+      if (this.transitionTimer) clearTimeout(this.transitionTimer);
+      this.transitionTimer = undefined;
+      this.nextTickAt = null;
+      await this.runLoop();
     }
   }
 
@@ -133,7 +173,10 @@ export class Scheduler {
     }
 
     this.nextTickAt = new Date(Date.now() + delay).toISOString();
-    this.transitionTimer = setTimeout(() => void this.runLoop(), delay);
+    this.transitionTimer = setTimeout(() => {
+      this.transitionTimer = undefined;
+      void this.runLoop();
+    }, delay);
   }
 
   /**

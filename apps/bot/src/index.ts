@@ -15,6 +15,7 @@ import {
   handleVerificationMemberJoin,
 } from "./gateway/verificationEvents.js";
 import { GuildMemberSyncService } from "./services/guildMemberSyncService.js";
+import { registerSchedulerWake } from "./services/schedulerWake.js";
 
 async function main() {
   const client = createClient();
@@ -22,6 +23,7 @@ async function main() {
   let scheduler: Scheduler | undefined;
   let guildMemberSync: GuildMemberSyncService | undefined;
   let internalApi: Server | undefined;
+  let unregisterSchedulerWake: (() => void) | undefined;
 
   client.once(Events.ClientReady, async (c) => {
     logger.info(
@@ -35,6 +37,9 @@ async function main() {
 
     scheduler = new Scheduler(c);
     scheduler.start();
+    unregisterSchedulerWake = registerSchedulerWake((reason) =>
+      scheduler?.wake(reason),
+    );
 
     guildMemberSync = new GuildMemberSyncService(c);
     guildMemberSync.start();
@@ -43,6 +48,7 @@ async function main() {
       c,
       () => scheduler?.health() ?? null,
       () => guildMemberSync?.health() ?? null,
+      (reason) => scheduler?.wake(reason),
     );
 
     // Do not hold readiness behind one slow database write per guild. The
@@ -141,6 +147,7 @@ async function main() {
   const shutdown = async (signal: string) => {
     logger.info({ signal }, "shutting down");
     clearInterval(limiterSweep);
+    unregisterSchedulerWake?.();
     scheduler?.stop();
     guildMemberSync?.stop();
     internalApi?.close();

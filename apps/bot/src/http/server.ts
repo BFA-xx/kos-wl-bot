@@ -19,6 +19,7 @@ export function startInternalApi(
   client: Client,
   schedulerHealth: () => unknown = () => null,
   memberSyncHealth: () => unknown = () => null,
+  schedulerWake: (reason: string) => void = () => undefined,
 ): Server | undefined {
   if (!config.INTERNAL_API_PORT) return undefined;
   if (!config.INTERNAL_API_TOKEN) {
@@ -30,7 +31,15 @@ export function startInternalApi(
   const token = config.INTERNAL_API_TOKEN;
 
   const server = createServer((req, res) => {
-    void handle(req, res, client, token, schedulerHealth, memberSyncHealth);
+    void handle(
+      req,
+      res,
+      client,
+      token,
+      schedulerHealth,
+      memberSyncHealth,
+      schedulerWake,
+    );
   });
 
   server.listen(config.INTERNAL_API_PORT, config.INTERNAL_API_HOST, () => {
@@ -49,6 +58,7 @@ async function handle(
   token: string,
   schedulerHealth: () => unknown,
   memberSyncHealth: () => unknown,
+  schedulerWake: (reason: string) => void,
 ): Promise<void> {
   const json = (status: number, body: unknown) => {
     res.writeHead(status, { "content-type": "application/json" });
@@ -70,6 +80,11 @@ async function handle(
 
     if (!authorized(req.headers.authorization, token)) {
       return json(401, { error: "unauthorized" });
+    }
+
+    if (req.method === "POST" && url.pathname === "/internal/scheduler/wake") {
+      schedulerWake("authenticated internal request");
+      return json(202, { ok: true });
     }
 
     const endMatch = url.pathname.match(/^\/internal\/raffles\/(\d+)\/end$/u);

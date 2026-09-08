@@ -37,6 +37,7 @@ import { resolveWhen, resolveTime, discordRelative } from "../utils/time.js";
 import type { EntryRequirements } from "../types.js";
 import { KOS } from "../theme.js";
 import { logger } from "../logger.js";
+import { requestSchedulerWake } from "../services/schedulerWake.js";
 
 const TEXT_CHANNELS = [
   ChannelType.GuildText,
@@ -548,6 +549,11 @@ async function publish(
     // publishRaffleMessage posts the embed with the @everyone/@here mention in
     // the message content (part of the post itself) when it's live.
     const result = await publishRaffleMessage(interaction.client, raffle.id);
+
+    // The adaptive scheduler may have started a long idle sleep before this
+    // raffle existed. Make it discover the new start boundary now so an
+    // UPCOMING raffle opens on time instead of waiting out that old sleep.
+    requestSchedulerWake(`Discord raffle #${raffle.id} published`);
 
     const header = result.ok
       ? `${KOS.emoji.check} **Raffle #${raffle.id}** is live in <#${draft.postChannelId}>.`
