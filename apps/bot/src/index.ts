@@ -16,6 +16,7 @@ import {
 } from "./gateway/verificationEvents.js";
 import { GuildMemberSyncService } from "./services/guildMemberSyncService.js";
 import { registerSchedulerWake } from "./services/schedulerWake.js";
+import { handleControlMessage } from "./services/controlChannel.js";
 
 async function main() {
   const client = createClient();
@@ -62,6 +63,11 @@ async function main() {
   });
 
   client.on(Events.MessageCreate, (message) => {
+    // Dashboard-written work has no other route to this process — see
+    // services/controlChannel.ts. Cheap and synchronous: it returns
+    // immediately for every message outside the control channel.
+    handleControlMessage(message, (reason) => scheduler?.wake(reason));
+
     void handleRaidSubmission(message).catch((err) =>
       logger.error(
         {

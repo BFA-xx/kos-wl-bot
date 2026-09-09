@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { AccessError, logAudit, requireOrgAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
 import { parseRaidInput } from "@/lib/raid-input";
+import { nudgeBot } from "@/lib/bot-nudge";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,6 +50,7 @@ export async function PATCH(
         },
       });
       await auditAction(org.id, user.id, raid.id, "RAID_PUBLISH");
+      await nudgeBot(`raid ${raid.id} published`);
       return NextResponse.json({ ok: true });
     }
 
@@ -63,6 +65,7 @@ export async function PATCH(
         data: { endAt: new Date(), finalizedAt: null },
       });
       await auditAction(org.id, user.id, raid.id, "RAID_END_REQUEST");
+      await nudgeBot(`raid ${raid.id} end requested`);
       return NextResponse.json({ ok: true });
     }
 
@@ -86,6 +89,7 @@ export async function PATCH(
         },
       });
       await auditAction(org.id, user.id, raid.id, "RAID_CANCEL");
+      await nudgeBot(`raid ${raid.id} cancelled`);
       return NextResponse.json({ ok: true });
     }
 
@@ -148,6 +152,9 @@ export async function PATCH(
       },
     });
     await auditAction(org.id, user.id, raid.id, "RAID_EDIT");
+    // Wake the bot for every edit: it may queue a re-render, publish a draft,
+    // or move a start or end the sleeping scheduler has not seen yet.
+    await nudgeBot(`raid ${raid.id} updated`);
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof AccessError)

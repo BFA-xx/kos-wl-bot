@@ -6,6 +6,7 @@ import { Prisma, type WalletChain } from "@prisma/client";
 import { sanitizeHttpUrl, sanitizeLegacyRaffleTasks } from "@/lib/raffle-input";
 import { parsePublicRaffleId } from "@/lib/raffle-share";
 import { isWalletChain } from "@/lib/wallet-validation";
+import { nudgeBot } from "@/lib/bot-nudge";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -225,6 +226,10 @@ export async function PATCH(
       targetType: "raffle",
       targetId: String(id),
     });
+    // Wake the bot for every edit: a posted raffle needs its message
+    // re-rendered, and an unposted one may have just moved its start or end
+    // to a moment the sleeping scheduler does not know about yet.
+    await nudgeBot(`raffle #${id} edited`);
     return NextResponse.json({
       ok: true,
       willRefresh: Boolean(existing.messageId),
@@ -313,6 +318,7 @@ export async function DELETE(
       },
     });
 
+    await nudgeBot(`raffle #${id} deletion requested`);
     return NextResponse.json({ ok: true, id, queued: true });
   } catch (err) {
     if (err instanceof AccessError)

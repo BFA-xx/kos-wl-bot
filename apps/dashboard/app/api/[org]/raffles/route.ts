@@ -10,6 +10,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import type { Prisma, RaffleStatus, WalletChain } from "@prisma/client";
 import { sanitizeHttpUrl, sanitizeLegacyRaffleTasks } from "@/lib/raffle-input";
 import { isWalletChain } from "@/lib/wallet-validation";
+import { nudgeBot } from "@/lib/bot-nudge";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -263,6 +264,9 @@ export async function POST(
       targetId: String(raffle.id),
     });
 
+    // The row is DRAFT until the bot posts it; nudge so that happens in
+    // seconds rather than on the next sweep.
+    await nudgeBot(`raffle #${raffle.id} created`);
     return NextResponse.json({ id: raffle.id });
   } catch (err) {
     if (err instanceof AccessError)

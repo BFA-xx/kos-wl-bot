@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
+import { nudgeBot } from "@/lib/bot-nudge";
 import type { TelegramWinnerVisibility } from "@prisma/client";
 
 export async function publishRaffleToTelegram(input: {
@@ -12,7 +13,7 @@ export async function publishRaffleToTelegram(input: {
   winnerVisibility: TelegramWinnerVisibility;
 }) {
   const marker = randomUUID();
-  return prisma.$transaction(async (tx) => {
+  const publication = await prisma.$transaction(async (tx) => {
     const raffle = await tx.raffle.findUniqueOrThrow({
       where: { id: input.raffleId },
       select: { id: true, endAt: true },
@@ -98,4 +99,11 @@ export async function publishRaffleToTelegram(input: {
     }
     return publication;
   });
+
+  // The announcement is a PENDING delivery that only the bot's sweep drains,
+  // so without this it waited out SCHEDULER_IDLE_SECONDS. Nudged after the
+  // transaction commits — from inside it, the bot could sweep before the rows
+  // were visible and go straight back to sleep.
+  await nudgeBot(`raffle #${input.raffleId} published to Telegram`);
+  return publication;
 }

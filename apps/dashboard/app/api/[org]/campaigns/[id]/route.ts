@@ -3,6 +3,7 @@ import { CampaignStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { AccessError, logAudit, requireOrgAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
+import { nudgeBot } from "@/lib/bot-nudge";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -68,6 +69,7 @@ export async function PATCH(
         targetId: campaign.id,
         metadata: { from: campaign.status, to: status },
       });
+      await nudgeBot("campaign changed");
       return NextResponse.json({ ok: true, status });
     }
 
@@ -211,6 +213,7 @@ export async function PATCH(
       targetType: "campaign",
       targetId: campaign.id,
     });
+    await nudgeBot("campaign changed");
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof AccessError)
@@ -252,6 +255,7 @@ export async function DELETE(
       targetType: "campaign",
       targetId: campaign.id,
     });
+    await nudgeBot("campaign changed");
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof AccessError)

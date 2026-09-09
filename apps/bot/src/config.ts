@@ -134,6 +134,19 @@ const schema = z.object({
   /** Bind address for the internal API. Keep 127.0.0.1 on a VPS; use 0.0.0.0
    *  only inside an isolated Docker network. */
   INTERNAL_API_HOST: z.string().default("127.0.0.1"),
+
+  /**
+   * Private channel the dashboard posts a marker to after it writes work the
+   * scheduler must action (a new raffle, a reroll, a Telegram delivery). The
+   * bot sleeps between ticks and the dashboard runs on Vercel with no route to
+   * the internal API, so this is the only push channel between them — see
+   * services/controlChannel.ts. Leave it unset and dashboard-written work
+   * simply waits out SCHEDULER_IDLE_SECONDS, exactly as it did before.
+   */
+  CONTROL_CHANNEL_ID: z
+    .string()
+    .regex(/^\d{17,20}$/u, "CONTROL_CHANNEL_ID must be a Discord channel ID")
+    .optional(),
 });
 
 const parsed = schema.safeParse(process.env);

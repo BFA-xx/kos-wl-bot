@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { AccessError, logAudit, requireOrgAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
 import { parsePublicRaffleId } from "@/lib/raffle-share";
+import { nudgeBot } from "@/lib/bot-nudge";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -86,6 +87,7 @@ export async function POST(
       targetType: "raffle",
       targetId: String(id),
     });
+    await nudgeBot(`raffle #${id} results publish requested`);
     return NextResponse.json({ ok: true, queued: true });
   } catch (err) {
     if (err instanceof AccessError) {

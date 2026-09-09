@@ -12,6 +12,7 @@ import {
 import { parsePublicRaffleId } from "@/lib/raffle-share";
 import { sanitizeHttpUrl, sanitizeLegacyRaffleTasks } from "@/lib/raffle-input";
 import { isWalletChain } from "@/lib/wallet-validation";
+import { nudgeBot } from "@/lib/bot-nudge";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -313,6 +314,7 @@ export async function POST(
       metadata: { sourceRaffleId: source.id, variant },
     });
 
+    await nudgeBot(`raffle #${duplicate.id} duplicated from #${source.id}`);
     return NextResponse.json({ id: duplicate.id, sourceRaffleId: source.id });
   } catch (err) {
     if (err instanceof AccessError) {

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { AccessError, logAudit, requireOrgAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
 import { parseRaidInput } from "@/lib/raid-input";
+import { nudgeBot } from "@/lib/bot-nudge";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -163,6 +164,9 @@ export async function POST(
         proofType: raid.proofType,
       },
     });
+    // A DRAFT raid is not bot work yet; a SCHEDULED one is.
+    if (raid.status === RaidStatus.SCHEDULED)
+      await nudgeBot(`raid ${raid.id} scheduled`);
     return NextResponse.json({
       ok: true,
       id: raid.id,

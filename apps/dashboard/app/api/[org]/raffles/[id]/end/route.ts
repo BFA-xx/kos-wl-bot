@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { AccessError, requireOrgAccess, logAudit } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
+import { nudgeBot } from "@/lib/bot-nudge";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -33,6 +34,7 @@ export async function POST(
       data: { status: "LIVE", endAt: new Date() },
     });
     await logAudit(org.id, user.id, "RAFFLE_END", { targetType: "raffle", targetId: String(id) });
+    await nudgeBot(`raffle #${id} end requested`);
     return NextResponse.json({ ok: true, queued: true });
   } catch (err) {
     if (err instanceof AccessError) return NextResponse.json({ error: err.message }, { status: err.status });

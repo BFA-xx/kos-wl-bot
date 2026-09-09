@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { AccessError, requireOrgAccess, logAudit } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
 import { parsePublicRaffleId } from "@/lib/raffle-share";
+import { nudgeBot } from "@/lib/bot-nudge";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -150,6 +151,7 @@ export async function POST(req: Request, { params }: RouteContext) {
         : "RAFFLE_REROLL",
       { targetType: "raffle", targetId: String(id), metadata: options },
     );
+    await nudgeBot(`raffle #${id} reroll requested`);
     return NextResponse.json({ ok: true, queued: true });
   } catch (err) {
     if (err instanceof AccessError) {

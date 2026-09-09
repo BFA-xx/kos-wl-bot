@@ -21,6 +21,7 @@ import {
 } from "@/lib/telegram/format";
 import { ensureTelegramIdentity } from "@/lib/telegram/identity";
 import { removeWebEntry } from "@/lib/raffle-entry";
+import { nudgeBot } from "@/lib/bot-nudge";
 import {
   evaluateTelegramRaffleAccess,
   renderAccessChecklist,
@@ -694,6 +695,9 @@ async function confirmQuickRaffle(ctx: Context): Promise<void> {
     });
     return created;
   });
+  // Created from Telegram, but still a DRAFT row the Discord bot must post —
+  // same sweep, same wait, same nudge.
+  await nudgeBot(`raffle #${raffle.id} created from Telegram`);
   await ctx.answerCallbackQuery({ text: `Raffle #${raffle.id} created.` });
   await ctx.editMessageText(
     `Quick raffle #${raffle.id} is queued. KOS will publish it to Discord and Telegram.`,

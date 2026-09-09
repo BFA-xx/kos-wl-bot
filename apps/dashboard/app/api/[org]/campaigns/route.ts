@@ -3,6 +3,7 @@ import { CampaignStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { AccessError, logAudit, requireOrgAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
+import { nudgeBot } from "@/lib/bot-nudge";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -168,6 +169,7 @@ export async function POST(
         raffleCount: parsed.raffleIds.length,
       },
     });
+    await nudgeBot("campaign changed");
     return NextResponse.json({ ok: true, id: campaign.id });
   } catch (err) {
     if (err instanceof AccessError)
