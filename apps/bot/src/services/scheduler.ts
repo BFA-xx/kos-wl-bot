@@ -164,6 +164,15 @@ export class Scheduler {
       logger.warn({ err }, "next-boundary lookup failed; sleeping for the cap");
     }
     delay = Math.max(tickMs, delay);
+    this.nextTickAt = new Date(Date.now() + delay).toISOString();
+
+    // Publish liveness here, not at the top of the tick: the health page
+    // trusts the deadline in this row, and the only deadline the tick knew
+    // was the one that had just fired. With that stale value the page called
+    // a bot sleeping its idle cap "offline" three minutes into every nap. A
+    // sleep long enough to drop the connection always writes, so the row
+    // carries the real deadline; short hops keep the once-a-minute throttle.
+    await this.heartbeat(delay >= 60_000);
 
     // Release the connection so the compute can suspend while we wait. Prisma
     // reconnects lazily, so Discord interactions arriving mid-sleep still work
@@ -172,7 +181,6 @@ export class Scheduler {
       await prisma.$disconnect().catch(() => undefined);
     }
 
-    this.nextTickAt = new Date(Date.now() + delay).toISOString();
     this.transitionTimer = setTimeout(() => {
       this.transitionTimer = undefined;
       void this.runLoop();
@@ -256,10 +264,10 @@ export class Scheduler {
   /**
    * Liveness heartbeat for the Super Admin health page (the dashboard can't
    * reach the bot's localhost API from Vercel, so status flows via the DB).
-   * Throttled to ~1 write/minute.
+   * Throttled to ~1 write/minute unless forced.
    */
-  private async heartbeat(): Promise<void> {
-    if (Date.now() - this.lastHeartbeat < 60_000) return;
+  private async heartbeat(force = false): Promise<void> {
+    if (!force && Date.now() - this.lastHeartbeat < 60_000) return;
     this.lastHeartbeat = Date.now();
     const value = JSON.stringify({
       guilds: this.client.guilds.cache.size,
@@ -285,7 +293,6 @@ export class Scheduler {
       // Post raffles created from the dashboard, and run dashboard reroll
       // requests. This is how the Vercel dashboard drives the bot (they share
       // only the DB — the dashboard can't reach the bot's local API).
-      await this.heartbeat();
       if (Date.now() - this.lastCollaborationSweep >= 60_000) {
         this.lastCollaborationSweep = Date.now();
         await processCollaborationAutomations().catch((err) =>

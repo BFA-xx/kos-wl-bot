@@ -112,7 +112,8 @@ export default async function AdminHealthPage() {
         <p className="mt-4 text-xs text-kos-muted">
           Dashboard commands (post, edit, end, reroll) are delivered to the bot
           through the database — no direct network link is needed. The bot
-          reports a heartbeat every minute.
+          sleeps between ticks and publishes when its next one is due; it only
+          reads as offline once that deadline is well past.
         </p>
       </Card>
     </>
