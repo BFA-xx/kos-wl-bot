@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { getSessionUser, getValidAccessToken } from "@/lib/auth";
-import { fetchUserGuildsResult, guildIconUrl } from "@/lib/discord-oauth";
+import { getSessionUser } from "@/lib/auth";
+import { guildIconUrl } from "@/lib/discord-oauth";
+import { fetchMemberGuilds } from "@/lib/member-guilds";
 import { xProfileUrl } from "@/lib/organization-social";
 import { communityHasGuildMembership } from "@/lib/communities";
 import { PageTitle, Empty } from "@/components/ui";
@@ -37,14 +38,8 @@ export default async function CommunitiesPage({
     org.guildConnections.map((connection) => connection.guildId),
   );
   const discordMemberships = user
-    ? getValidAccessToken(user.id)
-        .then((token) =>
-          token
-            ? fetchUserGuildsResult(token)
-            : { ok: false as const, guilds: [] },
-        )
-        .catch(() => ({ ok: false as const, guilds: [] }))
-    : Promise.resolve({ ok: false as const, guilds: [] });
+    ? fetchMemberGuilds(user.id)
+    : Promise.resolve({ ok: false, guilds: [] });
   const [liveCounts, storedGuilds, discordResult] = await Promise.all([
     guildIds.length
       ? prisma.raffle.groupBy({

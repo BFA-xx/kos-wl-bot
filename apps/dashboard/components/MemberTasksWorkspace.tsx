@@ -426,8 +426,8 @@ function TasksHub({
                 <SectionTitle>Raffle task workspaces</SectionTitle>
                 {raffles.length === 0 ? (
                   <Empty>
-                    No active raffles right now. When communities go live, their
-                    raffle entry tasks will show here.
+                    No active raffles in your communities right now. When one of
+                    them goes live, its raffle entry tasks will show here.
                   </Empty>
                 ) : (
                   <div className="space-y-4">

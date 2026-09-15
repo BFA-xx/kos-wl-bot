@@ -35,6 +35,8 @@ interface RaffleSummary {
 interface RafflesData {
   raffles?: RaffleSummary[];
   endedRaffles?: RaffleSummary[];
+  /** False when Discord membership couldn't be read — only entered raffles are listed. */
+  membershipKnown?: boolean;
   error?: string;
 }
 
@@ -127,7 +129,7 @@ function MeRafflesInner() {
     <>
       <PageTitle
         title="Raffles"
-        subtitle="Browse live raffles, complete raffle-specific steps, and enter from one clean panel."
+        subtitle="Live raffles from your communities. Complete the raffle steps and enter from one clean panel."
         action={
           <>
             <Link href="/me/points" className="kos-btn">
@@ -161,13 +163,25 @@ function MeRafflesInner() {
             />
           </div>
 
+          {data && data.membershipKnown === false ? (
+            <ReconnectDiscordNotice />
+          ) : null}
+
           <SectionTitle>Enter raffles</SectionTitle>
           {!data ? (
             <Empty>Loading raffles…</Empty>
           ) : raffles.length === 0 ? (
             <Empty>
-              No live raffles right now. When a community opens one, it will
-              appear here.
+              No live raffles in your communities right now. When one of them
+              opens a raffle, it will appear here.
+              <div className="mt-3">
+                <Link
+                  href="/me/communities?view=all"
+                  className="text-kos-fg underline underline-offset-2"
+                >
+                  Discover more communities
+                </Link>
+              </div>
             </Empty>
           ) : (
             <div className="grid gap-4 xl:grid-cols-2">
@@ -354,6 +368,31 @@ function RaffleEntryCard({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Raffles are scoped by the member's own Discord guild list; without it the
+ * page can only show raffles they already entered, so say so instead of
+ * looking empty.
+ */
+function ReconnectDiscordNotice() {
+  return (
+    <div className="mb-6 rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-4 text-sm text-amber-100">
+      <div className="font-medium">
+        Reconnect Discord to see raffles from your communities
+      </div>
+      <p className="mt-1 text-xs leading-5 text-amber-100/70">
+        Raffles are matched to the Discord servers you belong to. Until Discord
+        is reconnected, only raffles you have already entered are listed.
+      </p>
+      <Link
+        href="/api/auth/discord/login?next=%2Fme%2Fraffles"
+        className="kos-btn mt-3"
+      >
+        Reconnect Discord
+      </Link>
     </div>
   );
 }

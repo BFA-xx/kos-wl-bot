@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { AccessError, requireUser } from "@/lib/access";
+import { memberCommunityGuildIds, memberRaffleWhere } from "@/lib/communities";
+import { fetchMemberGuilds } from "@/lib/member-guilds";
 import { TASK_TYPE_LABELS, taskActionUrl, type TaskConfig } from "@/lib/verify";
 import type { CompletionStatus, Prisma, TaskDefinition } from "@prisma/client";
 import {
@@ -17,8 +19,12 @@ export const runtime = "nodejs";
  * Tasks for the signed-in participant.
  *
  * - Without a query param, this returns the profile Tasks hub: standalone
- *   earning tasks, live raffles, and a separate recent-ended raffle collection
- *   from public KOS communities, all with the caller's completion state.
+ *   earning tasks, live raffles, and a separate recent-ended raffle collection,
+ *   all with the caller's completion state. Raffles are scoped to the
+ *   communities the caller is in (their own Discord guild list, the same rule
+ *   as the Communities directory) plus any raffle they already entered; when
+ *   that list can't be read, `membershipKnown` is false and only entered
+ *   raffles come back.
  * - With ?raffle=N, it returns the task list for one raffle.
  *
  * Participants aren't org members, so this is user-auth only — it exposes just
@@ -30,17 +36,20 @@ export async function GET(req: NextRequest) {
     const raffleParam = req.nextUrl.searchParams.get("raffle");
 
     if (!raffleParam) {
-      const orgs = await prisma.organization.findMany({
-        where: { suspendedAt: null },
-        orderBy: { createdAt: "asc" },
-        select: {
-          id: true,
-          slug: true,
-          name: true,
-          logoUrl: true,
-          guildConnections: { select: { guildId: true } },
-        },
-      });
+      const [orgs, membership] = await Promise.all([
+        prisma.organization.findMany({
+          where: { suspendedAt: null },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            logoUrl: true,
+            guildConnections: { select: { guildId: true } },
+          },
+        }),
+        fetchMemberGuilds(user.id),
+      ]);
 
       const orgByGuild = new Map<
         string,
@@ -59,6 +68,14 @@ export async function GET(req: NextRequest) {
 
       const guildIds = [...orgByGuild.keys()];
       const orgIds = orgs.map((org) => org.id);
+      const communityGuildIds = memberCommunityGuildIds(
+        orgs,
+        new Set(membership.guilds.map((guild) => guild.id)),
+      );
+      const visibleRaffleWhere = {
+        guildId: { in: guildIds },
+        ...memberRaffleWhere(user.id, communityGuildIds),
+      } satisfies Prisma.RaffleWhereInput;
 
       const standaloneTasks = orgIds.length
         ? await prisma.taskDefinition.findMany({
@@ -99,13 +116,13 @@ export async function GET(req: NextRequest) {
       const [raffles, endedRaffles] = guildIds.length
         ? await Promise.all([
             prisma.raffle.findMany({
-              where: { guildId: { in: guildIds }, status: "LIVE" },
+              where: { ...visibleRaffleWhere, status: "LIVE" },
               orderBy: { endAt: "asc" },
               take: 50,
               select: raffleSelect,
             }),
             prisma.raffle.findMany({
-              where: { guildId: { in: guildIds }, status: "ENDED" },
+              where: { ...visibleRaffleWhere, status: "ENDED" },
               orderBy: { endAt: "desc" },
               take: 30,
               select: raffleSelect,
@@ -213,6 +230,7 @@ export async function GET(req: NextRequest) {
 
       return NextResponse.json({
         xLinked,
+        membershipKnown: membership.ok,
         taskGroups: orgs
           .map((org) => {
             const tasks = standaloneTasks.filter(
