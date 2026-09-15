@@ -12,9 +12,10 @@ import { WalletChain } from "@kos/db";
 import type { Command } from "../types.js";
 import { KOS } from "../theme.js";
 import { buildId, Actions } from "../utils/ids.js";
-import { chainLabel, ALL_CHAINS } from "../utils/wallets.js";
+import { chainLabel, ALL_CHAINS, EVM_CHAINS, EVM_FIELD_ID } from "../utils/wallets.js";
 import { isRaffleManager } from "../utils/permissions.js";
 import {
+  upsertEvmWalletProfiles,
   upsertWalletProfile,
   getWalletProfiles,
   removeWalletProfile,
@@ -25,6 +26,11 @@ import { fetchTextChannel } from "../services/raffleService.js";
 import { toCsv } from "../proof/csv.js";
 
 const CHAIN_CHOICES = ALL_CHAINS.map((c) => ({ name: chainLabel(c), value: c }));
+// Discord allows 25 choices per option; the EVM shortcut takes one slot.
+const SET_CHAIN_CHOICES = [
+  { name: `All EVM networks (${EVM_CHAINS.length})`, value: EVM_FIELD_ID },
+  ...CHAIN_CHOICES,
+];
 
 export const walletCommand: Command = {
   // Members use set/view/remove; panel/export do their own manager check.
@@ -43,7 +49,7 @@ export const walletCommand: Command = {
         .setName("set")
         .setDescription("Save or update a wallet address")
         .addStringOption((o) =>
-          o.setName("chain").setDescription("Which chain").setRequired(true).addChoices(...CHAIN_CHOICES),
+          o.setName("chain").setDescription("Which chain").setRequired(true).addChoices(...SET_CHAIN_CHOICES),
         )
         .addStringOption((o) =>
           o.setName("address").setDescription("Your wallet address").setRequired(true),
@@ -98,8 +104,22 @@ async function handleRegister(interaction: ChatInputCommandInteraction) {
 }
 
 async function handleSet(interaction: ChatInputCommandInteraction) {
-  const chain = interaction.options.getString("chain", true) as WalletChain;
+  const requested = interaction.options.getString("chain", true);
   const address = interaction.options.getString("address", true);
+  if (requested === EVM_FIELD_ID) {
+    const res = await upsertEvmWalletProfiles({
+      userId: interaction.user.id,
+      username: interaction.user.username,
+      address,
+    });
+    return interaction.reply({
+      content: res.ok
+        ? `${KOS.emoji.check} Saved your EVM address for all **${EVM_CHAINS.length}** networks.`
+        : `${KOS.emoji.cross} ${res.error}`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+  const chain = requested as WalletChain;
   const res = await upsertWalletProfile({
     userId: interaction.user.id,
     username: interaction.user.username,
@@ -150,7 +170,8 @@ async function handlePanel(interaction: ChatInputCommandInteraction) {
       [
         "Register your wallet addresses once and they're saved for every raffle.",
         "",
-        `Supported chains: **${ALL_CHAINS.map(chainLabel).join(", ")}**`,
+        `One 0x address covers all **${EVM_CHAINS.length} EVM networks** (${EVM_CHAINS.map(chainLabel).join(", ")}).`,
+        `Also supported: **${ALL_CHAINS.filter((c) => !EVM_CHAINS.includes(c)).map(chainLabel).join(", ")}**.`,
         "",
         "Click below to add or update your wallets. You can change them any time.",
       ].join("\n"),

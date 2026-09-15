@@ -3,17 +3,40 @@
 import useSWR from "swr";
 import { useState } from "react";
 import { Empty } from "@/components/ui";
-import { walletChainLabel } from "@/lib/wallet-validation";
+import {
+  EVM_CHAINS,
+  EVM_FAMILY_KEY,
+  WALLET_CHAINS,
+  walletChainHint,
+  walletChainLabel,
+  walletFamily,
+} from "@/lib/wallet-validation";
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json());
 
+/**
+ * One `0x` address is valid on every EVM network, so the picker leads with a
+ * save-everywhere option; the per-network entries below it override one chain.
+ */
+const CHAIN_OPTIONS = WALLET_CHAINS.map((key) => ({
+  key: key as string,
+  label: walletChainLabel(key),
+  hint: walletChainHint(key),
+  evm: walletFamily(key) === "EVM",
+}));
 const CHAINS = [
-  { key: "ETHEREUM", label: "Ethereum", hint: "0x…" },
-  { key: "BASE", label: "Base", hint: "0x…" },
-  { key: "ROBINHOOD", label: walletChainLabel("ROBINHOOD"), hint: "0x…" },
-  { key: "SOLANA", label: "Solana", hint: "base58 address" },
-  { key: "BITCOIN", label: "Bitcoin", hint: "bc1… / 1… / 3…" },
+  {
+    key: EVM_FAMILY_KEY,
+    label: `All EVM networks (${EVM_CHAINS.length})`,
+    hint: "0x… — saved to every EVM network at once",
+    evm: true,
+  },
+  ...CHAIN_OPTIONS,
 ];
+const labelFor = (key: string) =>
+  CHAIN_OPTIONS.find((c) => c.key === key)?.label ?? key;
+const EVM_OPTIONS = CHAIN_OPTIONS.filter((c) => c.evm);
+const OTHER_OPTIONS = CHAIN_OPTIONS.filter((c) => !c.evm);
 
 interface Wallet {
   chain: string;
@@ -27,7 +50,7 @@ export function WalletsEditor() {
     "/api/me/wallets",
     fetcher,
   );
-  const [chain, setChain] = useState("ETHEREUM");
+  const [chain, setChain] = useState<string>(EVM_FAMILY_KEY);
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -48,17 +71,72 @@ export function WalletsEditor() {
     setBusy(false);
     if (res.ok) {
       setAddress("");
-      setMsg(`${CHAINS.find((c) => c.key === chain)?.label} wallet saved.`);
+      setMsg(
+        chain === EVM_FAMILY_KEY
+          ? `Saved to all ${EVM_CHAINS.length} EVM networks.`
+          : `${CHAINS.find((c) => c.key === chain)?.label} wallet saved.`,
+      );
       mutate();
     } else {
       setMsg(body.error ?? "Couldn't save that address.");
     }
   }
 
-  async function remove(c: string) {
-    if (!confirm(`Remove your ${c} wallet?`)) return;
-    await fetch(`/api/me/wallets?chain=${c}`, { method: "DELETE" });
+  async function remove(label: string, chainKeys: string[]) {
+    if (!confirm(`Remove your ${label} wallet?`)) return;
+    await Promise.all(
+      chainKeys.map((c) =>
+        fetch(`/api/me/wallets?chain=${c}`, { method: "DELETE" }),
+      ),
+    );
     mutate();
+  }
+
+  // EVM rows that share an address collapse into one card — after a
+  // save-everywhere that is all of them; a per-network override stands alone.
+  const evmKeys = new Set<string>(EVM_CHAINS);
+  const groups: {
+    key: string;
+    label: string;
+    chainKeys: string[];
+    address: string;
+    updatedAt: string;
+  }[] = [];
+  const evmByAddress = new Map<string, Wallet[]>();
+  for (const w of wallets) {
+    if (!evmKeys.has(w.chain)) continue;
+    const list = evmByAddress.get(w.address) ?? [];
+    list.push(w);
+    evmByAddress.set(w.address, list);
+  }
+  for (const [address, rows] of evmByAddress) {
+    const chainKeys = rows.map((r) => r.chain);
+    const label =
+      chainKeys.length === EVM_CHAINS.length
+        ? "All EVM networks"
+        : chainKeys.length > 4
+          ? `${chainKeys.length} EVM networks`
+          : chainKeys.map((c) => labelFor(c)).join(", ");
+    groups.push({
+      key: `evm:${address}`,
+      label,
+      chainKeys: chainKeys.length === EVM_CHAINS.length ? [EVM_FAMILY_KEY] : chainKeys,
+      address,
+      updatedAt: rows.reduce(
+        (latest, r) => (r.updatedAt > latest ? r.updatedAt : latest),
+        rows[0]?.updatedAt ?? "",
+      ),
+    });
+  }
+  for (const w of wallets) {
+    if (evmKeys.has(w.chain)) continue;
+    groups.push({
+      key: w.chain,
+      label: labelFor(w.chain),
+      chainKeys: [w.chain],
+      address: w.address,
+      updatedAt: w.updatedAt,
+    });
   }
 
   return (
@@ -79,11 +157,21 @@ export function WalletsEditor() {
             value={chain}
             onChange={(e) => setChain(e.target.value)}
           >
-            {CHAINS.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.label}
-              </option>
-            ))}
+            <option value={EVM_FAMILY_KEY}>{CHAINS[0].label}</option>
+            <optgroup label="EVM networks">
+              {EVM_OPTIONS.map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Other networks">
+              {OTHER_OPTIONS.map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
           <input
             className="kos-input font-mono text-sm"
@@ -96,7 +184,13 @@ export function WalletsEditor() {
             disabled={busy || !address.trim()}
             className="kos-btn-primary whitespace-nowrap disabled:opacity-50"
           >
-            {busy ? "Saving…" : byChain.has(chain) ? "Update" : "Add wallet"}
+            {busy
+              ? "Saving…"
+              : chain === EVM_FAMILY_KEY
+                ? "Save everywhere"
+                : byChain.has(chain)
+                  ? "Update"
+                  : "Add wallet"}
           </button>
         </div>
         {msg ? <p className="text-sm text-kos-muted">{msg}</p> : null}
@@ -110,25 +204,23 @@ export function WalletsEditor() {
         </Empty>
       ) : (
         <div className="grid gap-3">
-          {wallets.map((w) => (
+          {groups.map((g) => (
             <div
-              key={w.chain}
+              key={g.key}
               className="kos-card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0">
-                <div className="text-sm font-semibold">
-                  {CHAINS.find((c) => c.key === w.chain)?.label ?? w.chain}
-                </div>
+                <div className="text-sm font-semibold">{g.label}</div>
                 <code className="break-all text-xs text-kos-muted">
-                  {w.address}
+                  {g.address}
                 </code>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="text-[11px] text-kos-muted">
-                  updated {new Date(w.updatedAt).toLocaleDateString()}
+                  updated {new Date(g.updatedAt).toLocaleDateString()}
                 </span>
                 <button
-                  onClick={() => remove(w.chain)}
+                  onClick={() => remove(g.label, g.chainKeys)}
                   className="text-xs text-kos-muted hover:text-red-400"
                 >
                   Remove

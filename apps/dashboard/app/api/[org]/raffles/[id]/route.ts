@@ -5,11 +5,11 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { Prisma, type WalletChain } from "@prisma/client";
 import { sanitizeHttpUrl, sanitizeLegacyRaffleTasks } from "@/lib/raffle-input";
 import { parsePublicRaffleId } from "@/lib/raffle-share";
+import { isWalletChain } from "@/lib/wallet-validation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const CHAINS = ["ETHEREUM", "BASE", "ROBINHOOD", "SOLANA", "BITCOIN"];
 
 export async function GET(
   _req: Request,
@@ -113,7 +113,7 @@ export async function PATCH(
 
     if (Array.isArray(b.walletChains)) {
       const wc = b.walletChains.filter((c: string) =>
-        CHAINS.includes(c),
+        isWalletChain(c),
       ) as WalletChain[];
       if (wc.length) data.walletChains = wc;
     }

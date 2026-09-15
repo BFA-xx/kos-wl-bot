@@ -12,6 +12,8 @@ import {
   TableShell,
 } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
+import { WALLET_CHAINS, walletChainLabel } from "@/lib/wallet-validation";
+import type { WalletChain } from "@prisma/client";
 import {
   IconArrowDown,
   IconArrowUp,
@@ -92,14 +94,10 @@ interface PoolData {
   };
 }
 
-const CHAINS = ["ETHEREUM", "BASE", "ROBINHOOD", "SOLANA", "BITCOIN"] as const;
-const CHAIN_LABELS: Record<(typeof CHAINS)[number], string> = {
-  ETHEREUM: "Ethereum",
-  BASE: "Base",
-  ROBINHOOD: "Robinhood",
-  SOLANA: "Solana",
-  BITCOIN: "Bitcoin",
-};
+const CHAINS = WALLET_CHAINS;
+const CHAIN_LABELS: Record<string, string> = Object.fromEntries(
+  CHAINS.map((chain) => [chain, walletChainLabel(chain)]),
+);
 const MODES: { value: SelectionMode; label: string; hint: string }[] = [
   {
     value: "ROUND_ROBIN",
@@ -135,7 +133,7 @@ export function TeamWalletPoolManager() {
   const [showImport, setShowImport] = useState(false);
   const [content, setContent] = useState("");
   const [selectedChains, setSelectedChains] = useState<
-    (typeof CHAINS)[number][]
+    WalletChain[]
   >(["ETHEREUM"]);
   const [ownerId, setOwnerId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -210,7 +208,7 @@ export function TeamWalletPoolManager() {
     setContent(await file.text());
   }
 
-  function toggleChain(chain: (typeof CHAINS)[number]) {
+  function toggleChain(chain: WalletChain) {
     setSelectedChains((current) =>
       current.includes(chain)
         ? current.filter((value) => value !== chain)
@@ -781,7 +779,7 @@ function WalletMobileCard({
             key={chain}
             className="rounded-lg border border-white/[0.08] bg-white/[0.035] px-2 py-1 text-[11px] text-kos-muted"
           >
-            {CHAIN_LABELS[chain as keyof typeof CHAIN_LABELS] ?? chain}
+            {CHAIN_LABELS[chain] ?? chain}
           </span>
         ))}
       </div>
@@ -869,7 +867,7 @@ function WalletRows({
                 key={chain}
                 className="rounded-lg border border-white/[0.08] bg-white/[0.035] px-2 py-1 text-[11px] text-kos-muted"
               >
-                {CHAIN_LABELS[chain as keyof typeof CHAIN_LABELS] ?? chain}
+                {CHAIN_LABELS[chain] ?? chain}
               </span>
             ))}
           </div>

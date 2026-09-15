@@ -11,11 +11,11 @@ import {
 } from "@/lib/raffle-duplication";
 import { parsePublicRaffleId } from "@/lib/raffle-share";
 import { sanitizeHttpUrl, sanitizeLegacyRaffleTasks } from "@/lib/raffle-input";
+import { isWalletChain } from "@/lib/wallet-validation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const CHAINS = ["ETHEREUM", "BASE", "ROBINHOOD", "SOLANA", "BITCOIN"];
 
 const sourceInclude = {
   eligibleRoles: { orderBy: { id: "asc" as const } },
@@ -218,7 +218,7 @@ export async function POST(
 
     const walletChains = (
       Array.isArray(body.walletChains) ? body.walletChains : source.walletChains
-    ).filter((chain: string) => CHAINS.includes(chain)) as WalletChain[];
+    ).filter((chain: string) => isWalletChain(chain)) as WalletChain[];
 
     const duplicate = await prisma.$transaction(async (tx) => {
       const created = await tx.raffle.create({

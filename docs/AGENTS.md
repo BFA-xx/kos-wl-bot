@@ -138,10 +138,18 @@ Task verification behavior:
   Reward redemptions spend points through negative ledger rows and refunds use
   positive refund rows.
 
-Wallet validation is format-only for Ethereum/Base/Robinhood Chain, Solana,
-and Bitcoin. Robinhood Chain (`ROBINHOOD`, shown as `Robinhood Chain (RH)`) is
-an EVM chain and therefore uses the same normalized `0x` address rules as
-Ethereum and Base.
+Wallet chains come from one registry table (dashboard
+`lib/wallet-validation.ts`, mirrored in bot `utils/wallets.ts` — change both).
+Every EVM chain (Ethereum, Base, Robinhood Chain, Arc, Ink, Abstract,
+HyperEVM, Monad, MegaETH, Berachain, ApeChain, Arbitrum, Optimism, Polygon,
+BNB Chain, Zora, Shape, Scroll, Linea, Blast) shares the normalized `0x` rule
+but is its own enum value; Solana and Bitcoin are format-only; Zcash accepts
+`t1`/`t3`, `zs1`, `u1`/`zu1`/`tu1`, and `tex1` with bech32/bech32m checksums
+verified. Adding a chain is one registry row plus an `ALTER TYPE … ADD VALUE`
+migration, and the list must stay at or under 25 entries (Discord's select
+and slash-choice cap; the registry test enforces it). The Discord wallet
+modal and `chain: "EVM"` on `/wallet set` / `POST /api/me/wallets` save one
+`0x` address to every EVM chain; a per-chain save overrides one network.
 Winner resolution is also chain-strict: a raffle-specific wallet is usable
 only when its chain is configured on that raffle, and a reusable profile may
 only fall back to another configured chain. Never substitute the user's first

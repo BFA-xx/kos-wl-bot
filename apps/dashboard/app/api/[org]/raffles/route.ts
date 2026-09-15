@@ -9,11 +9,11 @@ import {
 import { PERMISSIONS } from "@/lib/permissions";
 import type { Prisma, RaffleStatus, WalletChain } from "@prisma/client";
 import { sanitizeHttpUrl, sanitizeLegacyRaffleTasks } from "@/lib/raffle-input";
+import { isWalletChain } from "@/lib/wallet-validation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const CHAINS = ["ETHEREUM", "BASE", "ROBINHOOD", "SOLANA", "BITCOIN"];
 
 export async function GET(
   req: NextRequest,
@@ -148,7 +148,7 @@ export async function POST(
 
     const walletChains = (
       Array.isArray(b.walletChains) ? b.walletChains : ["ETHEREUM"]
-    ).filter((c: string) => CHAINS.includes(c)) as WalletChain[];
+    ).filter((c: string) => isWalletChain(c)) as WalletChain[];
     const roles = (Array.isArray(b.roles) ? b.roles : [])
       .filter((r: { roleId?: string; roleName?: string }) => r?.roleId)
       .map((r: { roleId: string; roleName?: string }) => ({

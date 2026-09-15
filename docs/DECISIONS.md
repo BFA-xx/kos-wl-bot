@@ -730,3 +730,38 @@ each check costs a billable read, and re-charging for an answer already given is
 the same waste the cost audit removed everywhere else. With no handle configured
 the gate stands down entirely — a required step nobody can define would strand
 every new member.
+
+## D058 — Wallet chains are an address-family registry; one EVM address fans out
+
+**Status:** Accepted; built 2026-09-15
+**Decision:** `WalletChain` grows from five values to twenty-three: Zcash
+(`ZCASH`) plus every EVM network the mint bot runs on or is about to (Arc, Ink,
+Abstract, HyperEVM, Monad, MegaETH, Berachain, ApeChain, Arbitrum, Optimism,
+Polygon, BNB Chain, Zora, Shape, Scroll, Linea, Blast). Each chain carries an
+address *family* (`EVM`, `SOLANA`, `BITCOIN`, `ZCASH`) in one registry table,
+mirrored between `apps/dashboard/lib/wallet-validation.ts` and
+`apps/bot/src/utils/wallets.ts`; every list, label, and validator derives from
+it, so a future chain is one row plus a migration. Validation stays
+format-level, but the Zcash bech32/bech32m encodings (`zs1`, `u1`/`zu1`/`tu1`,
+`tex1`) are checksum-verified because unified addresses run past 200
+characters and a pasted typo is otherwise invisible; `t1`/`t3` are Base58 by
+shape, and retired Sprout `zc…` addresses are refused by name. Modal and API
+address limits rise to 320 characters for the same reason.
+Because a Discord modal holds five inputs, the wallet-registration modal now
+has one **EVM address** field that saves to every EVM chain, plus Solana,
+Bitcoin, and Zcash. Submitting it with the pre-filled EVM value untouched
+fills only the EVM chains the member does not have yet; a new value replaces
+the address on all of them. `/wallet set` and the website's `/me/wallets`
+offer the same "All EVM networks" shortcut (`chain: "EVM"` on
+`POST /api/me/wallets`), while a per-chain save still overrides one network.
+D042's rule is unchanged: a profile is an explicit row per chain, and winner
+resolution never borrows a wallet from a chain the raffle did not configure.
+**Why:** Teams were already running raffles on chains the enum could not name,
+and every new chain meant editing seven hand-copied lists. The fan-out is what
+makes twenty EVM chains usable: without it a member holding one `0x` wallet
+would be "missing a wallet" on every Ink or Arc raffle until they discovered a
+slash command. Filling gaps on an unchanged submit is how existing members —
+who hold Ethereum/Base/RH rows from before — pick up the new networks the next
+time they open the form, without clobbering a Base-specific override they set
+on purpose. Discord's 25-entry cap on select menus and slash choices is the
+hard ceiling on the list; the registry test asserts it.

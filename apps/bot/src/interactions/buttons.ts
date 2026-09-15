@@ -21,7 +21,7 @@ import {
 } from "../services/entryService.js";
 import { buildWalletProfileModal } from "../services/walletService.js";
 import { handleRaffleWizardButton } from "./raffleWizard.js";
-import { chainLabel } from "../utils/wallets.js";
+import { chainLabel, MAX_ADDRESS_LENGTH } from "../utils/wallets.js";
 import { KOS } from "../theme.js";
 import { logger } from "../logger.js";
 import { verifyTaskForMember } from "../services/pointsService.js";
@@ -425,7 +425,7 @@ async function handleOpenWalletForm(
       .setLabel(`${chainLabel(chain)} address`)
       .setStyle(TextInputStyle.Short)
       .setRequired(chains.length === 1)
-      .setMaxLength(120);
+      .setMaxLength(MAX_ADDRESS_LENGTH);
     modal.addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(input),
     );

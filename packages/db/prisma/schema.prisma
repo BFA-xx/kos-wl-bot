@@ -30,12 +30,34 @@ enum RoleMatchMode {
   ALL
 }
 
+/// Payout networks a raffle can collect wallets for. Every EVM chain shares the
+/// `0x` address format but stays a distinct registry identity (D042) — the
+/// chain names the network the team pays out on, not the address shape.
+/// Postgres enums are append-only; add new values at the end via a migration.
 enum WalletChain {
   ETHEREUM
   BASE
   ROBINHOOD
   SOLANA
   BITCOIN
+  ZCASH
+  ARC
+  INK
+  ABSTRACT
+  HYPEREVM
+  MONAD
+  MEGAETH
+  BERACHAIN
+  APECHAIN
+  ARBITRUM
+  OPTIMISM
+  POLYGON
+  BNB
+  ZORA
+  SHAPE
+  SCROLL
+  LINEA
+  BLAST
 }
 
 enum TeamWalletStatus {

@@ -1,14 +1,24 @@
 import { MessageFlags, type ModalSubmitInteraction } from "discord.js";
 import { parseId, Actions } from "../utils/ids.js";
 import {
+  currentEvmAddress,
+  getWalletProfiles,
   recordWallet,
+  upsertEvmWalletProfiles,
   upsertWalletProfile,
 } from "../services/walletService.js";
 import {
   handleRaffleCreateModal,
   handleRaffleOptionsModal,
 } from "./raffleWizard.js";
-import { chainLabel, ALL_CHAINS } from "../utils/wallets.js";
+import {
+  chainLabel,
+  ALL_CHAINS,
+  EVM_CHAINS,
+  EVM_FIELD_ID,
+  validateWallet,
+} from "../utils/wallets.js";
+import { WalletChain } from "@kos/db";
 import { KOS } from "../theme.js";
 import {
   handleVerificationModal,
@@ -47,6 +57,42 @@ async function handleWalletProfileSubmit(interaction: ModalSubmitInteraction) {
 
   const results: string[] = [];
   let savedAny = false;
+
+  // One 0x field covers every EVM network. Unchanged from its pre-filled value
+  // means "fill the networks I don't have yet" — a per-network override set via
+  // /wallet set is kept; a new value replaces the address everywhere.
+  const evmValue = interaction.fields.fields.has(EVM_FIELD_ID)
+    ? interaction.fields.getTextInputValue(EVM_FIELD_ID).trim()
+    : "";
+  if (evmValue) {
+    const check = validateWallet(WalletChain.ETHEREUM, evmValue);
+    const current = currentEvmAddress(
+      await getWalletProfiles(interaction.user.id).catch(() => []),
+    );
+    const unchanged =
+      check.valid && current !== undefined && check.normalized === current;
+    const res = await upsertEvmWalletProfiles({
+      userId: interaction.user.id,
+      username: interaction.user.username,
+      address: evmValue,
+      onlyMissing: unchanged,
+    });
+    if (!res.ok) {
+      results.push(`${KOS.emoji.cross} EVM address: ${res.error}`);
+    } else if (unchanged) {
+      results.push(
+        res.chains?.length
+          ? `${KOS.emoji.check} EVM address unchanged — added to ${res.chains.length} more network${res.chains.length === 1 ? "" : "s"}.`
+          : `${KOS.emoji.check} EVM address unchanged.`,
+      );
+      savedAny = true;
+    } else {
+      results.push(
+        `${KOS.emoji.check} EVM address saved for all ${EVM_CHAINS.length} networks.`,
+      );
+      savedAny = true;
+    }
+  }
 
   for (const chain of ALL_CHAINS) {
     if (!interaction.fields.fields.has(chain)) continue;

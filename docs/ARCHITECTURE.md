@@ -305,12 +305,24 @@ Discord surfaces:
 
 ## Wallets and encryption
 
-Ethereum/Base/Robinhood Chain, Solana, and Bitcoin addresses receive
-format-only validation. Robinhood Chain is stored as the distinct
-`ROBINHOOD` enum value but uses EVM `0x` validation and normalization. This
-lets a team require or collect the exact network without conflating it with a
-member's Ethereum/Base record. `WalletProfile` is shared between Discord and
-web. Winner exports prefer a raffle-specific `Wallet`, then fall back to a
+Wallet chains live in one registry (`apps/dashboard/lib/wallet-validation.ts`,
+mirrored in `apps/bot/src/utils/wallets.ts`) that maps each `WalletChain` to a
+label and an address family: `EVM` (Ethereum, Base, Robinhood Chain, Arc, Ink,
+Abstract, HyperEVM, Monad, MegaETH, Berachain, ApeChain, Arbitrum, Optimism,
+Polygon, BNB Chain, Zora, Shape, Scroll, Linea, Blast), `SOLANA`, `BITCOIN`,
+and `ZCASH`. Validation is format-level: every EVM chain uses the same
+lowercase-normalized `0x` rule but stays a distinct enum value, so a team can
+require the exact payout network without conflating it with a member's
+Ethereum record. Zcash accepts transparent `t1`/`t3` (Base58, 35 chars),
+Sapling `zs1` (bech32, 78 chars), unified `u1`/`zu1`/`tu1` (bech32m, typically
+141–213 chars), and `tex1` (bech32m, 42 chars); the bech32 family is
+checksum-verified and lowercased, and retired Sprout `zc…` addresses are
+refused. Because Discord modals hold five inputs, the registration modal has
+one EVM field that fans out to every EVM chain (filling gaps when the value is
+unchanged, replacing everywhere when it changes); `/wallet set` and
+`POST /api/me/wallets` accept `chain: "EVM"` for the same fan-out. Discord
+caps select menus and slash choices at 25 entries, which bounds the registry.
+`WalletProfile` is shared between Discord and web. Winner exports prefer a raffle-specific `Wallet`, then fall back to a
 matching reusable profile. Both paths are constrained by the raffle's exact
 `walletChains`; a submitted or saved wallet from another chain is omitted and
 the winner remains awaiting a valid wallet. This same resolver is used by bot

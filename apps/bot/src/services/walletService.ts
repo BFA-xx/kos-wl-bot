@@ -14,16 +14,36 @@ import {
   validateWallet,
   chainLabel,
   ALL_CHAINS,
+  EVM_CHAINS,
+  EVM_FIELD_ID,
+  MAX_ADDRESS_LENGTH,
   selectConfiguredWallet,
+  walletFamily,
 } from "../utils/wallets.js";
 import { buildId, Actions } from "../utils/ids.js";
 import { KOS } from "../theme.js";
 import { audit } from "./auditService.js";
 import { logger } from "../logger.js";
 
+/** The member's current EVM address: their first EVM profile in display order. */
+export function currentEvmAddress(
+  profiles: readonly { chain: WalletChain; address: string }[],
+): string | undefined {
+  const byChain = new Map(profiles.map((p) => [p.chain, p.address]));
+  for (const chain of EVM_CHAINS) {
+    const saved = byChain.get(chain);
+    if (saved) return saved;
+  }
+  return undefined;
+}
+
 /**
  * Build the wallet-registration popup, pre-filled with the user's saved
  * addresses. Shared by the panel button, winner DMs, and /wallet register.
+ *
+ * A Discord modal holds five inputs and there are far more than five chains,
+ * so every EVM network shares one `0x` field — the submit handler fans it out
+ * to all of them — and the non-EVM families get a field each.
  */
 export async function buildWalletProfileModal(
   userId: string,
@@ -35,13 +55,29 @@ export async function buildWalletProfileModal(
     .setCustomId(buildId(Actions.SubmitWalletProfile))
     .setTitle("Register / Update Wallets");
 
-  for (const chain of ALL_CHAINS.slice(0, 5)) {
+  const evm = new TextInputBuilder()
+    .setCustomId(EVM_FIELD_ID)
+    .setLabel("EVM address (Ethereum, Base, RH, Ink, Arc…)")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(MAX_ADDRESS_LENGTH)
+    .setPlaceholder(
+      `0x… — saved for all ${EVM_CHAINS.length} EVM networks (optional)`,
+    );
+  const savedEvm = currentEvmAddress(existing);
+  if (savedEvm) evm.setValue(savedEvm);
+  modal.addComponents(
+    new ActionRowBuilder<TextInputBuilder>().addComponents(evm),
+  );
+
+  const nonEvm = ALL_CHAINS.filter((chain) => walletFamily(chain) !== "EVM");
+  for (const chain of nonEvm.slice(0, 4)) {
     const input = new TextInputBuilder()
       .setCustomId(chain)
       .setLabel(`${chainLabel(chain)} address`)
       .setStyle(TextInputStyle.Short)
       .setRequired(false)
-      .setMaxLength(120)
+      .setMaxLength(MAX_ADDRESS_LENGTH)
       .setPlaceholder(`Your ${chainLabel(chain)} address (optional)`);
     const saved = byChain.get(chain);
     if (saved) input.setValue(saved);
@@ -289,6 +325,51 @@ export async function upsertWalletProfile(params: {
   });
 
   return { ok: true };
+}
+
+/**
+ * Save one `0x` address to every EVM chain at once. With `onlyMissing`, chains
+ * that already hold an address keep it — used when the modal comes back with
+ * the pre-filled EVM value untouched, so a per-network override survives while
+ * newly added networks still get filled in.
+ */
+export async function upsertEvmWalletProfiles(params: {
+  userId: string;
+  username: string;
+  address: string;
+  onlyMissing?: boolean;
+}): Promise<RecordWalletResult & { chains?: WalletChain[] }> {
+  const validation = validateWallet(WalletChain.ETHEREUM, params.address);
+  if (!validation.valid) return { ok: false, error: validation.error };
+
+  await prisma.user.upsert({
+    where: { id: params.userId },
+    create: { id: params.userId, username: params.username },
+    update: { username: params.username },
+  });
+
+  let chains = EVM_CHAINS;
+  if (params.onlyMissing) {
+    const held = await prisma.walletProfile.findMany({
+      where: { userId: params.userId, chain: { in: EVM_CHAINS } },
+      select: { chain: true },
+    });
+    const heldSet = new Set(held.map((row) => row.chain));
+    chains = EVM_CHAINS.filter((chain) => !heldSet.has(chain));
+  }
+  if (chains.length === 0) return { ok: true, chains };
+
+  const stored = encryptSecret(validation.normalized!);
+  await prisma.$transaction(
+    chains.map((chain) =>
+      prisma.walletProfile.upsert({
+        where: { userId_chain: { userId: params.userId, chain } },
+        create: { userId: params.userId, chain, address: stored },
+        update: { address: stored },
+      }),
+    ),
+  );
+  return { ok: true, chains };
 }
 
 export async function getWalletProfiles(userId: string) {

@@ -1,18 +1,16 @@
+import { WALLET_CHAINS, walletChainLabel } from "@/lib/wallet-validation";
+
 const GENERIC_PARTNER_CATEGORIES = new Set([
   "partner",
   "raffle partner",
   "collaboration partner",
 ]);
 
-const CHAIN_LABELS: Record<string, string> = {
-  ETHEREUM: "Ethereum",
-  BASE: "Base",
-  ROBINHOOD: "Robinhood Chain (RH)",
-  SOLANA: "Solana",
-  BITCOIN: "Bitcoin",
-};
+const CHAIN_LABELS: Record<string, string> = Object.fromEntries(
+  WALLET_CHAINS.map((chain) => [chain, walletChainLabel(chain)]),
+);
 
-const CHAIN_ORDER = Object.keys(CHAIN_LABELS);
+const CHAIN_ORDER: readonly string[] = WALLET_CHAINS;
 
 type RaffleChainLink = {
   raffle: {
