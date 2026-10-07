@@ -1,16 +1,17 @@
 # KOS Raffles — Runbook (when something goes wrong)
 
 Your live setup:
-- **Bot** → EC2 (`ubuntu@34.207.252.118`), managed by **pm2** as `kos-bot`.
+- **Bot** → EC2 (`ubuntu@34.226.109.172`), managed by **pm2** as `kos-bot`.
+  The box is shared with the Mintooor mint bot (its pm2 apps are `mintooor-*`, its API
+  owns port 4000) — only ever restart `kos-bot`, never `pm2 restart all`.
 - **Dashboard** → Vercel (`kos-wl-bot-dashboard-3a8x.vercel.app`).
 - **Database** → Neon (shared by both).
 
 Connect to the server:
 ```
-ssh -i ~/Downloads/kosraf.pem ubuntu@34.207.252.118
+ssh -i ~/.ssh/mintooor-outis.pem ubuntu@34.226.109.172
 ```
-> If `pm2`/`pnpm`/`node` "command not found" right after SSH, run:
-> `export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"`
+> node, pnpm and pm2 are system installs on this box — no nvm.
 
 ---
 
@@ -29,7 +30,7 @@ The **dashboard** redeploys itself automatically whenever you push to GitHub.
 ```
 pm2 ls                         # is kos-bot "online"? (high ↺ = crash loop)
 pm2 logs kos-bot --lines 50    # recent logs (Ctrl+C to exit)
-curl -s http://127.0.0.1:4000/internal/health   # {"ok":true,"ready":true}
+curl -s http://127.0.0.1:4100/internal/health   # {"ok":true,"ready":true}
 pm2 monit                      # live CPU / memory
 ```
 
@@ -60,14 +61,14 @@ Attach Files**. Then in Discord run `/raffle repost id:<#>`.
 
 ### Slash commands missing or outdated
 ```
-cd ~/kos-wl-bot && export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"
+cd ~/kos-wl-bot
 pnpm deploy:commands
 ```
 (Instant for your guild; reopen Discord if needed.)
 
 ### Need to fix raffle data directly
 ```
-cd ~/kos-wl-bot && export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"
+cd ~/kos-wl-bot
 DATABASE_URL="<your-neon-url>" pnpm db:studio
 ```
 Opens Prisma Studio (a spreadsheet-like DB editor) — but prefer `/raffle edit`
@@ -97,8 +98,7 @@ Production**.
 pm2 is set to auto-start the bot on reboot (`pm2 save` + `pm2 startup` were run).
 If after a reboot the bot is down:
 ```
-ssh -i ~/Downloads/kosraf.pem ubuntu@34.207.252.118
-export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"
+ssh -i ~/.ssh/mintooor-outis.pem ubuntu@34.226.109.172
 pm2 resurrect || (cd ~/kos-wl-bot && pm2 start ecosystem.config.cjs --only kos-bot && pm2 save)
 ```
 

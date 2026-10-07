@@ -6,12 +6,14 @@
 #   ./scripts/deploy-ec2.sh
 #
 # Override host/key/path if they change:
-#   KEY=~/Downloads/kosraf.pem HOST=ubuntu@1.2.3.4 ./scripts/deploy-ec2.sh
+#   KEY=~/.ssh/mintooor-outis.pem HOST=ubuntu@1.2.3.4 ./scripts/deploy-ec2.sh
 #
 set -euo pipefail
 
-KEY="${KEY:-$HOME/Downloads/kosraf.pem}"
-HOST="${HOST:-ubuntu@34.207.252.118}"
+KEY="${KEY:-$HOME/.ssh/mintooor-outis.pem}"
+HOST="${HOST:-ubuntu@34.226.109.172}"
+# The box is shared with the Mintooor API, which owns :4000; .env sets INTERNAL_API_PORT=4100.
+HEALTH_PORT="${HEALTH_PORT:-4100}"
 REMOTE_DIR="${REMOTE_DIR:-~/kos-wl-bot/}"
 LOCAL_DIR="${LOCAL_DIR:-$(cd "$(dirname "$0")/.." && pwd)/}"
 
@@ -23,8 +25,8 @@ rsync -az \
   "$LOCAL_DIR" "$HOST:$REMOTE_DIR"
 
 echo "▶ Building & restarting on the server ..."
-ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "$HOST" '
-  export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"
+ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "$HOST" HEALTH_PORT="$HEALTH_PORT" bash -s <<'REMOTE'
+  export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
   cd ~/kos-wl-bot
   pnpm install --frozen-lockfile
   pnpm --filter @kos/db build
@@ -33,7 +35,7 @@ ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "$HOST" '
   pnpm --filter @kos/bot deploy:commands -- --global
   pm2 restart kos-bot --update-env
   for attempt in $(seq 1 20); do
-    if health=$(curl -fsS --max-time 5 http://127.0.0.1:4000/internal/health 2>/dev/null); then
+    if health=$(curl -fsS --max-time 5 http://127.0.0.1:$HEALTH_PORT/internal/health 2>/dev/null); then
       if node -e "const health = JSON.parse(process.argv[1]); if (!health.ok || !health.ready || !health.scheduler?.lastTickAt || health.scheduler.lastTickOk !== true) process.exit(1)" "$health"; then
         echo "$health"
         exit 0
@@ -44,5 +46,5 @@ ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "$HOST" '
   echo "Bot did not become scheduler-ready within 40 seconds" >&2
   pm2 logs kos-bot --lines 50 --nostream >&2
   exit 1
-'
+REMOTE
 echo "✅ Deploy complete."
