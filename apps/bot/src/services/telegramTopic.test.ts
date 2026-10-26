@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { callTelegramApi } from "@kos/db";
 import {
+  formatTelegramDate,
   isTopicUnavailable,
   raffleBannerForTelegram,
   sendToCommunity,
@@ -192,5 +193,12 @@ test("only https banners are handed to Telegram", () => {
   assert.equal(
     raffleBannerForTelegram("https://raffle.koslabs.app/r/9/banner?v=2"),
     "https://raffle.koslabs.app/r/9/banner?v=2",
+  );
+});
+
+test("spells out raffle dates for Telegram in UTC", () => {
+  assert.equal(
+    formatTelegramDate(new Date("2026-10-26T16:47:09.476Z")),
+    "Mon 26 Oct 16:47 UTC",
   );
 });

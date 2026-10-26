@@ -96,6 +96,21 @@ export function raffleBannerForTelegram(
   }
 }
 
+const TELEGRAM_DATE_FORMAT = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "UTC",
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+/** Telegram has no client-side timestamps, so dates are spelled out in UTC. */
+export function formatTelegramDate(date: Date): string {
+  return `${TELEGRAM_DATE_FORMAT.format(date).replace(",", "")} UTC`;
+}
+
 function statusHeading(event: IntegrationDeliveryEvent): string {
   if (event === "RAFFLE_STARTING") return "KOS RAFFLE IS LIVE";
   if (event === "RAFFLE_COMPLETED") return "KOS RAFFLE COMPLETE";
@@ -187,7 +202,7 @@ async function deliverRaffleMessage(deliveryId: string): Promise<void> {
     `<b>Prize:</b> ${escapeHtml(raffle.title)}`,
     `<b>Winners:</b> ${raffle.spots}`,
     `<b>Status:</b> ${escapeHtml(status)}`,
-    `<b>Ends:</b> ${raffle.endAt.toISOString()}`,
+    `<b>Ends:</b> ${formatTelegramDate(raffle.endAt)}`,
   ];
   const keyboard: { text: string; callback_data?: string; url?: string }[][] =
     [];
