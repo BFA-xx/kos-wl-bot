@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { buildTelegramEntryRequirements } from "@/lib/telegram/entry-requirements";
+import { describe, expect, it, vi } from "vitest";
+import type { Context } from "grammy";
+import {
+  buildTelegramEntryRequirements,
+  sendTelegramEntryRequirements,
+} from "@/lib/telegram/entry-requirements";
 
 describe("Telegram raffle entry requirements", () => {
   it("names every failed step and gives one task-panel retry flow", () => {
@@ -109,5 +113,29 @@ describe("Telegram raffle entry requirements", () => {
         expect.objectContaining({ text: "Add required wallet" }),
       ]),
     );
+  });
+
+  it("redraws the checklist in place when Retry is pressed in the private chat", async () => {
+    const editMessageText = vi.fn().mockResolvedValue(true);
+    const sendMessage = vi.fn();
+    const reply = vi.fn();
+    const ctx = {
+      from: { id: 42 },
+      callbackQuery: { message: { chat: { id: 42, type: "private" } } },
+      editMessageText,
+      reply,
+      api: { sendMessage },
+    } as unknown as Context;
+    const delivered = await sendTelegramEntryRequirements(ctx, {
+      tokenId: "tok_123",
+      raffleId: 271,
+      raffleTitle: "GTD Spots",
+      discordOnly: false,
+      gates: [{ key: "wallet", label: "Registered wallet", ok: false }],
+    });
+    expect(delivered).toBe(true);
+    expect(editMessageText).toHaveBeenCalledTimes(1);
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(reply).not.toHaveBeenCalled();
   });
 });

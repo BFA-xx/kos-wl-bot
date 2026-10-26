@@ -1558,6 +1558,7 @@ enum KosCommunityApprovalStatus {
 
 enum TelegramConversationKind {
   QUICK_RAFFLE
+  WALLET_ADDRESS
 }
 
 enum KosModerationActionType {

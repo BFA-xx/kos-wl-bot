@@ -1,6 +1,9 @@
 import { InlineKeyboard, type Context } from "grammy";
+import type { WalletChain } from "@prisma/client";
 import type { Gate } from "@/lib/raffle-entry";
 import { dashboardOrigin, escapeTelegramHtml } from "@/lib/telegram/format";
+import { addWalletButtons } from "@/lib/telegram/wallet-entry";
+import { editOrReply } from "@/lib/telegram/edit-or-reply";
 
 interface TelegramEntryRequirements {
   tokenId: string;
@@ -8,6 +11,8 @@ interface TelegramEntryRequirements {
   raffleTitle: string;
   gates: Gate[];
   discordOnly: boolean;
+  /** Chains the raffle accepts; offered as in-chat wallet buttons. */
+  walletChains?: readonly WalletChain[];
 }
 
 function gateActionLabel(url: string): string {
@@ -46,9 +51,7 @@ function legacyTaskRef(
   gate: Gate,
   raffleId: number,
 ): { index: number; hash: string } | null {
-  const match = /^legacy-task-legacy:(\d+):(\d+):[a-f0-9]{12}$/u.exec(
-    gate.key,
-  );
+  const match = /^legacy-task-legacy:(\d+):(\d+):[a-f0-9]{12}$/u.exec(gate.key);
   if (!match || Number(match[1]) !== raffleId) return null;
   const index = Number(match[2]);
   return Number.isSafeInteger(index) && index >= 0
@@ -100,6 +103,10 @@ export function buildTelegramEntryRequirements(
     }
   }
 
+  if (input.walletChains?.length && failed.some((g) => g.key === "wallet")) {
+    addWalletButtons(keyboard, input.tokenId, input.walletChains);
+  }
+
   const seenUrls = new Set<string>();
   for (const gate of failed) {
     if (legacyTaskRef(gate, input.raffleId) !== null) continue;
@@ -128,12 +135,26 @@ export function buildTelegramEntryRequirements(
   };
 }
 
+/**
+ * Show the checklist in the member's private chat. A Retry entry pressed in
+ * that chat redraws the checklist it was pressed on, so retrying never stacks
+ * copies; a press in the group sends the first copy privately.
+ */
 export async function sendTelegramEntryRequirements(
   ctx: Context,
   input: TelegramEntryRequirements,
 ): Promise<boolean> {
   if (!ctx.from) return false;
   const { text, keyboard } = buildTelegramEntryRequirements(input);
+  if (ctx.callbackQuery?.message?.chat.type === "private") {
+    return editOrReply(ctx, text, {
+      parse_mode: "HTML",
+      reply_markup: keyboard,
+      link_preview_options: { is_disabled: true },
+    })
+      .then(() => true)
+      .catch(() => false);
+  }
   return ctx.api
     .sendMessage(ctx.from.id, text, {
       parse_mode: "HTML",

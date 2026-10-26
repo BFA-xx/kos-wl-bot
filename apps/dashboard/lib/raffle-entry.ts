@@ -5,6 +5,7 @@ import {
   recordRaffleParticipant,
   syncCampaignsForRaffle,
 } from "@kos/db";
+import { walletChainLabel } from "@/lib/wallet-validation";
 import { notifyPointsChannel } from "@/lib/points";
 import {
   getLegacyRaffleTasks,
@@ -230,7 +231,7 @@ export async function evaluateWebGates(
     const ok = have > 0;
     gates.push({
       key: "wallet",
-      label: `Registered ${raffle.walletChains.join(" / ")} wallet`,
+      label: `Registered ${raffle.walletChains.map(walletChainLabel).join(" / ")} wallet`,
       ok,
       reason: ok ? undefined : "Add a wallet on the Wallets page first.",
       url: "/me/wallets",

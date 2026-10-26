@@ -1,4 +1,4 @@
-import { Bot, type Context } from "grammy";
+import { Bot, InlineKeyboard, type Context } from "grammy";
 import type { Update } from "grammy/types";
 import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -20,6 +20,12 @@ import { ensureTelegramIdentity } from "@/lib/telegram/identity";
 import { awardKosPoints } from "@/lib/telegram/points";
 import { registerTelegramEngagementHandlers } from "@/lib/telegram/engagement";
 import { sendTelegramEntryRequirements } from "@/lib/telegram/entry-requirements";
+import {
+  closeWalletStep,
+  registerTelegramWalletHandlers,
+} from "@/lib/telegram/wallet-entry";
+import { editOrReply } from "@/lib/telegram/edit-or-reply";
+import { escapeTelegramHtml } from "@/lib/telegram/format";
 import { reconcileTelegramMembership } from "@/lib/telegram/raffle-access";
 import {
   getLegacyRaffleTasks,
@@ -159,6 +165,7 @@ async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
   );
   if (access.alreadyEntered) {
     await answer(ctx, "You are already entered in this raffle.");
+    await showEnteredScreen(ctx, publication.raffle, null);
     return;
   }
   if (!access.canEnter || !access.ready) {
@@ -169,6 +176,7 @@ async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
         raffleTitle: publication.raffle.title,
         gates: access.requirements.gates,
         discordOnly: access.requirements.discordOnly,
+        walletChains: publication.raffle.walletChains,
       });
       await ctx.answerCallbackQuery({
         text: delivered
@@ -211,6 +219,38 @@ async function enterFromTelegram(ctx: Context, tokenId: string): Promise<void> {
       ? "You are already entered in this raffle."
       : `You're in. This raffle now has ${entryCount} entries.`,
   );
+  await showEnteredScreen(ctx, publication.raffle, entryCount);
+}
+
+/**
+ * An entry finished from the private chat replaces the checklist it was
+ * pressed on, so a done checklist with a live Retry button isn't left behind.
+ * Group presses only get the toast — the shared raffle card isn't theirs.
+ */
+async function showEnteredScreen(
+  ctx: Context,
+  raffle: { id: number; title: string },
+  entryCount: number | null,
+): Promise<void> {
+  if (ctx.callbackQuery?.message?.chat.type !== "private") return;
+  await editOrReply(
+    ctx,
+    [
+      "<b>YOU'RE IN</b>",
+      "",
+      `<b>#${raffle.id} ${escapeTelegramHtml(raffle.title)}</b>`,
+      entryCount === null
+        ? "You are already entered in this raffle."
+        : `This raffle now has ${entryCount} entries.`,
+    ].join("\n"),
+    {
+      parse_mode: "HTML",
+      reply_markup: new InlineKeyboard().text(
+        "Back to raffles",
+        "raffles:list",
+      ),
+    },
+  ).catch(() => undefined);
 }
 
 async function attestTaskFromTelegram(
@@ -330,6 +370,7 @@ export function buildTelegramBot(token: string): Bot {
     await publishFromTelegram(ctx, match[1]);
   });
   bot.callbackQuery(/^a:([A-Za-z0-9_-]+)$/u, async (ctx) => {
+    await closeWalletStep(ctx);
     await enterFromTelegram(ctx, ctx.match[1]);
   });
   bot.callbackQuery(
@@ -347,6 +388,8 @@ export function buildTelegramBot(token: string): Bot {
   // `message:text` catch-all, and command handlers must be reachable.
   registerTelegramRaffleTopicHandlers(bot);
   registerTelegramDiscordLinkHandlers(bot);
+  // Its address-reply catch-all passes through when no wallet step is open.
+  registerTelegramWalletHandlers(bot);
   registerTelegramRaffleHandlers(bot);
   bot.catch((error) => {
     telegramLog("error", "handler_failed", {
