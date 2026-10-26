@@ -8,7 +8,7 @@ import type { WalletChain } from "@prisma/client";
  *
  * Mirrored in apps/bot/src/utils/wallets.ts — keep the two tables identical.
  */
-export type WalletFamily = "EVM" | "SOLANA" | "BITCOIN" | "ZCASH";
+export type WalletFamily = "EVM" | "SOLANA" | "BITCOIN" | "ZCASH" | "MONERO";
 
 export interface WalletChainMeta {
   label: string;
@@ -36,6 +36,7 @@ export const WALLET_CHAIN_META: Record<WalletChain, WalletChainMeta> = {
     family: "ZCASH",
     hint: "t1… / t3… / zs1… / u1…",
   },
+  MONERO: { label: "Monero (XMR)", family: "MONERO", hint: "4… / 8…" },
   ARC: { label: "Arc", family: "EVM", hint: "0x…" },
   INK: { label: "Ink", family: "EVM", hint: "0x…" },
   ABSTRACT: { label: "Abstract", family: "EVM", hint: "0x…" },
@@ -89,6 +90,11 @@ const ZEC_SAPLING_RE = /^zs1[02-9ac-hj-np-z]{75}$/u;
 const ZEC_UNIFIED_RE = /^(?:u|zu|tu)1[02-9ac-hj-np-z]{60,}$/u;
 const ZEC_TEX_RE = /^tex1[02-9ac-hj-np-z]{38}$/u;
 const ZEC_SPROUT_RE = /^zc[a-km-zA-HJ-NP-Z1-9]{93}$/u;
+
+// Monero: Base58 (Monero alphabet, case-sensitive, stored as typed). Standard
+// `4…` and subaddress `8…` are 95 chars; integrated `4…` is 106.
+const XMR_RE =
+  /^(?:[48][1-9A-HJ-NP-Za-km-z]{94}|4[1-9A-HJ-NP-Za-km-z]{105})$/u;
 
 const BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 const BECH32_GENERATOR = [
@@ -197,6 +203,13 @@ export function validateWalletAddress(
         : { ok: false, error: "Expected a valid legacy or bech32 address." };
     case "ZCASH":
       return validateZcash(address);
+    case "MONERO":
+      return XMR_RE.test(address)
+        ? { ok: true, normalized: address }
+        : {
+            ok: false,
+            error: "Expected a 95 or 106 character Monero address (4… / 8…).",
+          };
   }
 }
 

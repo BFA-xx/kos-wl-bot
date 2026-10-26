@@ -112,3 +112,16 @@ test("existing chains keep their rules", () => {
   );
   assert.equal(validateWallet(WalletChain.BITCOIN, EVM_ADDRESS).valid, false);
 });
+
+test("Monero validates base58 addresses and keeps their case", () => {
+  const address =
+    "888tNkZrPN6JsEgekjMnABU4TBzc2Dt29EPAvkRxbANsAnjyPbb3iQ1YBRk1UXcdRsiKc9dhwMVgN5S9cQUiyoogDavup3H";
+  assert.equal(chainLabel(WalletChain.MONERO), "Monero (XMR)");
+  assert.equal(walletFamily(WalletChain.MONERO), "MONERO");
+  assert.deepEqual(validateWallet(WalletChain.MONERO, address), {
+    valid: true,
+    normalized: address,
+  });
+  assert.equal(validateWallet(WalletChain.MONERO, address.slice(1)).valid, false);
+  assert.equal(validateWallet(WalletChain.MONERO, EVM_ADDRESS).valid, false);
+});

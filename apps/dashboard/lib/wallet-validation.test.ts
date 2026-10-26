@@ -238,3 +238,31 @@ describe("Zcash wallet support", () => {
     expect(validateWalletAddress("ZCASH", "").ok).toBe(false);
   });
 });
+
+describe("Monero wallet support", () => {
+  const address =
+    "888tNkZrPN6JsEgekjMnABU4TBzc2Dt29EPAvkRxbANsAnjyPbb3iQ1YBRk1UXcdRsiKc9dhwMVgN5S9cQUiyoogDavup3H";
+
+  it("is its own family with a label", () => {
+    expect(isWalletChain("MONERO")).toBe(true);
+    expect(walletChainLabel("MONERO")).toBe("Monero (XMR)");
+    expect(walletFamily("MONERO")).toBe("MONERO");
+    expect(EVM_CHAINS).not.toContain("MONERO");
+  });
+
+  it("accepts Monero addresses without changing their case", () => {
+    expect(validateWalletAddress("MONERO", address)).toEqual({
+      ok: true,
+      normalized: address,
+    });
+    expect(validateWalletAddress("MONERO", address.slice(0, 94)).ok).toBe(
+      false,
+    );
+    expect(
+      validateWalletAddress(
+        "MONERO",
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      ).ok,
+    ).toBe(false);
+  });
+});

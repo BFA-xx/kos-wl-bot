@@ -58,6 +58,7 @@ enum WalletChain {
   SCROLL
   LINEA
   BLAST
+  MONERO
 }
 
 enum TeamWalletStatus {

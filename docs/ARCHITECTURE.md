@@ -310,7 +310,7 @@ mirrored in `apps/bot/src/utils/wallets.ts`) that maps each `WalletChain` to a
 label and an address family: `EVM` (Ethereum, Base, Robinhood Chain, Arc, Ink,
 Abstract, HyperEVM, Monad, MegaETH, Berachain, ApeChain, Arbitrum, Optimism,
 Polygon, BNB Chain, Zora, Shape, Scroll, Linea, Blast), `SOLANA`, `BITCOIN`,
-and `ZCASH`. Validation is format-level: every EVM chain uses the same
+`ZCASH`, and `MONERO`. Validation is format-level: every EVM chain uses the same
 lowercase-normalized `0x` rule but stays a distinct enum value, so a team can
 require the exact payout network without conflating it with a member's
 Ethereum record. Zcash accepts transparent `t1`/`t3` (Base58, 35 chars),

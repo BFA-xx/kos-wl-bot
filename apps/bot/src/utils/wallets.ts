@@ -17,7 +17,7 @@ export interface WalletValidation {
   error?: string;
 }
 
-export type WalletFamily = "EVM" | "SOLANA" | "BITCOIN" | "ZCASH";
+export type WalletFamily = "EVM" | "SOLANA" | "BITCOIN" | "ZCASH" | "MONERO";
 
 interface WalletChainMeta {
   label: string;
@@ -36,6 +36,7 @@ const CHAIN_META: Record<WalletChain, WalletChainMeta> = {
   [WalletChain.SOLANA]: { label: "Solana", family: "SOLANA" },
   [WalletChain.BITCOIN]: { label: "Bitcoin", family: "BITCOIN" },
   [WalletChain.ZCASH]: { label: "Zcash (ZEC)", family: "ZCASH" },
+  [WalletChain.MONERO]: { label: "Monero (XMR)", family: "MONERO" },
   [WalletChain.ARC]: { label: "Arc", family: "EVM" },
   [WalletChain.INK]: { label: "Ink", family: "EVM" },
   [WalletChain.ABSTRACT]: { label: "Abstract", family: "EVM" },
@@ -94,6 +95,11 @@ const ZEC_SAPLING_RE = /^zs1[02-9ac-hj-np-z]{75}$/u;
 const ZEC_UNIFIED_RE = /^(?:u|zu|tu)1[02-9ac-hj-np-z]{60,}$/u;
 const ZEC_TEX_RE = /^tex1[02-9ac-hj-np-z]{38}$/u;
 const ZEC_SPROUT_RE = /^zc[a-km-zA-HJ-NP-Z1-9]{93}$/u;
+
+// Monero: Base58 (Monero alphabet, case-sensitive, stored as typed). Standard
+// `4…` and subaddress `8…` are 95 chars; integrated `4…` is 106.
+const XMR_RE =
+  /^(?:[48][1-9A-HJ-NP-Za-km-z]{94}|4[1-9A-HJ-NP-Za-km-z]{105})$/u;
 
 const BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 const BECH32_GENERATOR = [
@@ -205,6 +211,14 @@ export function validateWallet(
 
     case "ZCASH":
       return validateZcash(address);
+
+    case "MONERO":
+      return XMR_RE.test(address)
+        ? { valid: true, normalized: address }
+        : {
+            valid: false,
+            error: "Invalid Monero address (expected 95 or 106 chars, 4… / 8…).",
+          };
   }
 }
 
