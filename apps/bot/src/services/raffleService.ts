@@ -235,12 +235,17 @@ export async function publishRaffleMessage(
 }
 
 /** Re-render the live raffle embed (countdown, entry count, status). */
+/**
+ * Re-render the raffle post in place. Resolves false when the edit should be
+ * retried (channel unreachable or Discord rejected the edit), true when it
+ * landed or there is nothing left to edit.
+ */
 export async function refreshRaffleMessage(
   client: Client,
   raffleId: number,
-): Promise<void> {
+): Promise<boolean> {
   const raffle = await getRaffle(raffleId);
-  if (!raffle || !raffle.channelId || !raffle.messageId) return;
+  if (!raffle || !raffle.channelId || !raffle.messageId) return true;
 
   const channel = await fetchTextChannel(client, raffle.channelId);
   if (!channel) {
@@ -248,7 +253,7 @@ export async function refreshRaffleMessage(
       { raffleId, channelId: raffle.channelId },
       "refresh skipped: raffle channel not reachable",
     );
-    return;
+    return false;
   }
 
   const message = await channel.messages
@@ -259,18 +264,22 @@ export async function refreshRaffleMessage(
       { raffleId, messageId: raffle.messageId },
       "refresh skipped: raffle post not found",
     );
-    return;
+    return true;
   }
 
   const content = startMentionContent(raffle);
-  await message
+  return message
     .edit({
       content: content || null,
       embeds: [buildRaffleEmbed(raffle)],
       components: buildRaffleComponents(raffle),
       allowedMentions: { parse: content ? ["everyone"] : [] },
     })
-    .catch((err) => logger.warn({ err, raffleId }, "refresh edit failed"));
+    .then(() => true)
+    .catch((err) => {
+      logger.warn({ err, raffleId }, "refresh edit failed");
+      return false;
+    });
 }
 
 /**

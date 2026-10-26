@@ -32,6 +32,9 @@ import {
   missedStartPingWhere,
 } from "./startPingRetry.js";
 
+/** Refresh attempts for one dashboard edit before it is dropped. */
+const MAX_EDIT_REFRESH_ATTEMPTS = 5;
+
 /**
  * Sweep-based scheduler. A single interval drives all raffle state machines,
  * which makes it crash-safe (state is recomputed from the DB every tick rather
@@ -49,6 +52,7 @@ export class Scheduler {
   private lastHeartbeat = 0;
   private lastCollaborationSweep = 0;
   private readonly startPingAttempts = new Map<number, number>();
+  private readonly editAttempts = new Map<number, number>();
   private lastTickAt: string | null = null;
   private lastTickDurationMs: number | null = null;
   private lastTickOk: boolean | null = null;
@@ -685,9 +689,39 @@ export class Scheduler {
       await prisma.raffle
         .update({ where: { id: r.id }, data: { editRequestedAt: null } })
         .catch(() => undefined);
-      await refreshRaffleMessage(this.client, r.id).catch((err) =>
-        logger.error({ err, raffleId: r.id }, "dashboard edit refresh failed"),
+      const refreshed = await refreshRaffleMessage(this.client, r.id).catch(
+        (err) => {
+          logger.error(
+            { err, raffleId: r.id },
+            "dashboard edit refresh failed",
+          );
+          return false;
+        },
       );
+      if (refreshed) {
+        this.editAttempts.delete(r.id);
+        continue;
+      }
+      // Re-queue so a transient Discord or database failure doesn't silently
+      // drop the edit; give up after a few tries so a dead post can't loop.
+      const attempts = (this.editAttempts.get(r.id) ?? 0) + 1;
+      if (attempts >= MAX_EDIT_REFRESH_ATTEMPTS) {
+        this.editAttempts.delete(r.id);
+        logger.warn(
+          { raffleId: r.id, attempts },
+          "dashboard edit refresh abandoned",
+        );
+        continue;
+      }
+      this.editAttempts.set(r.id, attempts);
+      await prisma.raffle
+        .update({
+          where: { id: r.id },
+          data: { editRequestedAt: new Date() },
+        })
+        .catch((err) =>
+          logger.warn({ err, raffleId: r.id }, "edit re-queue failed"),
+        );
     }
   }
 }

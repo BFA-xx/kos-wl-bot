@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { withConnectTimeout } from "./connection.js";
 
 /**
  * Shared Prisma client singleton.
@@ -14,6 +15,13 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma: PrismaClient =
   globalForPrisma.prisma ??
   new PrismaClient({
+    ...(process.env.DATABASE_URL
+      ? {
+          datasources: {
+            db: { url: withConnectTimeout(process.env.DATABASE_URL) },
+          },
+        }
+      : {}),
     log:
       process.env.PRISMA_LOG === "query"
         ? ["query", "warn", "error"]
