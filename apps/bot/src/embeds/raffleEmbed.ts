@@ -23,7 +23,6 @@ export interface RaffleEmbedData {
   endAt: Date;
   entryCount: number;
   hideEntries: boolean;
-  useRoleWeights: boolean;
   holdResults: boolean;
   resultsPublishedAt: Date | null;
   bannerUrl: string | null;
@@ -117,14 +116,6 @@ export function buildRaffleEmbed(raffle: RaffleEmbedData): EmbedBuilder {
     { name: "Start", value: discordFull(raffle.startAt), inline: true },
     { name: "End", value: discordFull(raffle.endAt), inline: true },
   );
-  if (raffle.useRoleWeights) {
-    embed.addFields({
-      name: "Draw Mode",
-      value: "Weighted by configured role multipliers.",
-      inline: false,
-    });
-  }
-
   const tasks = parseRequirements(raffle.requirements).tasks ?? [];
   const textTasks = tasks.filter((t) => !t.url);
   const hasLinkTasks = tasks.some((t) => t.url);

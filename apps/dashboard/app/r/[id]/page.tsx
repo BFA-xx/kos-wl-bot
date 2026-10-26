@@ -100,7 +100,6 @@ export default async function ShareableRafflePage({
   }));
   const rules = getRules(requirements, {
     requireWallet: raffle.requireWallet,
-    weighted: raffle.useRoleWeights,
   });
   const kind = inferRaffleKind(raffle.title);
   const bannerUrl = canonicalRaffleBannerUrl(raffle.id, raffle.bannerUrl);
@@ -159,11 +158,6 @@ export default async function ShareableRafflePage({
                   <span className="kos-badge text-kos-muted">
                     Raffle #{raffle.id}
                   </span>
-                  {raffle.useRoleWeights ? (
-                    <span className="kos-badge border-violet-400/25 bg-violet-500/10 text-violet-200">
-                      Weighted draw
-                    </span>
-                  ) : null}
                 </div>
 
                 <h1 className="mt-5 text-3xl font-semibold tracking-[-0.035em] text-white sm:text-5xl lg:text-6xl">
@@ -465,7 +459,7 @@ function taskConfigUrl(config: unknown): string | undefined {
 
 function getRules(
   requirements: Record<string, unknown>,
-  options: { requireWallet: boolean; weighted: boolean },
+  options: { requireWallet: boolean },
 ): string[] {
   const configured = requirements.rules;
   const custom = Array.isArray(configured)
@@ -487,9 +481,6 @@ function getRules(
     ...(options.requireWallet
       ? ["Register a supported wallet before joining."]
       : []),
-    ...(options.weighted
-      ? ["Configured Discord roles may increase draw weight."]
-      : ["Every eligible entry receives the same draw weight."]),
     "Winners are selected by KOS's verifiable draw engine.",
   ];
 }
