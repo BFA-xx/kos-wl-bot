@@ -27,6 +27,10 @@ import { backfillProofArtifacts } from "./proofService.js";
 import { processRaidLifecycle } from "./raidService.js";
 import { processVerificationControlRequests } from "./verificationControlService.js";
 import { processTelegramDeliveries } from "./telegramService.js";
+import {
+  START_PING_RETRY_INTERVAL_MS,
+  missedStartPingWhere,
+} from "./startPingRetry.js";
 
 /**
  * Sweep-based scheduler. A single interval drives all raffle state machines,
@@ -44,6 +48,7 @@ export class Scheduler {
   private wakeRequested = false;
   private lastHeartbeat = 0;
   private lastCollaborationSweep = 0;
+  private readonly startPingAttempts = new Map<number, number>();
   private lastTickAt: string | null = null;
   private lastTickDurationMs: number | null = null;
   private lastTickOk: boolean | null = null;
@@ -204,40 +209,52 @@ export class Scheduler {
    * thing left to wait for is a dashboard request.
    */
   private async nextBoundaryAt(): Promise<Date | null> {
-    const [raffleOpen, raffleClose, campaignOpen, campaignEnd, delivery] =
-      await Promise.all([
-        prisma.raffle.findFirst({
-          where: { status: RaffleStatus.UPCOMING },
-          orderBy: { startAt: "asc" },
-          select: { startAt: true },
-        }),
-        prisma.raffle.findFirst({
-          where: { status: RaffleStatus.LIVE },
-          orderBy: { endAt: "asc" },
-          select: { endAt: true },
-        }),
-        prisma.campaign.findFirst({
-          where: { status: CampaignStatus.SCHEDULED, startAt: { not: null } },
-          orderBy: { startAt: "asc" },
-          select: { startAt: true },
-        }),
-        prisma.campaign.findFirst({
-          where: { status: CampaignStatus.LIVE, endAt: { not: null } },
-          orderBy: { endAt: "asc" },
-          select: { endAt: true },
-        }),
-        // Scheduled cross-platform sends are deadlines too. Without this the
-        // scheduler slept through them: a raffle's own endAt woke it, but a
-        // RAFFLE_ENDING_SOON queued for ten minutes earlier did not, so the
-        // reminder landed with the raffle already closing. Retries re-arm as
-        // PENDING with a future notBefore, so they wake it the same way, and
-        // FAILED rows are excluded so a dead delivery cannot hold it awake.
-        prisma.integrationDelivery.findFirst({
-          where: { status: "PENDING" },
-          orderBy: { notBefore: "asc" },
-          select: { notBefore: true },
-        }),
-      ]);
+    const [
+      raffleOpen,
+      raffleClose,
+      campaignOpen,
+      campaignEnd,
+      delivery,
+      missedPing,
+    ] = await Promise.all([
+      prisma.raffle.findFirst({
+        where: { status: RaffleStatus.UPCOMING },
+        orderBy: { startAt: "asc" },
+        select: { startAt: true },
+      }),
+      prisma.raffle.findFirst({
+        where: { status: RaffleStatus.LIVE },
+        orderBy: { endAt: "asc" },
+        select: { endAt: true },
+      }),
+      prisma.campaign.findFirst({
+        where: { status: CampaignStatus.SCHEDULED, startAt: { not: null } },
+        orderBy: { startAt: "asc" },
+        select: { startAt: true },
+      }),
+      prisma.campaign.findFirst({
+        where: { status: CampaignStatus.LIVE, endAt: { not: null } },
+        orderBy: { endAt: "asc" },
+        select: { endAt: true },
+      }),
+      // Scheduled cross-platform sends are deadlines too. Without this the
+      // scheduler slept through them: a raffle's own endAt woke it, but a
+      // RAFFLE_ENDING_SOON queued for ten minutes earlier did not, so the
+      // reminder landed with the raffle already closing. Retries re-arm as
+      // PENDING with a future notBefore, so they wake it the same way, and
+      // FAILED rows are excluded so a dead delivery cannot hold it awake.
+      prisma.integrationDelivery.findFirst({
+        where: { status: "PENDING" },
+        orderBy: { notBefore: "asc" },
+        select: { notBefore: true },
+      }),
+      // A live raffle whose start ping failed needs another attempt soon;
+      // the retry window keeps a dead channel from holding it awake forever.
+      prisma.raffle.findFirst({
+        where: missedStartPingWhere(new Date()),
+        select: { id: true },
+      }),
+    ]);
 
     const due = [
       raffleOpen?.startAt,
@@ -245,6 +262,9 @@ export class Scheduler {
       campaignOpen?.startAt,
       campaignEnd?.endAt,
       delivery?.notBefore,
+      missedPing
+        ? new Date(Date.now() + START_PING_RETRY_INTERVAL_MS)
+        : undefined,
     ].filter((d): d is Date => d instanceof Date);
 
     if (due.length === 0) return null;
@@ -345,9 +365,11 @@ export class Scheduler {
           ),
         );
         // Re-post so the ping fires and the LIVE post is clean (see class doc).
-        await repostRaffleMessage(this.client, r.id).catch(() => undefined);
+        // A failure is retried by retryMissedStartPings below.
+        await this.repostWithPing(r.id, r.guildId);
         logger.info({ raffleId: r.id }, "raffle opened");
       }
+      await this.retryMissedStartPings(now);
 
       // Close + draw live raffles whose end time has passed.
       const toClose = await prisma.raffle.findMany({
@@ -381,6 +403,57 @@ export class Scheduler {
       this.lastTickAt = new Date().toISOString();
       this.lastTickDurationMs = Date.now() - startedAt;
       this.running = false;
+    }
+  }
+
+  /**
+   * Re-post a LIVE raffle so its start ping fires. Never throws: the failure
+   * is logged and audited, and startPinged stays false so the retry sweep
+   * picks it up.
+   */
+  private async repostWithPing(raffleId: number, guildId: string) {
+    this.startPingAttempts.set(raffleId, Date.now());
+    const res = await repostRaffleMessage(this.client, raffleId).catch(
+      (err) => {
+        logger.error({ err, raffleId }, "raffle live re-post threw");
+        return { ok: false as const, reason: "internal error" };
+      },
+    );
+    if (res.ok) {
+      this.startPingAttempts.delete(raffleId);
+      return;
+    }
+    logger.warn(
+      { raffleId, reason: res.reason },
+      "raffle live re-post failed; start ping will be retried",
+    );
+    await audit({
+      guildId,
+      raffleId,
+      category: LogCategory.SYSTEM,
+      action: "PUBLISH_FAILED",
+      message: `Raffle #${raffleId} went live but its post could not be refreshed: ${res.reason ?? "unknown"}`,
+    });
+  }
+
+  /**
+   * Retry the go-live re-post for raffles that opened without their start
+   * ping landing. Without this a single failed re-post left the raffle LIVE
+   * in the database while Discord still showed the unpinged "upcoming" post,
+   * and nothing ever tried again.
+   */
+  private async retryMissedStartPings(now: Date): Promise<void> {
+    const missed = await prisma.raffle.findMany({
+      where: missedStartPingWhere(now),
+      orderBy: [{ startAt: "asc" }, { id: "asc" }],
+      take: config.SCHEDULER_BATCH_SIZE,
+      select: { id: true, guildId: true },
+    });
+    for (const r of missed) {
+      const last = this.startPingAttempts.get(r.id) ?? 0;
+      if (Date.now() - last < START_PING_RETRY_INTERVAL_MS) continue;
+      logger.info({ raffleId: r.id }, "retrying missed raffle start ping");
+      await this.repostWithPing(r.id, r.guildId);
     }
   }
 

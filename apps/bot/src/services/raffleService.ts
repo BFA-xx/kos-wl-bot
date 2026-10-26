@@ -243,12 +243,24 @@ export async function refreshRaffleMessage(
   if (!raffle || !raffle.channelId || !raffle.messageId) return;
 
   const channel = await fetchTextChannel(client, raffle.channelId);
-  if (!channel) return;
+  if (!channel) {
+    logger.warn(
+      { raffleId, channelId: raffle.channelId },
+      "refresh skipped: raffle channel not reachable",
+    );
+    return;
+  }
 
   const message = await channel.messages
     .fetch(raffle.messageId)
     .catch(() => null);
-  if (!message) return;
+  if (!message) {
+    logger.warn(
+      { raffleId, messageId: raffle.messageId },
+      "refresh skipped: raffle post not found",
+    );
+    return;
+  }
 
   const content = startMentionContent(raffle);
   await message
@@ -262,10 +274,13 @@ export async function refreshRaffleMessage(
 }
 
 /**
- * Delete the old raffle post and publish a fresh one. Used when a scheduled
+ * Publish a fresh raffle post, then delete the old one. Used when a scheduled
  * raffle flips from UPCOMING to LIVE: re-posting (a message *create*) is what
  * fires the @everyone push notification and puts the ping in the original post,
  * whereas an in-place edit would neither notify nor look un-edited.
+ *
+ * The new post goes out first so a failed publish leaves the old one standing
+ * (and retryable) instead of an empty channel.
  */
 export async function repostRaffleMessage(
   client: Client,
@@ -274,15 +289,23 @@ export async function repostRaffleMessage(
   const raffle = await getRaffle(raffleId);
   if (!raffle) return { ok: false, reason: "raffle not found" };
 
+  const result = await publishRaffleMessage(client, raffleId);
+  if (!result.ok) return result;
+
   if (raffle.channelId && raffle.messageId) {
     const channel = await fetchTextChannel(client, raffle.channelId);
     const old = channel
       ? await channel.messages.fetch(raffle.messageId).catch(() => null)
       : null;
-    if (old) await old.delete().catch(() => undefined);
+    if (old) {
+      await old
+        .delete()
+        .catch((err) =>
+          logger.warn({ err, raffleId }, "old raffle post delete failed"),
+        );
+    }
   }
-
-  return publishRaffleMessage(client, raffleId);
+  return result;
 }
 
 /**
