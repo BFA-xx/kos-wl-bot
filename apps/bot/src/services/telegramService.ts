@@ -309,7 +309,7 @@ async function deliverWinners(input: {
     id: number;
     projectName: string;
     title: string;
-    winners: { userId: string; username: string; position: number; manuallySelected: boolean }[];
+    winners: { userId: string; username: string; position: number }[];
   };
   visibility: TelegramWinnerVisibility;
   updated: boolean;
@@ -332,7 +332,7 @@ async function deliverWinners(input: {
   if (input.visibility === "ANONYMOUS") {
     winners = input.raffle.winners.length
       ? input.raffle.winners
-          .map((winner) => `Winner ${winner.position}${winner.manuallySelected ? " (team-selected)" : ""}`)
+          .map((winner) => `Winner ${winner.position}`)
           .join("\n")
       : "No eligible winners were drawn.";
   } else if (input.visibility === "PUBLIC") {
@@ -343,7 +343,7 @@ async function deliverWinners(input: {
             const label = identity?.handle
               ? `@${identity.handle}`
               : identity?.displayName || winner.username;
-            return `${winner.position}. ${escapeHtml(label)}${winner.manuallySelected ? " (team-selected)" : ""}`;
+            return `${winner.position}. ${escapeHtml(label)}`;
           })
           .join("\n")
       : "No eligible winners were drawn.";

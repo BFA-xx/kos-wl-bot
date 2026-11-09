@@ -34,12 +34,7 @@ export const getPublicRaffle = cache(async (id: number) => {
       winners: {
         where: { replaced: false },
         orderBy: { position: "asc" },
-        select: {
-          id: true,
-          position: true,
-          username: true,
-          manuallySelected: true,
-        },
+        select: { id: true, position: true, username: true },
       },
     },
   });

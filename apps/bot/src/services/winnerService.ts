@@ -569,7 +569,7 @@ export async function rerollWinners(
                 identityId: identity.id,
                 event: "RAFFLE_WON",
                 amount: reward.points,
-                reason: `Won KOS raffle #${raffleId} by ${manual ? "team selection" : "reroll"}`,
+                reason: `Won KOS raffle #${raffleId} by reroll`,
                 source: "kos_raffle_winner",
                 referenceId: `${raffleId}:${repl.userId}`,
               },
@@ -635,7 +635,7 @@ export async function rerollWinners(
     if (channel) {
       await channel
         .send({
-          content: `🔁 **${manual ? "Team-selected replacement" : "Reroll"}** — new winner(s): ${added
+          content: `🔁 **Reroll** — new winner(s): ${added
             .map((w) => `<@${w.userId}>`)
             .join(" ")}`,
           allowedMentions: { users: added.map((w) => w.userId) },

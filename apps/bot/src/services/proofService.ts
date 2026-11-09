@@ -35,12 +35,7 @@ export async function generateAndDeliverProof(
   const winnerRows = await prisma.winner.findMany({
     where: { raffleId, replaced: false },
     orderBy: { position: "asc" },
-    select: {
-      position: true,
-      username: true,
-      userId: true,
-      manuallySelected: true,
-    },
+    select: { position: true, username: true, userId: true },
   });
 
   const walletRows = await getWinnerWallets(raffleId);
@@ -150,7 +145,6 @@ export async function generateAndDeliverProof(
         winnerCount: winnerRows.length,
         messageLink,
         drawSeedHash: raffle.drawSeedHash,
-        hasManualWinners: winnerRows.some((winner) => winner.manuallySelected),
       });
       if (config.DASHBOARD_URL) {
         embed.addFields({

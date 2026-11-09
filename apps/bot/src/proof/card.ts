@@ -24,7 +24,7 @@ export interface WinnerCardData {
   title: string;
   spots: number;
   entryCount?: number;
-  winners: { username: string; manuallySelected?: boolean }[];
+  winners: { username: string }[];
   timestamp: Date;
   brandName: string;
   logoUrl?: string | null;
@@ -132,14 +132,7 @@ export async function renderWinnerCard(data: WinnerCardData): Promise<Buffer> {
   const listTop = 386;
   ctx.fillStyle = MUTED;
   ctx.font = bold(14);
-  const hasManualWinners = data.winners.some(
-    (winner) => winner.manuallySelected,
-  );
-  ctx.fillText(
-    hasManualWinners ? "WINNERS · INCLUDES TEAM SELECTIONS" : "WINNERS",
-    PAD,
-    listTop,
-  );
+  ctx.fillText("WINNERS", PAD, listTop);
   hairline(ctx, PAD, listTop + 14, W - PAD);
 
   const maxShown = 12;
@@ -161,12 +154,7 @@ export async function renderWinnerCard(data: WinnerCardData): Promise<Buffer> {
     ctx.fillText(`${i + 1}`, x, y);
     ctx.fillStyle = FG;
     ctx.font = reg(20);
-    const suffix = w.manuallySelected ? " (team-selected)" : "";
-    ctx.fillText(
-      truncate(ctx, w.username, 300 - ctx.measureText(suffix).width) + suffix,
-      x + 30,
-      y,
-    );
+    ctx.fillText(truncate(ctx, w.username, 300), x + 30, y);
   });
   if (data.winners.length > maxShown) {
     ctx.fillStyle = MUTED;
@@ -183,7 +171,7 @@ export async function renderWinnerCard(data: WinnerCardData): Promise<Buffer> {
     ctx.fillStyle = MUTED;
     ctx.font = reg(13);
     ctx.fillText(
-      `${hasManualWinners ? "Original draw" : "Draw"} commitment (SHA-256): ${data.commitment.slice(0, 40)}…`,
+      `Draw commitment (SHA-256): ${data.commitment.slice(0, 40)}…`,
       PAD,
       H - 100,
     );

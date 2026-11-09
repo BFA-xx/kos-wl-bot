@@ -37,25 +37,3 @@ test("private completion embeds omit entry totals without a placeholder", () => 
   assert.doesNotMatch(serialized, /Entries/i);
   assert.doesNotMatch(serialized, /Private/i);
 });
-
-test("manual replacements are labeled separately from the original draw commitment", () => {
-  const winnerJson = buildWinnerEmbed({
-    ...baseWinner,
-    winners: [{ ...baseWinner.winners[0]!, manuallySelected: true }],
-  }).toJSON();
-  const proofJson = buildProofEmbed({
-    id: 60,
-    projectName: "NUTSY",
-    startAt: new Date("2026-07-11T19:15:00.000Z"),
-    endAt: baseWinner.endedAt,
-    winnerCount: 1,
-    messageLink: null,
-    drawSeedHash: "abc123",
-    hasManualWinners: true,
-  }).toJSON();
-
-  assert.match(winnerJson.fields?.[0]?.value ?? "", /\(team-selected\)/);
-  assert.match(winnerJson.fields?.[1]?.value ?? "", /Original draw commitment/);
-  assert.match(proofJson.description ?? "", /team-selected replacements/);
-  assert.match(proofJson.description ?? "", /Original draw commitment/);
-});

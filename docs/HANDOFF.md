@@ -14,7 +14,8 @@ Previous audited production baseline: `d079d52`
 - Selection preserves the winner's slot, excludes current winners and blacklisted
   entrants, checks applicable Telegram draw rules, and records the team member
   in the guild audit. Held results stay private. Public results, proof and
-  announcements identify manual replacements. Random rerolls keep occupied
+  announcements present a manual replacement like any other winner; only the
+  team dashboard and audit log mark it as team-selected. Random rerolls keep occupied
   slots when the supply of new entrants runs out.
 - Release order: take and verify a restricted production database backup,
   apply `20261109090000_manual_raffle_replacements`, deploy the EC2 bot with
