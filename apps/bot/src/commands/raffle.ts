@@ -181,6 +181,11 @@ export const raffleCommand: Command = {
             .setName("count")
             .setDescription("How many to replace (multiple mode)")
             .setMinValue(1),
+        )
+        .addUserOption((o) =>
+          o
+            .setName("replacement")
+            .setDescription("Choose an entrant as the replacement (single mode)"),
         ),
     )
     // ---- publish results ----
@@ -530,6 +535,15 @@ async function handleReroll(interaction: ChatInputCommandInteraction) {
     | "all";
   const user = interaction.options.getUser("user");
   const count = interaction.options.getInteger("count") ?? undefined;
+  const replacement = interaction.options.getUser("replacement");
+  if (
+    replacement &&
+    (mode !== "single" || !user || user.id === replacement.id)
+  ) {
+    return interaction.editReply(
+      "To choose a replacement, use Single winner mode and select two different users in the winner and replacement fields.",
+    );
+  }
 
   const raffle = await getRaffle(id);
   if (!raffle || raffle.guildId !== interaction.guildId) {
@@ -540,15 +554,24 @@ async function handleReroll(interaction: ChatInputCommandInteraction) {
     interaction.client,
     id,
     interaction.user.id,
-    {
-      mode,
-      userIds: user ? [user.id] : undefined,
-      count,
-    },
+    replacement && user
+      ? {
+          mode: "manual",
+          winnerUserId: user.id,
+          replacementUserId: replacement.id,
+        }
+      : { mode, userIds: user ? [user.id] : undefined, count },
   );
   if (!result) {
     return interaction.editReply(
-      "Reroll failed — the raffle must be ENDED with eligible replacements available.",
+      replacement
+        ? "Selection failed. Check that the raffle has ended, the winner is still active, and the replacement is an eligible entrant who has never won this raffle. Wait for any queued result action to finish."
+        : "Reroll failed — the raffle must be ENDED with eligible replacements available.",
+    );
+  }
+  if (replacement && user) {
+    return interaction.editReply(
+      `${KOS.emoji.check} Selected <@${replacement.id}> as the replacement for <@${user.id}>.`,
     );
   }
   await interaction.editReply(

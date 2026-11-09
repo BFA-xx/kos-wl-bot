@@ -363,12 +363,20 @@ export default async function ShareableRafflePage({
                         #{winner.position}
                       </span>
                       {winner.username}
+                      {winner.manuallySelected ? (
+                        <span className="ml-2 text-xs text-kos-muted">
+                          Team-selected replacement
+                        </span>
+                      ) : null}
                     </li>
                   ))}
                 </ol>
                 {raffle.drawSeedHash ? (
                   <p className="mt-4 break-all text-[11px] leading-5 text-kos-muted">
-                    Verifiable draw commitment · {raffle.drawSeedHash}
+                    {raffle.winners.some((winner) => winner.manuallySelected)
+                      ? "Original draw commitment"
+                      : "Verifiable draw commitment"}{" "}
+                    · {raffle.drawSeedHash}
                   </p>
                 ) : null}
               </section>

@@ -1,9 +1,40 @@
 # Engineering Handoff
 
-Last updated: 2026-09-03
+Last updated: 2026-11-09
 Repository: `BFA-xx/kos-wl-bot`
 Branch: `main`
 Previous audited production baseline: `d079d52`
+
+## Manual raffle replacements (2026-11-09)
+
+- On an ended raffle, a team member with `raffle:reroll` can open **Reroll →
+  Choose a replacement**, select the current winner and search by entrant
+  username or user ID. Discord managers can use `/raffle reroll` in single
+  mode with both the winner and replacement users supplied.
+- Selection preserves the winner's slot, excludes past winners and blacklisted
+  entrants, checks applicable Telegram draw rules, and records the team member
+  in the guild audit. Held results stay private. Public results, proof and
+  announcements identify manual replacements. Random rerolls keep occupied
+  slots when the supply of new entrants runs out.
+- Release order: take and verify a restricted production database backup,
+  apply `20261109090000_manual_raffle_replacements`, deploy the EC2 bot with
+  `scripts/deploy-ec2.sh` (the Discord command signature changed), then deploy
+  the Vercel dashboard. Check scheduler health and verify the production alias
+  points to the new dashboard deployment. Use a test raffle for the signed-in
+  replacement and held-publication smoke checks.
+- The release source excludes the separate in-progress Telegram raffle menu
+  edits and `.gitignore` change. The menu edits have TypeScript errors in the
+  original working tree. The desktop sandbox blocked the production SSH
+  connection and local PostgreSQL shared memory. The Vercel production alias
+  still reported `fdae8ee` when checked.
+
+From a terminal with production access, copy the new migration into the EC2
+checkout after taking the backup, verify that it is the only pending migration,
+then run `pnpm db:migrate:deploy` on EC2 with its production database connection.
+From the isolated release checkout on the Mac, run `./scripts/deploy-ec2.sh`.
+Once its health check passes, verify the linked Vercel project is
+`kos-wl-bot-dashboard-3a8x`, then run `vercel deploy --prod` from the release
+checkout and verify the production alias.
 
 ## Telegram Start Here welcomes (2026-09-04)
 

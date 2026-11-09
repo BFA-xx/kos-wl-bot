@@ -308,7 +308,7 @@ model Raffle {
   drawSeedHash String?
 
   /// Dashboard-requested reroll, picked up + cleared by the bot scheduler.
-  /// Shape: { mode, count?, userIds?, actorId }.
+  /// Random: { mode, count?, userIds?, actorId }. Manual: { mode, winnerUserId, replacementUserId, actorId }.
   rerollRequest     Json?
   rerollRequestedAt DateTime?
 
@@ -430,6 +430,8 @@ model Winner {
   selectedAt    DateTime @default(now())
   /// True if this winner was added through a reroll.
   fromReroll    Boolean  @default(false)
+  /// True if a team member chose this entrant as a replacement winner.
+  manuallySelected Boolean @default(false)
   /// True if this winner was replaced by a reroll (kept for audit).
   replaced      Boolean  @default(false)
   participantId Int?     @unique

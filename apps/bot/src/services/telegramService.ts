@@ -178,12 +178,14 @@ async function deliverRaffleMessage(deliveryId: string): Promise<void> {
   }
 
   if (delivery.event === "WINNER_SELECTED") {
+    const payload = delivery.payload as { updated?: boolean } | null;
     await deliverWinners({
       botToken: token,
       chatId: community.telegramChatId,
       topicId: raffleTopicId,
       raffle,
       visibility: publication.winnerVisibility,
+      updated: payload?.updated === true,
       url,
     });
     return;
@@ -307,9 +309,10 @@ async function deliverWinners(input: {
     id: number;
     projectName: string;
     title: string;
-    winners: { userId: string; username: string; position: number }[];
+    winners: { userId: string; username: string; position: number; manuallySelected: boolean }[];
   };
   visibility: TelegramWinnerVisibility;
+  updated: boolean;
   url: string;
 }): Promise<void> {
   const identities =
@@ -329,7 +332,7 @@ async function deliverWinners(input: {
   if (input.visibility === "ANONYMOUS") {
     winners = input.raffle.winners.length
       ? input.raffle.winners
-          .map((winner) => `Winner ${winner.position}`)
+          .map((winner) => `Winner ${winner.position}${winner.manuallySelected ? " (team-selected)" : ""}`)
           .join("\n")
       : "No eligible winners were drawn.";
   } else if (input.visibility === "PUBLIC") {
@@ -340,7 +343,7 @@ async function deliverWinners(input: {
             const label = identity?.handle
               ? `@${identity.handle}`
               : identity?.displayName || winner.username;
-            return `${winner.position}. ${escapeHtml(label)}`;
+            return `${winner.position}. ${escapeHtml(label)}${winner.manuallySelected ? " (team-selected)" : ""}`;
           })
           .join("\n")
       : "No eligible winners were drawn.";
@@ -351,7 +354,7 @@ async function deliverWinners(input: {
     input.topicId,
     {
       parse_mode: "HTML",
-      text: `<b>RAFFLE RESULTS</b>\n\n${escapeHtml(input.raffle.projectName)}\n\n${winners}`,
+      text: `<b>${input.updated ? "RAFFLE RESULTS UPDATED" : "RAFFLE RESULTS"}</b>\n\n${escapeHtml(input.raffle.projectName)}\n\n${winners}`,
       reply_markup: {
         inline_keyboard: [[{ text: "View results", url: input.url }]],
       },

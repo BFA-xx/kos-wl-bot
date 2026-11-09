@@ -3,11 +3,8 @@ import { timingSafeEqual } from "node:crypto";
 import type { Client } from "discord.js";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
-import {
-  closeAndDraw,
-  rerollWinners,
-  type RerollMode,
-} from "../services/winnerService.js";
+import { closeAndDraw, rerollWinners } from "../services/winnerService.js";
+import { parseRerollOptions } from "@kos/db";
 
 /**
  * Minimal internal control API for the dashboard. Exposes the few actions that
@@ -101,15 +98,13 @@ async function handle(
     if (req.method === "POST" && rerollMatch) {
       const id = Number(rerollMatch[1]);
       const body = await readJson(req);
+      const options = parseRerollOptions(body);
+      if (!options) return json(400, { error: "invalid_reroll_options" });
       const result = await rerollWinners(
         client,
         id,
         body.actorId ?? "dashboard",
-        {
-          mode: (body.mode as RerollMode) ?? "all",
-          userIds: body.userIds,
-          count: body.count,
-        },
+        options,
       );
       return json(result ? 200 : 400, { ok: Boolean(result), result });
     }

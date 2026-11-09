@@ -205,8 +205,9 @@ mechanics.
    the reason without creating a CRM record.
 
 Dashboard edits set `editRequestedAt`; end-now sets LIVE with `endAt = now`;
-rerolls set `rerollRequest` and `rerollRequestedAt`. The scheduler clears and
-processes those requests.
+rerolls set `rerollRequest` and `rerollRequestedAt`. The scheduler consumes a
+reroll request in the same transaction as the winner changes and guild audit.
+Rerolls and publication requests take turns under the raffle row lock.
 
 ### Public sharing and duplication
 
@@ -259,9 +260,12 @@ bot token.
 5. Discord announcements, web notifications, wallet DMs, and PDF/CSV/PNG
    proof generation follow.
 
-Rerolls use a new seed but do not persist that reroll seed or commitment. They
-mark replaced winners, add replacements, notify replacements, and regenerate
-the proof from the raffle's original commitment.
+Random rerolls use a new seed that is currently kept in memory. Authorized
+team members can also replace one active winner with an eligible entrant who
+has never won that raffle. The replacement keeps the original slot, and the
+results and proof identify it as team-selected. Held results stay private until
+published. Published raffles notify replacements and refresh the proof, which
+retains the original draw commitment.
 
 ## Task Verification Engine
 

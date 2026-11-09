@@ -10,7 +10,7 @@ export interface WinnerEmbedData {
   spots: number;
   entryCount?: number;
   endedAt: Date;
-  winners: { userId: string; username: string }[];
+  winners: { userId: string; username: string; manuallySelected?: boolean }[];
   drawSeedHash: string | null;
 }
 
@@ -19,7 +19,12 @@ export function buildWinnerEmbed(data: WinnerEmbedData): EmbedBuilder {
   const winnerList =
     data.winners.length === 0
       ? "_No eligible entries — no winners drawn._"
-      : data.winners.map((w, i) => `\`${i + 1}.\` <@${w.userId}>`).join("\n");
+      : data.winners
+          .map(
+            (w, i) =>
+              `\`${i + 1}.\` <@${w.userId}>${w.manuallySelected ? " (team-selected)" : ""}`,
+          )
+          .join("\n");
 
   const embed = new EmbedBuilder()
     .setColor(KOS.colors.white)
@@ -54,7 +59,7 @@ export function buildWinnerEmbed(data: WinnerEmbedData): EmbedBuilder {
   if (data.drawSeedHash) {
     embed.addFields({
       name: "Verification",
-      value: `Draw commitment \`${data.drawSeedHash.slice(0, 24)}…\``,
+      value: `${data.winners.some((w) => w.manuallySelected) ? "Original draw" : "Draw"} commitment \`${data.drawSeedHash.slice(0, 24)}…\``,
     });
   }
 

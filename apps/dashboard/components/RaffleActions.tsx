@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
 import { useOrg, useCan } from "@/lib/org-context";
 import { PERMISSIONS } from "@/lib/permissions";
 
@@ -41,6 +42,9 @@ export function RaffleActions({
   holdResults = false,
   resultsPublishedAt = null,
   resultsPublishRequestedAt = null,
+  rerollRequestedAt = null,
+  rerollError = null,
+  currentWinners,
   canReleaseTeamWallets = false,
   winnerSheet = null,
 }: {
@@ -49,6 +53,9 @@ export function RaffleActions({
   holdResults?: boolean;
   resultsPublishedAt?: string | null;
   resultsPublishRequestedAt?: string | null;
+  rerollRequestedAt?: string | null;
+  rerollError?: string | null;
+  currentWinners: { userId: string; username: string; position: number }[];
   canReleaseTeamWallets?: boolean;
   winnerSheet?: WinnerSheetSummary | null;
 }) {
@@ -63,8 +70,11 @@ export function RaffleActions({
 
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [mode, setMode] = useState<"multiple" | "all">("all");
+  const [mode, setMode] = useState<"multiple" | "all" | "manual">("all");
   const [count, setCount] = useState(1);
+  const [winnerUserId, setWinnerUserId] = useState("");
+  const [replacementUserId, setReplacementUserId] = useState("");
+  const [entrantSearch, setEntrantSearch] = useState("");
   const [teamWalletModal, setTeamWalletModal] = useState<
     "fill" | "release" | null
   >(null);
@@ -80,6 +90,40 @@ export function RaffleActions({
   const [sheetError, setSheetError] = useState<string | null>(null);
 
   const api = (path: string) => `/api/${slug}/raffles/${raffleId}${path}`;
+  const {
+    data: entrants,
+    error: entrantError,
+    mutate: refreshEntrants,
+  } = useSWR(
+    canReroll && status === "ENDED" && mode === "manual"
+      ? api(`/reroll?q=${encodeURIComponent(entrantSearch.trim())}`)
+      : null,
+    async (url): Promise<{ userId: string; username: string }[]> => {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Couldn't load replacement entrants.");
+      const body = await response.json();
+      return body.entrants;
+    },
+  );
+  const winnerToReplace = currentWinners.find(
+    (winner) => winner.userId === winnerUserId,
+  );
+  const replacement = entrants?.find(
+    (entrant) => entrant.userId === replacementUserId,
+  );
+  const resultActionPending = Boolean(
+    rerollRequestedAt || resultsPublishRequestedAt,
+  );
+
+  useEffect(() => {
+    if (!resultActionPending) return;
+    const interval = window.setInterval(() => router.refresh(), 4000);
+    return () => window.clearInterval(interval);
+  }, [resultActionPending, router]);
+
+  useEffect(() => {
+    if (!rerollRequestedAt) void refreshEntrants();
+  }, [rerollRequestedAt, refreshEntrants]);
 
   /**
    * Open the winners sheet, creating it on first use.
@@ -145,26 +189,37 @@ export function RaffleActions({
   }
 
   async function reroll() {
-    if (!confirm(`Reroll (${mode}) winners for raffle #${raffleId}?`)) return;
+    const manual = mode === "manual";
+    if (manual && (!winnerToReplace || !replacement)) return;
+    const prompt = manual
+      ? `Replace ${winnerToReplace?.username} with ${replacement?.username} in raffle #${raffleId}?`
+      : `Reroll (${mode}) winners for raffle #${raffleId}?`;
+    if (!confirm(prompt)) return;
     setBusy("reroll");
     setMsg(null);
-    const res = await fetch(api(`/reroll`), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        mode,
-        count: mode === "multiple" ? count : undefined,
-      }),
-    });
-    setBusy(null);
-    setMsg(
-      res.ok
-        ? holdResults && !resultsPublishedAt
-          ? "Private reroll queued — nothing has been announced."
-          : "Reroll queued — the bot will process it shortly."
-        : "Reroll failed — raffle must be ENDED with spare entrants.",
-    );
-    router.refresh();
+    try {
+      const res = await fetch(api("/reroll"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          manual
+            ? { mode, winnerUserId, replacementUserId }
+            : { mode, count: mode === "multiple" ? count : undefined },
+        ),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setMsg(body.error ?? "Couldn't queue the reroll.");
+      } else {
+        setWinnerUserId("");
+        setReplacementUserId("");
+      }
+      router.refresh();
+    } catch {
+      setMsg("Couldn't queue the reroll.");
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function publishResults() {
@@ -381,7 +436,7 @@ export function RaffleActions({
           <button
             className="kos-btn-primary"
             onClick={() => void publishResults()}
-            disabled={busy !== null}
+            disabled={busy !== null || resultActionPending}
           >
             {busy === "publish" ? "Publishing…" : "Publish final results"}
           </button>
@@ -419,7 +474,7 @@ export function RaffleActions({
         <p className="mt-3 text-sm text-amber-200">
           {resultsPublishRequestedAt
             ? "Publication is queued; the bot will release the final result shortly."
-            : "Results are private while the team reviews the draw. Rerolls stay private until publication."}
+            : "Results and replacements stay private until the team publishes them."}
         </p>
       ) : null}
 
@@ -470,12 +525,14 @@ export function RaffleActions({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <select
+              aria-label="Reroll method"
               className="kos-input max-w-[200px]"
               value={mode}
               onChange={(e) => setMode(e.target.value as typeof mode)}
             >
               <option value="all">Entire winner pool</option>
               <option value="multiple">Multiple winners</option>
+              <option value="manual">Choose a replacement</option>
             </select>
             {mode === "multiple" ? (
               <input
@@ -486,14 +543,96 @@ export function RaffleActions({
                 onChange={(e) => setCount(Number(e.target.value))}
               />
             ) : null}
-            <button
-              className="kos-btn"
-              onClick={reroll}
-              disabled={busy !== null}
-            >
-              {busy === "reroll" ? "Rerolling…" : "Reroll"}
-            </button>
+            {mode !== "manual" ? (
+              <button
+                className="kos-btn"
+                onClick={reroll}
+                disabled={
+                  busy !== null ||
+                  resultActionPending ||
+                  currentWinners.length === 0
+                }
+              >
+                {busy === "reroll" ? "Rerolling…" : "Reroll"}
+              </button>
+            ) : null}
           </div>
+          {mode === "manual" ? (
+            <div className="mt-3 grid max-w-2xl gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-sm">
+                <span>Winner to replace</span>
+                <select
+                  className="kos-input"
+                  value={winnerToReplace?.userId ?? ""}
+                  onChange={(e) => setWinnerUserId(e.target.value)}
+                >
+                  <option value="">Select a current winner</option>
+                  {currentWinners.map((winner) => (
+                    <option key={winner.userId} value={winner.userId}>
+                      #{winner.position} · {winner.username}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="space-y-2 text-sm">
+                <label className="block space-y-1">
+                  <span>Find an entrant</span>
+                  <input
+                    className="kos-input"
+                    placeholder="Username or user ID"
+                    maxLength={128}
+                    value={entrantSearch}
+                    onChange={(e) => {
+                      setEntrantSearch(e.target.value);
+                      setReplacementUserId("");
+                    }}
+                  />
+                </label>
+                <select
+                  className="kos-input"
+                  aria-label="Replacement entrant"
+                  value={replacement?.userId ?? ""}
+                  onChange={(e) => setReplacementUserId(e.target.value)}
+                >
+                  <option value="">
+                    {entrantError
+                      ? "Couldn't load entrants"
+                      : !entrants
+                        ? "Loading entrants…"
+                        : entrants.length
+                          ? "Select an entrant"
+                          : "No matching entrants"}
+                  </option>
+                  {entrants?.map((entrant) => (
+                    <option key={entrant.userId} value={entrant.userId}>
+                      {entrant.username} · {entrant.userId}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                className="kos-btn justify-self-start"
+                onClick={reroll}
+                disabled={
+                  busy !== null ||
+                  resultActionPending ||
+                  !winnerToReplace ||
+                  !replacement
+                }
+              >
+                {busy === "reroll" ? "Queuing…" : "Confirm replacement"}
+              </button>
+            </div>
+          ) : null}
+          {rerollRequestedAt ? (
+            <p className="mt-3 text-sm text-kos-muted" role="status">
+              Winner change queued. This page updates when the bot finishes.
+            </p>
+          ) : rerollError ? (
+            <p className="mt-3 text-sm text-amber-200" role="status">
+              Last winner change failed. {rerollError}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

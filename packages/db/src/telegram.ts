@@ -374,7 +374,7 @@ export async function autoPublishRaffleToTelegram(
 
 /** Queue one lifecycle event for every active Telegram publication. */
 export async function enqueueTelegramRaffleEvent(
-  db: PrismaClient,
+  db: Pick<PrismaClient, "telegramRafflePublication" | "integrationDelivery">,
   input: {
     raffleId: number;
     event: IntegrationDeliveryEvent;

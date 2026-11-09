@@ -64,10 +64,19 @@ export default async function RaffleDetailPage({
       },
       proof: true,
       logs: {
-        where: { action: "PUBLISH_FAILED" },
-        orderBy: { createdAt: "desc" },
+        where: {
+          action: {
+            in: [
+              "PUBLISH_FAILED",
+              "RAFFLE_REROLL",
+              "RAFFLE_MANUAL_REROLL",
+              "RAFFLE_REROLL_REJECTED",
+            ],
+          },
+        },
+        orderBy: { id: "desc" },
         take: 1,
-        select: { message: true, createdAt: true },
+        select: { action: true, message: true },
       },
       _count: {
         select: {
@@ -90,6 +99,10 @@ export default async function RaffleDetailPage({
   const canDelete = hasPermission(
     { isOwner, permissions },
     PERMISSIONS.RAFFLE_DELETE,
+  );
+  const canReroll = hasPermission(
+    { isOwner, permissions },
+    PERMISSIONS.RAFFLE_REROLL,
   );
   const winnerSheet = hasPermission(
     { isOwner, permissions },
@@ -358,7 +371,7 @@ export default async function RaffleDetailPage({
                     {w.username}
                     {w.fromReroll ? (
                       <span className="ml-2 text-xs text-kos-muted">
-                        (reroll)
+                        {w.manuallySelected ? "(team-selected)" : "(reroll)"}
                       </span>
                     ) : null}
                   </span>
@@ -382,7 +395,8 @@ export default async function RaffleDetailPage({
         <ParticipantsLive raffleId={raffle.id} />
       </div>
 
-      {raffle.status === "CANCELLED" && raffle.logs[0] ? (
+      {raffle.status === "CANCELLED" &&
+      raffle.logs[0]?.action === "PUBLISH_FAILED" ? (
         <div className="mt-4 rounded-3xl border border-amber-400/20 bg-amber-500/[0.07] p-4 text-sm">
           <div className="font-semibold text-amber-200">
             Discord post failed
@@ -405,8 +419,8 @@ export default async function RaffleDetailPage({
         raffle.holdResults &&
         !raffle.resultsPublishedAt ? (
           <div className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-500/[0.08] px-4 py-3 text-sm text-amber-100">
-            Results are held for team review. You can reroll privately, then
-            publish the final results when ready.
+            Results are held for team review. You can reroll or choose
+            replacements privately, then publish the final results.
           </div>
         ) : null}
         <RaffleActions
@@ -416,6 +430,21 @@ export default async function RaffleDetailPage({
           resultsPublishedAt={raffle.resultsPublishedAt?.toISOString() ?? null}
           resultsPublishRequestedAt={
             raffle.resultsPublishRequestedAt?.toISOString() ?? null
+          }
+          rerollRequestedAt={raffle.rerollRequestedAt?.toISOString() ?? null}
+          rerollError={
+            canReroll && raffle.logs[0]?.action === "RAFFLE_REROLL_REJECTED"
+              ? raffle.logs[0].message
+              : null
+          }
+          currentWinners={
+            canReroll
+              ? raffle.winners.map(({ userId, username, position }) => ({
+                  userId,
+                  username,
+                  position,
+                }))
+              : []
           }
           winnerSheet={winnerSheet}
           canReleaseTeamWallets={

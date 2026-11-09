@@ -59,13 +59,29 @@ export async function POST(
       return NextResponse.json({ ok: true, queued: true });
     }
 
-    await prisma.raffle.update({
-      where: { id },
+    const queued = await prisma.raffle.updateMany({
+      where: {
+        id,
+        guildId: { in: guildIds },
+        status: "ENDED",
+        rerollRequestedAt: null,
+        resultsPublishedAt: null,
+        resultsPublishRequestedAt: null,
+      },
       data: {
         resultsPublishRequestedAt: new Date(),
         resultsPublishRequestedBy: user.id,
       },
     });
+    if (!queued.count) {
+      return NextResponse.json(
+        {
+          error:
+            "The raffle changed or a result action is already queued. Refresh and try again.",
+        },
+        { status: 409 },
+      );
+    }
     await logAudit(org.id, user.id, "RAFFLE_RESULTS_PUBLISH_REQUEST", {
       targetType: "raffle",
       targetId: String(id),

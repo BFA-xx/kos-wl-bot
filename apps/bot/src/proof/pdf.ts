@@ -11,7 +11,12 @@ export interface ProofReportData {
   eligibleRoles: string[];
   entryCount?: number;
   spots: number;
-  winners: { position: number; username: string; userId: string }[];
+  winners: {
+    position: number;
+    username: string;
+    userId: string;
+    manuallySelected?: boolean;
+  }[];
   messageLink: string | null;
   drawSeedHash: string | null;
   brandName: string;
@@ -29,6 +34,9 @@ const SILVER = "#c0c0c0";
  * Render a professional, black-themed PDF proof report and resolve to a Buffer.
  */
 export function renderProofPdf(data: ProofReportData): Promise<Buffer> {
+  const hasManualWinners = data.winners.some(
+    (winner) => winner.manuallySelected,
+  );
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 0 });
     const chunks: Buffer[] = [];
@@ -62,7 +70,9 @@ export function renderProofPdf(data: ProofReportData): Promise<Buffer> {
       .font("Helvetica")
       .fontSize(10)
       .text(
-        "Whitelist Raffle — Verifiable Proof Report",
+        hasManualWinners
+          ? "Whitelist Raffle — Results Report"
+          : "Whitelist Raffle — Verifiable Proof Report",
         M + (data.logoBuffer ? 52 : 0),
         y + 30,
       );
@@ -151,7 +161,12 @@ export function renderProofPdf(data: ProofReportData): Promise<Buffer> {
         doc
           .fillColor(FG)
           .font("Helvetica")
-          .text(w.username, M + 28, y, { width: 200, continued: false });
+          .text(
+            w.manuallySelected ? `${w.username} (team-selected)` : w.username,
+            M + 28,
+            y,
+            { width: 200, ellipsis: true, lineBreak: false },
+          );
         doc
           .fillColor(MUTED)
           .font("Helvetica")
@@ -178,9 +193,14 @@ export function renderProofPdf(data: ProofReportData): Promise<Buffer> {
     y += 14;
     doc.fillColor(MUTED).font("Helvetica").fontSize(8);
     if (data.drawSeedHash) {
-      doc.text(`Draw commitment (SHA-256): ${data.drawSeedHash}`, M, y, {
-        width: W - M - M,
-      });
+      doc.text(
+        `${hasManualWinners ? "Original draw" : "Draw"} commitment (SHA-256): ${data.drawSeedHash}`,
+        M,
+        y,
+        {
+          width: W - M - M,
+        },
+      );
       y += 14;
     }
     if (data.messageLink) {

@@ -1,4 +1,58 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
+
+export type RerollOptions =
+  | { mode: "manual"; winnerUserId: string; replacementUserId: string }
+  | { mode: "single" | "multiple" | "all"; userIds?: string[]; count?: number };
+
+export function parseRerollOptions(input: unknown): RerollOptions | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const {
+    mode = "all",
+    winnerUserId,
+    replacementUserId,
+    userIds,
+    count,
+  } = input as Record<string, unknown>;
+  const isUserId = (value: unknown): value is string =>
+    typeof value === "string" && value.trim().length > 0 && value.length <= 128;
+
+  if (mode === "manual") {
+    if (
+      !isUserId(winnerUserId) ||
+      !isUserId(replacementUserId) ||
+      winnerUserId === replacementUserId
+    ) {
+      return null;
+    }
+    return { mode, winnerUserId, replacementUserId };
+  }
+  if (mode !== "single" && mode !== "multiple" && mode !== "all") return null;
+  if (
+    userIds !== undefined &&
+    (!Array.isArray(userIds) || !userIds.every(isUserId))
+  )
+    return null;
+  if (
+    count !== undefined &&
+    (typeof count !== "number" || !Number.isSafeInteger(count) || count < 1)
+  )
+    return null;
+  return { mode, userIds, count };
+}
+
+/** Replacements must have entered and cannot have already won this raffle. */
+export function raffleReplacementWhere(
+  raffleId: number,
+  guildId: string,
+): Prisma.ParticipantWhereInput {
+  return {
+    raffleId,
+    user: {
+      winners: { none: { raffleId } },
+      blacklists: { none: { guildId } },
+    },
+  };
+}
 
 export interface RecordRaffleParticipantInput {
   raffleId: number;

@@ -11,6 +11,7 @@ export interface ProofEmbedData {
   winnerCount: number;
   messageLink: string | null;
   drawSeedHash: string | null;
+  hasManualWinners?: boolean;
 }
 
 /** "✅ WL Raffle Completed" proof delivery embed. */
@@ -31,7 +32,7 @@ export function buildProofEmbed(data: ProofEmbedData): EmbedBuilder {
       { name: "End", value: discordFull(data.endAt), inline: true },
     )
     .setFooter({
-      text: `${KOS.footer} · Verifiable Proof`,
+      text: `${KOS.footer} · ${data.hasManualWinners ? "Results Report" : "Verifiable Proof"}`,
       ...(KOS.logoUrl ? { iconURL: KOS.logoUrl } : {}),
     })
     .setTimestamp(new Date());
@@ -47,8 +48,12 @@ export function buildProofEmbed(data: ProofEmbedData): EmbedBuilder {
   const extra: string[] = [];
   if (data.messageLink)
     extra.push(`[Announcement message](${data.messageLink})`);
+  if (data.hasManualWinners)
+    extra.push("Final results include team-selected replacements.");
   if (data.drawSeedHash)
-    extra.push(`Draw commitment: \`${data.drawSeedHash.slice(0, 32)}…\``);
+    extra.push(
+      `${data.hasManualWinners ? "Original draw" : "Draw"} commitment: \`${data.drawSeedHash.slice(0, 32)}…\``,
+    );
   if (extra.length) {
     embed.setDescription(extra.join("\n"));
   }

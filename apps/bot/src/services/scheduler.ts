@@ -6,6 +6,7 @@ import {
   LogCategory,
   RaffleStatus,
   enqueueTelegramRaffleEvent,
+  parseRerollOptions,
 } from "@kos/db";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
@@ -19,7 +20,6 @@ import {
   closeAndDraw,
   publishRaffleResults,
   rerollWinners,
-  type RerollMode,
 } from "./winnerService.js";
 import { audit } from "./auditService.js";
 import { processCollaborationAutomations } from "./collaborationService.js";
@@ -609,31 +609,31 @@ export class Scheduler {
   /** Run reroll requests the dashboard wrote to the DB, then clear them. */
   private async processRerollRequests(): Promise<void> {
     const pending = await prisma.raffle.findMany({
-      where: { rerollRequestedAt: { not: null } },
+      where: { status: RaffleStatus.ENDED, rerollRequestedAt: { not: null } },
       orderBy: [{ rerollRequestedAt: "asc" }, { id: "asc" }],
       take: config.SCHEDULER_BATCH_SIZE,
-      select: { id: true, rerollRequest: true },
+      select: { id: true, rerollRequest: true, rerollRequestedAt: true },
     });
     this.warnIfBatchIsFull("dashboard reroll requests", pending.length);
     for (const r of pending) {
-      // Clear FIRST so a failure can't loop.
-      await prisma.raffle
-        .update({
-          where: { id: r.id },
+      if (!r.rerollRequestedAt) continue;
+      const request = r.rerollRequest as { actorId?: unknown } | null;
+      const options = parseRerollOptions(request ?? {});
+      if (!options) {
+        await prisma.raffle.updateMany({
+          where: { id: r.id, rerollRequestedAt: r.rerollRequestedAt },
           data: { rerollRequest: Prisma.DbNull, rerollRequestedAt: null },
-        })
-        .catch(() => undefined);
-      const req = (r.rerollRequest ?? {}) as {
-        mode?: RerollMode;
-        count?: number;
-        userIds?: string[];
-        actorId?: string;
-      };
-      await rerollWinners(this.client, r.id, req.actorId ?? "dashboard", {
-        mode: req.mode ?? "all",
-        count: req.count,
-        userIds: req.userIds,
-      }).catch((err) =>
+        });
+        logger.warn({ raffleId: r.id }, "invalid dashboard reroll request discarded");
+        continue;
+      }
+      await rerollWinners(
+        this.client,
+        r.id,
+        typeof request?.actorId === "string" ? request.actorId : "dashboard",
+        options,
+        r.rerollRequestedAt,
+      ).catch((err) =>
         logger.error({ err, raffleId: r.id }, "dashboard reroll failed"),
       );
     }
@@ -642,7 +642,12 @@ export class Scheduler {
   /** Publish a held raffle after the team has finished any private rerolls. */
   private async processResultPublishRequests(): Promise<void> {
     const pending = await prisma.raffle.findMany({
-      where: { resultsPublishRequestedAt: { not: null } },
+      where: {
+        status: RaffleStatus.ENDED,
+        resultsPublishRequestedAt: { not: null },
+        resultsPublishedAt: null,
+        rerollRequestedAt: null,
+      },
       orderBy: [{ resultsPublishRequestedAt: "asc" }, { id: "asc" }],
       take: config.SCHEDULER_BATCH_SIZE,
       select: { id: true, resultsPublishRequestedBy: true },
@@ -652,17 +657,6 @@ export class Scheduler {
       pending.length,
     );
     for (const raffle of pending) {
-      // Clear first to match the other dashboard request queues. Publishing is
-      // itself idempotent through resultsPublishedAt.
-      await prisma.raffle
-        .update({
-          where: { id: raffle.id },
-          data: {
-            resultsPublishRequestedAt: null,
-            resultsPublishRequestedBy: null,
-          },
-        })
-        .catch(() => undefined);
       await publishRaffleResults(
         this.client,
         raffle.id,

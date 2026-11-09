@@ -2,9 +2,12 @@ import { type Client } from "discord.js";
 import {
   prisma,
   LogCategory,
+  Prisma,
   RaffleStatus,
   enqueueTelegramRaffleEvent,
   evaluateTelegramEligibility,
+  raffleReplacementWhere,
+  type RerollOptions,
 } from "@kos/db";
 import {
   verifiableSample,
@@ -196,6 +199,7 @@ export async function publishRaffleResults(
         id: raffleId,
         status: RaffleStatus.ENDED,
         resultsPublishedAt: null,
+        rerollRequestedAt: null,
       },
       data: {
         resultsPublishedAt: publishedAt,
@@ -208,7 +212,7 @@ export async function publishRaffleResults(
     const activeWinners = await tx.winner.findMany({
       where: { raffleId, replaced: false },
       orderBy: { position: "asc" },
-      select: { userId: true, username: true },
+      select: { userId: true, username: true, manuallySelected: true },
     });
     const reward = await tx.kosRewardDefinition.findUnique({
       where: { event: "RAFFLE_WON" },
@@ -351,7 +355,7 @@ async function notifyRaffleResults(
 async function announceWinners(
   client: Client,
   raffleId: number,
-  winners: { userId: string; username: string }[],
+  winners: { userId: string; username: string; manuallySelected: boolean }[],
 ): Promise<string | null> {
   const raffle = await getRaffle(raffleId);
   if (!raffle) return null;
@@ -395,92 +399,135 @@ async function announceWinners(
     : null;
 }
 
-export type RerollMode = "single" | "multiple" | "all";
-
-export interface RerollOptions {
-  mode: RerollMode;
-  /** For single/multiple: the user ids of winners to replace. */
-  userIds?: string[];
-  /** For multiple: number of random winners to replace if no userIds given. */
-  count?: number;
-}
-
-export interface RerollResult {
+interface RerollResult {
   replaced: { userId: string; username: string }[];
   added: { userId: string; username: string }[];
 }
 
-/** Reroll some or all winners, drawing replacements from non-winning entrants. */
+/** Replace winners through a random draw or a team member's explicit pick. */
 export async function rerollWinners(
   client: Client,
   raffleId: number,
   actorId: string,
   options: RerollOptions,
+  requestedAt?: Date,
 ): Promise<RerollResult | null> {
-  const raffle = await getRaffle(raffleId);
-  if (!raffle || raffle.status !== RaffleStatus.ENDED) return null;
-
-  const currentWinners = await prisma.winner.findMany({
-    where: { raffleId, replaced: false },
-    orderBy: { position: "asc" },
-  });
-  if (currentWinners.length === 0) return null;
-
-  // Decide which winners to replace.
-  let toReplace = currentWinners;
-  if (options.mode === "single" || options.mode === "multiple") {
-    if (options.userIds?.length) {
-      const set = new Set(options.userIds);
-      toReplace = currentWinners.filter((w) => set.has(w.userId));
-    } else if (options.count) {
-      toReplace = currentWinners.slice(0, options.count);
-    }
-  }
-  if (toReplace.length === 0) return null;
-
-  // Eligible replacements: entrants who aren't current winners and not blacklisted.
-  const winnerIds = new Set(currentWinners.map((w) => w.userId));
-  const participants = await prisma.participant.findMany({
-    where: { raffleId },
-    select: { id: true, userId: true, username: true, weight: true },
-  });
-  const pool: DrawnWinner[] = [];
-  for (const p of participants) {
-    if (winnerIds.has(p.userId)) continue;
-    if (await isBlacklisted(raffle.guildId, p.userId)) continue;
-    pool.push({
-      userId: p.userId,
-      username: p.username,
-      participantId: p.id,
-      weight: p.weight,
-    });
-  }
-
-  const { seed } = generateDrawSeed();
-  const replacements = raffle.useRoleWeights
-    ? verifiableWeightedSample(
-        pool,
-        toReplace.length,
-        seed,
-        (p) => p.userId,
-        (p) => p.weight,
-      )
-    : verifiableSample(pool, toReplace.length, seed, (p) => p.userId);
+  const manual = options.mode === "manual" ? options : null;
+  // Telegram draw checks may call an external API. Do them before taking the lock.
+  const eligibility = manual
+    ? await evaluateTelegramEligibility(prisma, {
+        raffleId,
+        userId: manual.replacementUserId,
+        checkAt: "DRAW",
+        botToken: config.TELEGRAM_BOT_TOKEN,
+      })
+    : null;
 
   const reroll = await prisma.$transaction(async (tx) => {
+    // Serialize rerolls with each other and with the transition to published.
+    await tx.$queryRaw`SELECT id FROM "raffles" WHERE id = ${raffleId} FOR UPDATE`;
+    const raffle = await tx.raffle.findUnique({ where: { id: raffleId } });
+    if (!raffle || raffle.status !== RaffleStatus.ENDED) return null;
+
+    if (requestedAt) {
+      if (raffle.rerollRequestedAt?.getTime() !== requestedAt.getTime())
+        return null;
+      // Commit the queue acknowledgement with the mutation, so another worker
+      // cannot run the same request and a rolled-back transaction can retry.
+      await tx.raffle.update({
+        where: { id: raffleId },
+        data: { rerollRequestedAt: null, rerollRequest: Prisma.DbNull },
+      });
+    } else if (
+      raffle.rerollRequestedAt ||
+      raffle.resultsPublishRequestedAt ||
+      (!raffle.holdResults && !raffle.resultsPublishedAt)
+    ) {
+      return null;
+    }
+
+    const currentWinners = await tx.winner.findMany({
+      where: { raffleId, replaced: false },
+      orderBy: { position: "asc" },
+    });
+    let toReplace = currentWinners;
+    if (manual) {
+      toReplace = currentWinners.filter(
+        (w) => w.userId === manual.winnerUserId,
+      );
+    } else if (options.mode === "single" || options.mode === "multiple") {
+      if (options.userIds?.length) {
+        const ids = new Set(options.userIds);
+        toReplace = currentWinners.filter((w) => ids.has(w.userId));
+      } else if (options.count) {
+        toReplace = currentWinners.slice(0, options.count);
+      }
+    }
+
+    const participants = await tx.participant.findMany({
+      where: {
+        ...raffleReplacementWhere(raffleId, raffle.guildId),
+        ...(manual ? { userId: manual.replacementUserId } : {}),
+      },
+      select: { id: true, userId: true, username: true, weight: true },
+    });
+    const pool = participants.map(({ id, ...participant }) => ({
+      ...participant,
+      participantId: id,
+    }));
+    let failure: string | null = null;
+    if (manual && toReplace.length !== 1) {
+      failure = "The winner you selected is no longer active.";
+    } else if (toReplace.length === 0) {
+      failure = "There are no matching winners to replace.";
+    } else if (pool.length === 0) {
+      failure =
+        "There are no eligible replacement entrants for this selection.";
+    } else if (eligibility && eligibility.status !== "eligible") {
+      failure = eligibility.reasons.join(" ");
+    }
+    if (failure !== null) {
+      if (requestedAt) {
+        await tx.log.create({
+          data: {
+            guildId: raffle.guildId,
+            raffleId,
+            actorId,
+            category: LogCategory.REROLL,
+            action: "RAFFLE_REROLL_REJECTED",
+            message: failure,
+          },
+        });
+      }
+      return null;
+    }
+
+    const seed = manual ? null : generateDrawSeed().seed;
+    const replacements =
+      seed === null
+        ? pool
+        : raffle.useRoleWeights
+          ? verifiableWeightedSample(
+              pool,
+              toReplace.length,
+              seed,
+              (p) => p.userId,
+              (p) => p.weight,
+            )
+          : verifiableSample(pool, toReplace.length, seed, (p) => p.userId);
+
     const replaced: typeof toReplace = [];
-    const added: { userId: string; username: string }[] = [];
-    for (let i = 0; i < toReplace.length; i++) {
-      const old = toReplace[i]!;
+    const added: { id: number; userId: string; username: string }[] = [];
+    for (const [i, old] of toReplace.entries()) {
+      const repl = replacements[i];
+      if (!repl) break;
       const claimed = await tx.winner.updateMany({
         where: { id: old.id, replaced: false },
         data: { replaced: true },
       });
       if (claimed.count === 0) continue;
       replaced.push(old);
-      const repl = replacements[i];
-      if (!repl) continue; // pool exhausted
-      await tx.winner.create({
+      const winner = await tx.winner.create({
         data: {
           raffleId,
           userId: repl.userId,
@@ -488,7 +535,9 @@ export async function rerollWinners(
           position: old.position,
           participantId: repl.participantId,
           fromReroll: true,
+          manuallySelected: Boolean(manual),
         },
+        select: { id: true, userId: true, username: true },
       });
       if (raffle.resultsPublishedAt) {
         const identity = await tx.kosIdentity.findUnique({
@@ -507,7 +556,7 @@ export async function rerollWinners(
                 identityId: identity.id,
                 event: "RAFFLE_WON",
                 amount: reward.points,
-                reason: `Won KOS raffle #${raffleId} by reroll`,
+                reason: `Won KOS raffle #${raffleId} by ${manual ? "team selection" : "reroll"}`,
                 source: "kos_raffle_winner",
                 referenceId: `${raffleId}:${repl.userId}`,
               },
@@ -516,34 +565,40 @@ export async function rerollWinners(
           });
         }
       }
-      added.push({ userId: repl.userId, username: repl.username });
+      added.push(winner);
     }
-    return { replaced, added };
+    const selectedWinner = manual ? added[0] : undefined;
+    if (raffle.resultsPublishedAt && selectedWinner) {
+      await enqueueTelegramRaffleEvent(tx, {
+        raffleId,
+        event: "WINNER_SELECTED",
+        marker: `replacement-${selectedWinner.id}`,
+        payload: { updated: true },
+      });
+    }
+    await tx.log.create({
+      data: {
+        guildId: raffle.guildId,
+        raffleId,
+        category: LogCategory.REROLL,
+        action: manual ? "RAFFLE_MANUAL_REROLL" : "RAFFLE_REROLL",
+        message: manual
+          ? "Selected a replacement winner manually"
+          : `Rerolled ${replaced.length} winner(s) (${options.mode})`,
+        actorId,
+        metadata: {
+          removed: replaced.map((w) => w.userId),
+          added: added.map((w) => w.userId),
+          weighted: !manual && raffle.useRoleWeights,
+          resultsPublished: Boolean(raffle.resultsPublishedAt),
+          totalWeight: pool.reduce((sum, p) => sum + Math.max(1, p.weight), 0),
+        },
+      },
+    });
+    return { raffle, replaced, added };
   });
-  if (reroll.replaced.length === 0) {
-    logger.info(
-      { raffleId },
-      "reroll skipped because another worker already claimed the winners",
-    );
-    return null;
-  }
-  const { replaced, added } = reroll;
-
-  await audit({
-    guildId: raffle.guildId,
-    raffleId,
-    category: LogCategory.REROLL,
-    action: "RAFFLE_REROLL",
-    message: `Rerolled ${replaced.length} winner(s) (${options.mode})`,
-    actorId,
-    metadata: {
-      removed: replaced.map((w) => w.userId),
-      added: added.map((w) => w.userId),
-      weighted: raffle.useRoleWeights,
-      resultsPublished: Boolean(raffle.resultsPublishedAt),
-      totalWeight: pool.reduce((sum, p) => sum + Math.max(1, p.weight), 0),
-    },
-  });
+  if (!reroll || reroll.replaced.length === 0) return null;
+  const { raffle, replaced, added } = reroll;
 
   // Notify freshly drawn replacement winners on the web too.
   if (raffle.resultsPublishedAt && added.length > 0) {
@@ -567,7 +622,7 @@ export async function rerollWinners(
     if (channel) {
       await channel
         .send({
-          content: `🔁 **Reroll** — new winner(s): ${added
+          content: `🔁 **${manual ? "Team-selected replacement" : "Reroll"}** — new winner(s): ${added
             .map((w) => `<@${w.userId}>`)
             .join(" ")}`,
           allowedMentions: { users: added.map((w) => w.userId) },
@@ -590,6 +645,6 @@ export async function rerollWinners(
       userId: w.userId,
       username: w.username,
     })),
-    added,
+    added: added.map(({ userId, username }) => ({ userId, username })),
   };
 }
