@@ -52,7 +52,7 @@ function heldRaffle(t: TestContext, eligible: boolean) {
       })),
     },
     participant: {
-      findMany: t.mock.fn(async () =>
+      findMany: t.mock.fn(async (_args: unknown) =>
         eligible
           ? [{ id: 3, userId: "entrant", username: "New", weight: 1 }]
           : [],
@@ -86,6 +86,26 @@ test("a queued manual replacement takes exactly the chosen slot and applies once
     where: { id: 2, replaced: false },
     data: { replaced: true },
   });
+  // A previously replaced winner's audit row releases the entry link first.
+  assert.deepEqual(tx.winner.updateMany.mock.calls[1]?.arguments[0], {
+    where: { participantId: 3, replaced: true },
+    data: { participantId: null },
+  });
+  assert.deepEqual(
+    (
+      tx.participant.findMany.mock.calls[0]?.arguments[0] as {
+        where: unknown;
+      }
+    ).where,
+    {
+      raffleId,
+      user: {
+        winners: { none: { raffleId, replaced: false } },
+        blacklists: { none: { guildId: "guild" } },
+      },
+      userId: "entrant",
+    },
+  );
   assert.deepEqual(tx.winner.create.mock.calls[0]?.arguments[0], {
     data: {
       raffleId,
@@ -151,4 +171,19 @@ test("a random reroll keeps occupied slots when the replacement pool runs out", 
   assert.equal(result?.added.length, 1);
   assert.equal(tx.winner.updateMany.mock.callCount(), 1);
   assert.equal(tx.winner.create.mock.callCount(), 1);
+  // Random draws never bring back a winner an earlier reroll replaced.
+  assert.deepEqual(
+    (
+      tx.participant.findMany.mock.calls[0]?.arguments[0] as {
+        where: unknown;
+      }
+    ).where,
+    {
+      raffleId,
+      user: {
+        winners: { none: { raffleId } },
+        blacklists: { none: { guildId: "guild" } },
+      },
+    },
+  );
 });

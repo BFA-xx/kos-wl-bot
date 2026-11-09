@@ -185,7 +185,9 @@ export const raffleCommand: Command = {
         .addUserOption((o) =>
           o
             .setName("replacement")
-            .setDescription("Choose an entrant as the replacement (single mode)"),
+            .setDescription(
+              "Choose an entrant as the replacement (single mode)",
+            ),
         ),
     )
     // ---- publish results ----
@@ -565,7 +567,7 @@ async function handleReroll(interaction: ChatInputCommandInteraction) {
   if (!result) {
     return interaction.editReply(
       replacement
-        ? "Selection failed. Check that the raffle has ended, the winner is still active, and the replacement is an eligible entrant who has never won this raffle. Wait for any queued result action to finish."
+        ? "Selection failed. Check that the raffle has ended, the winner is still active, and the replacement is an eligible entrant who is not already a winner. Wait for any queued result action to finish."
         : "Reroll failed — the raffle must be ENDED with eligible replacements available.",
     );
   }

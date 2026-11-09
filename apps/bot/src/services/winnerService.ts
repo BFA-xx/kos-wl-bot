@@ -6,6 +6,7 @@ import {
   RaffleStatus,
   enqueueTelegramRaffleEvent,
   evaluateTelegramEligibility,
+  raffleManualReplacementWhere,
   raffleReplacementWhere,
   type RerollOptions,
 } from "@kos/db";
@@ -466,8 +467,12 @@ export async function rerollWinners(
 
     const participants = await tx.participant.findMany({
       where: {
-        ...raffleReplacementWhere(raffleId, raffle.guildId),
-        ...(manual ? { userId: manual.replacementUserId } : {}),
+        ...(manual
+          ? {
+              ...raffleManualReplacementWhere(raffleId, raffle.guildId),
+              userId: manual.replacementUserId,
+            }
+          : raffleReplacementWhere(raffleId, raffle.guildId)),
       },
       select: { id: true, userId: true, username: true, weight: true },
     });
@@ -527,6 +532,14 @@ export async function rerollWinners(
       });
       if (claimed.count === 0) continue;
       replaced.push(old);
+      if (manual) {
+        // A winner replaced earlier keeps its audit row, which still links the
+        // entry. Each entry links to one winner row, so release that link first.
+        await tx.winner.updateMany({
+          where: { participantId: repl.participantId, replaced: true },
+          data: { participantId: null },
+        });
+      }
       const winner = await tx.winner.create({
         data: {
           raffleId,

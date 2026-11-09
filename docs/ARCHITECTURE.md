@@ -261,8 +261,8 @@ bot token.
    proof generation follow.
 
 Random rerolls use a new seed that is currently kept in memory. Authorized
-team members can also replace one active winner with an eligible entrant who
-has never won that raffle. The replacement keeps the original slot, and the
+team members can also replace one active winner with any eligible entrant who
+is not a current winner, including a winner an earlier reroll replaced. The replacement keeps the original slot, and the
 results and proof identify it as team-selected. Held results stay private until
 published. Published raffles notify replacements and refresh the proof, which
 retains the original draw commitment.

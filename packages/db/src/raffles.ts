@@ -40,7 +40,10 @@ export function parseRerollOptions(input: unknown): RerollOptions | null {
   return { mode, userIds, count };
 }
 
-/** Replacements must have entered and cannot have already won this raffle. */
+/**
+ * Random rerolls draw only from entrants who have never won this raffle, so a
+ * winner who was rerolled out is not drawn back in by chance.
+ */
 export function raffleReplacementWhere(
   raffleId: number,
   guildId: string,
@@ -49,6 +52,23 @@ export function raffleReplacementWhere(
     raffleId,
     user: {
       winners: { none: { raffleId } },
+      blacklists: { none: { guildId } },
+    },
+  };
+}
+
+/**
+ * A team member choosing a replacement may pick any entrant who is not a
+ * current winner, including a winner an earlier reroll replaced.
+ */
+export function raffleManualReplacementWhere(
+  raffleId: number,
+  guildId: string,
+): Prisma.ParticipantWhereInput {
+  return {
+    raffleId,
+    user: {
+      winners: { none: { raffleId, replaced: false } },
       blacklists: { none: { guildId } },
     },
   };

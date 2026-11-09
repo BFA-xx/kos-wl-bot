@@ -91,20 +91,26 @@ export function RaffleActions({
 
   const api = (path: string) => `/api/${slug}/raffles/${raffleId}${path}`;
   const {
-    data: entrants,
+    data: entrantPage,
     error: entrantError,
     mutate: refreshEntrants,
   } = useSWR(
     canReroll && status === "ENDED" && mode === "manual"
       ? api(`/reroll?q=${encodeURIComponent(entrantSearch.trim())}`)
       : null,
-    async (url): Promise<{ userId: string; username: string }[]> => {
+    async (
+      url,
+    ): Promise<{
+      entrants: { userId: string; username: string }[];
+      truncated: boolean;
+    }> => {
       const response = await fetch(url);
       if (!response.ok) throw new Error("Couldn't load replacement entrants.");
       const body = await response.json();
-      return body.entrants;
+      return { entrants: body.entrants, truncated: Boolean(body.truncated) };
     },
   );
+  const entrants = entrantPage?.entrants;
   const winnerToReplace = currentWinners.find(
     (winner) => winner.userId === winnerUserId,
   );
@@ -609,6 +615,12 @@ export function RaffleActions({
                     </option>
                   ))}
                 </select>
+                {entrantPage?.truncated ? (
+                  <p className="text-xs opacity-70">
+                    Showing the first {entrants?.length} entrants. Search by
+                    username or user ID to find anyone else.
+                  </p>
+                ) : null}
               </div>
               <button
                 className="kos-btn justify-self-start"

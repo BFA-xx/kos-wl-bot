@@ -80,7 +80,7 @@ describe("dashboard raffle replacements", () => {
     expect(mocks.findEntrants).not.toHaveBeenCalled();
   });
 
-  it("searches the raffle's entrants and excludes past winners and blacklisted users", async () => {
+  it("searches the raffle's entrants and excludes current winners and blacklisted users", async () => {
     const response = await GET(new Request(`${url}?q=example`), context);
 
     expect(response.status).toBe(200);
@@ -94,7 +94,7 @@ describe("dashboard raffle replacements", () => {
         where: {
           raffleId: 60,
           user: {
-            winners: { none: { raffleId: 60 } },
+            winners: { none: { raffleId: 60, replaced: false } },
             blacklists: { none: { guildId: "guild-a" } },
           },
           OR: [
@@ -102,9 +102,26 @@ describe("dashboard raffle replacements", () => {
             { userId: "example" },
           ],
         },
-        take: 25,
+        take: 201,
       }),
     );
+    expect(await response.json()).toEqual({
+      entrants: [{ userId: "eligible-entrant", username: "Example" }],
+      truncated: false,
+    });
+  });
+
+  it("flags a list that needs a search to see every entrant", async () => {
+    mocks.findEntrants.mockResolvedValueOnce(
+      Array.from({ length: 201 }, (_, i) => ({
+        userId: String(i),
+        username: `entrant${i}`,
+      })),
+    );
+
+    const body = await (await GET(new Request(url), context)).json();
+    expect(body.entrants).toHaveLength(200);
+    expect(body.truncated).toBe(true);
   });
 
   it("queues the exact pair with the authenticated actor and guards against pending requests", async () => {

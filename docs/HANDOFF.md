@@ -11,7 +11,7 @@ Previous audited production baseline: `d079d52`
   Choose a replacement**, select the current winner and search by entrant
   username or user ID. Discord managers can use `/raffle reroll` in single
   mode with both the winner and replacement users supplied.
-- Selection preserves the winner's slot, excludes past winners and blacklisted
+- Selection preserves the winner's slot, excludes current winners and blacklisted
   entrants, checks applicable Telegram draw rules, and records the team member
   in the guild audit. Held results stay private. Public results, proof and
   announcements identify manual replacements. Random rerolls keep occupied

@@ -1,4 +1,4 @@
-import { parseRerollOptions, raffleReplacementWhere } from "@kos/db";
+import { parseRerollOptions, raffleManualReplacementWhere } from "@kos/db";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { AccessError, requireOrgAccess, logAudit } from "@/lib/access";
@@ -40,13 +40,16 @@ async function getRerollContext(params: RouteContext["params"]) {
   return { org, user, raffle };
 }
 
+/** Enough to scroll a typical raffle; larger ones are narrowed by search. */
+const ENTRANT_PAGE = 200;
+
 export async function GET(req: Request, { params }: RouteContext) {
   try {
     const { raffle } = await getRerollContext(params);
     const query = new URL(req.url).searchParams.get("q")?.trim().slice(0, 128);
     const entrants = await prisma.participant.findMany({
       where: {
-        ...raffleReplacementWhere(raffle.id, raffle.guildId),
+        ...raffleManualReplacementWhere(raffle.id, raffle.guildId),
         ...(query
           ? {
               OR: [
@@ -58,9 +61,12 @@ export async function GET(req: Request, { params }: RouteContext) {
       },
       select: { userId: true, username: true },
       orderBy: [{ username: "asc" }, { userId: "asc" }],
-      take: 25,
+      take: ENTRANT_PAGE + 1,
     });
-    return NextResponse.json({ entrants });
+    return NextResponse.json({
+      entrants: entrants.slice(0, ENTRANT_PAGE),
+      truncated: entrants.length > ENTRANT_PAGE,
+    });
   } catch (err) {
     if (err instanceof AccessError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
@@ -97,7 +103,7 @@ export async function POST(req: Request, { params }: RouteContext) {
         }),
         prisma.participant.findFirst({
           where: {
-            ...raffleReplacementWhere(id, guildId),
+            ...raffleManualReplacementWhere(id, guildId),
             userId: options.replacementUserId,
           },
           select: { id: true },
@@ -107,7 +113,7 @@ export async function POST(req: Request, { params }: RouteContext) {
         return NextResponse.json(
           {
             error:
-              "Choose a current winner and an eligible entrant who has never won this raffle.",
+              "Choose a current winner and an eligible entrant who is not already a winner.",
           },
           { status: 409 },
         );
