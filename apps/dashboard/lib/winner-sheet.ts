@@ -251,54 +251,48 @@ export async function collectWinnerSheetRows(
   };
 }
 
-const WINNERS_HEADER = ["#", "List", "Chain", "Wallet Address"];
-
 export function winnerSheetTitle(projectName: string): string {
   return `KOS X ${projectName} — Winners`.slice(0, 120);
 }
 
-/**
- * The two tabs: the working list, and a clean column to hand over.
- *
- * Neither carries the winner's Discord username, nor whether an address came
- * from the community or the team pool, nor which teammate owns it. The sheet
- * is readable by anyone holding the link — normally the partner project — and
- * a "Team Pool" label there would tell them which of their spots KOS took.
- * That detail stays in the Excel exports, which are downloaded, not shared.
- */
+function addressLayout(data: WinnerSheetData) {
+  const rows: string[][] = [];
+  const headingRows: number[] = [];
+  for (const kind of KIND_ORDER) {
+    const addresses = data.rows.filter((row) => row.kind === kind);
+    if (addresses.length === 0) continue;
+    if (rows.length > 0) rows.push([""]);
+    headingRows.push(rows.length);
+    rows.push(
+      [`${kind} Addresses`],
+      ...addresses.map(({ address }) => [address]),
+    );
+  }
+  if (rows.length === 0) {
+    headingRows.push(0);
+    rows.push(["Wallet Addresses"]);
+  }
+  return { rows, headingRows };
+}
+
+/** Both tabs are link-shared, so include only addresses and section labels. */
 export function buildWinnerSheetTabs(
   projectName: string,
   data: WinnerSheetData,
 ): SheetTab[] {
-  const banner = `KOS X ${projectName}`;
-  const winners: (string | number)[][] = [
-    [banner, "", "", ""],
-    WINNERS_HEADER,
-    ...data.rows.map((row, index) => [
-      index + 1,
-      row.kind,
-      row.chain,
-      row.address,
-    ]),
-  ];
-
-  const addresses: (string | number)[][] = [
-    ["Wallet Address", "List"],
-    ...data.rows.map((row) => [row.address, row.kind]),
-  ];
-
+  const { rows } = addressLayout(data);
   return [
     {
       title: WINNERS_TAB,
-      rows: winners,
-      frozenRows: 2,
-      columnWidths: [48, 72, 120, 420],
+      rows: [[`KOS X ${projectName}`], ...rows],
+      frozenRows: 1,
+      columnWidths: [560],
     },
     {
       title: ADDRESSES_TAB,
-      rows: addresses,
-      frozenRows: 1,
-      columnWidths: [420, 72],
+      rows,
+      frozenRows: 0,
+      columnWidths: [560],
     },
   ];
 }
@@ -306,153 +300,73 @@ export function buildWinnerSheetTabs(
 const INK = { red: 0.09, green: 0.09, blue: 0.09 };
 const BANNER_FILL = { red: 0.93, green: 0.93, blue: 0.93 };
 const HEADER_FILL = { red: 0.85, green: 0.85, blue: 0.85 };
-/** A faint wash behind the FCFS block so the split is visible while scrolling. */
-const FCFS_FILL = { red: 0.96, green: 0.97, blue: 1 };
-const WHITE = { red: 1, green: 1, blue: 1 };
 
-/**
- * Formatting for both tabs. Every request is idempotent so a re-sync repaints
- * rather than accumulating, and the data region is reset first so a list that
- * shrank does not leave the previous block's tint stranded below it.
- */
 export function buildWinnerSheetFormat(
   tabIds: Map<string, number>,
   data: WinnerSheetData,
 ): unknown[] {
-  const winnersId = tabIds.get(WINNERS_TAB);
-  const addressesId = tabIds.get(ADDRESSES_TAB);
+  const { headingRows } = addressLayout(data);
   const requests: unknown[] = [];
-  const dataRows = data.rows.length;
-  // Reset well past the current list so formatting left by a longer previous
-  // sync is cleared too.
-  const resetTo = dataRows + 2 + 1000;
-
-  if (winnersId !== undefined) {
+  for (const title of [WINNERS_TAB, ADDRESSES_TAB]) {
+    const sheetId = tabIds.get(title);
+    if (sheetId === undefined) continue;
+    const hasBanner = title === WINNERS_TAB;
+    if (hasBanner) {
+      // Old Winner tabs had a merged banner and a filter over four columns.
+      requests.push(
+        { clearBasicFilter: { sheetId } },
+        { unmergeCells: { range: { sheetId } } },
+      );
+    }
     requests.push(
-      {
-        updateCells: {
-          range: { sheetId: winnersId, startRowIndex: 0, endRowIndex: resetTo },
-          fields: "userEnteredFormat",
-        },
-      },
-      {
-        mergeCells: {
-          range: {
-            sheetId: winnersId,
-            startRowIndex: 0,
-            endRowIndex: 1,
-            startColumnIndex: 0,
-            endColumnIndex: WINNERS_HEADER.length,
-          },
-          mergeType: "MERGE_ALL",
-        },
-      },
-      cellFormat(winnersId, 0, 1, {
-        backgroundColor: BANNER_FILL,
-        horizontalAlignment: "CENTER",
-        verticalAlignment: "MIDDLE",
-        textFormat: { bold: true, fontSize: 14, foregroundColor: INK },
-      }),
-      cellFormat(winnersId, 1, 2, {
-        backgroundColor: HEADER_FILL,
-        textFormat: { bold: true, foregroundColor: INK },
-      }),
+      { updateCells: { range: { sheetId }, fields: "userEnteredFormat" } },
       {
         updateSheetProperties: {
           properties: {
-            sheetId: winnersId,
-            gridProperties: { frozenRowCount: 2 },
-          },
-          fields: "gridProperties.frozenRowCount",
-        },
-      },
-      {
-        updateDimensionProperties: {
-          range: {
-            sheetId: winnersId,
-            dimension: "ROWS",
-            startIndex: 0,
-            endIndex: 1,
-          },
-          properties: { pixelSize: 30 },
-          fields: "pixelSize",
-        },
-      },
-    );
-
-    // Tint each block so GTD and FCFS read as two sections of one list.
-    let offset = 2;
-    for (const block of data.countsByKind) {
-      if (block.rows > 0) {
-        requests.push(
-          cellFormat(winnersId, offset, offset + block.rows, {
-            backgroundColor: block.kind === "FCFS" ? FCFS_FILL : WHITE,
-          }),
-        );
-      }
-      offset += block.rows;
-    }
-
-    if (dataRows > 0) {
-      requests.push({
-        setBasicFilter: {
-          filter: {
-            range: {
-              sheetId: winnersId,
-              startRowIndex: 1,
-              endRowIndex: dataRows + 2,
-              startColumnIndex: 0,
-              endColumnIndex: WINNERS_HEADER.length,
-            },
-          },
-        },
-      });
-    }
-  }
-
-  if (addressesId !== undefined) {
-    requests.push(
-      {
-        updateCells: {
-          range: {
-            sheetId: addressesId,
-            startRowIndex: 0,
-            endRowIndex: resetTo,
-          },
-          fields: "userEnteredFormat",
-        },
-      },
-      cellFormat(addressesId, 0, 1, {
-        backgroundColor: HEADER_FILL,
-        textFormat: { bold: true, foregroundColor: INK },
-      }),
-      {
-        updateSheetProperties: {
-          properties: {
-            sheetId: addressesId,
-            gridProperties: { frozenRowCount: 1 },
+            sheetId,
+            gridProperties: { frozenRowCount: hasBanner ? 1 : 0 },
           },
           fields: "gridProperties.frozenRowCount",
         },
       },
     );
+    if (hasBanner) {
+      requests.push(
+        cellFormat(sheetId, 0, {
+          backgroundColor: BANNER_FILL,
+          horizontalAlignment: "CENTER",
+          textFormat: { bold: true, fontSize: 14, foregroundColor: INK },
+        }),
+      );
+    }
+    for (const index of headingRows) {
+      requests.push(
+        cellFormat(sheetId, index + (hasBanner ? 1 : 0), {
+          backgroundColor: HEADER_FILL,
+          textFormat: { bold: true, foregroundColor: INK },
+        }),
+      );
+    }
   }
-
   return requests;
 }
 
 function cellFormat(
   sheetId: number,
-  startRowIndex: number,
-  endRowIndex: number,
+  rowIndex: number,
   format: Record<string, unknown>,
 ) {
   return {
     repeatCell: {
-      range: { sheetId, startRowIndex, endRowIndex },
+      range: {
+        sheetId,
+        startRowIndex: rowIndex,
+        endRowIndex: rowIndex + 1,
+        startColumnIndex: 0,
+        endColumnIndex: 1,
+      },
       cell: { userEnteredFormat: format },
-      fields:
-        "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)",
+      fields: "userEnteredFormat",
     },
   };
 }

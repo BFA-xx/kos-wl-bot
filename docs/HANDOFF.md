@@ -3201,3 +3201,8 @@ Recommended next task:
 - The dashboard navigates the tab opened by the export click and keeps the raffle page in place. The sheet summary links to the spreadsheet if the browser blocks the popup, and failed requests close the empty tab.
 - Discord's private `/raffle export` reply includes an **Open in Google Sheets** button. When Sheets is unavailable, it explains why and attaches the winners CSV.
 - The `kosraffles` Google OAuth audience is External and In production. Confirm onboarding with a community administrator outside the former Google test list.
+
+## Winner address sections (2026-11-10)
+
+- The shared Google Sheets export writes one address column with a heading for each non-empty GTD, FCFS, or WL section and a blank row between sections. The Discord and dashboard export paths use the same writer.
+- Existing sheets adopt the layout when a manager uses **Rewrite sheet** on the raffle page. This replaces the sheet contents, including manual edits, and clears the old filter and merged banner. Opening an existing sheet preserves its current contents.

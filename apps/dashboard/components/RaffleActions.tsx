@@ -522,14 +522,16 @@ export function RaffleActions({
                       )} ${sheet.missingRaffleIds.length === 1 ? "was" : "were"} drawn after this sheet was written.`
                   : "Winners or wallets changed after this sheet was written."}
               </span>
-              <button
-                className="kos-btn shrink-0"
-                onClick={() => void openSheet(true)}
-                disabled={busy !== null}
-              >
-                {busy === "sheet" ? "Rewriting…" : "Rewrite sheet"}
-              </button>
             </div>
+          ) : null}
+          {sheet ? (
+            <button
+              className="kos-btn"
+              onClick={() => void openSheet(true)}
+              disabled={busy !== null}
+            >
+              {busy === "sheet" ? "Working…" : "Rewrite sheet"}
+            </button>
           ) : null}
           {sheetError ? (
             <p className="rounded-2xl border border-red-400/20 bg-red-500/[0.08] px-4 py-3 text-red-200">
