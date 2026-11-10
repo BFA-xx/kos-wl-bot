@@ -7,6 +7,15 @@ describe("dashboard middleware integration boundaries", () => {
     process.env.DASHBOARD_SESSION_TOKEN = "session-test-secret";
   });
 
+  it.each(["/about", "/privacy"])("allows public visitors to open %s", async (path) => {
+    const response = await middleware(
+      new NextRequest(`https://raffle.koslabs.app${path}`),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
   it("passes the Discord member feed to its bearer-token route", async () => {
     const response = await middleware(
       new NextRequest(

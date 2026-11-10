@@ -3190,3 +3190,8 @@ Recommended next task:
   surfaces still need deeper product-design passes.
 - The attached “KOS Phase 3” specification is the intended roadmap, while the
   code and migrations define what is actually shipped.
+
+## Google Sheets external onboarding (2026-11-10)
+
+- The KOS Raffles privacy policy is available on the dashboard at `/privacy` and linked from `/login`. The public app homepage at `/about` describes the raffle service and Sheets integration and links to the policy. Both routes are accessible without a KOS session.
+- The `kosraffles` OAuth project was External and Testing. The rollout requires the public app homepage and privacy-policy URLs in Branding, followed by verification of a non-test community administrator connecting and exporting a sample raffle.

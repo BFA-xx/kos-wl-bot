@@ -93,7 +93,8 @@ export default function LoginPage() {
 
           <p className="mt-5 text-center text-xs text-kos-muted/70">
             By continuing you agree to KOS's terms. New here? Signing in creates
-            your account.
+            your account.{" "}
+            <a href="/privacy" className="underline">Privacy policy</a>
           </p>
         </div>
       </div>

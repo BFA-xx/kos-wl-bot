@@ -40,6 +40,8 @@ export async function middleware(req: NextRequest) {
 
   if (
     pathname.startsWith("/login") ||
+    pathname === "/about" ||
+    pathname === "/privacy" ||
     pathname.startsWith("/r/") ||
     pathname.startsWith("/api/auth") ||
     pathname === "/api/integrations/telegram/webhook" ||
