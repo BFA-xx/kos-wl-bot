@@ -3206,3 +3206,8 @@ Recommended next task:
 
 - The shared Google Sheets export writes one address column with a heading for each non-empty GTD, FCFS, or WL section and a blank row between sections. The Discord and dashboard export paths use the same writer.
 - Existing sheets adopt the layout when a manager uses **Rewrite sheet** on the raffle page. This replaces the sheet contents, including manual edits, and clears the old filter and merged banner. Opening an existing sheet preserves its current contents.
+
+## Legacy raffle step labels (2026-11-10)
+
+- The Discord setup modal writes text-only tasks without a URL placeholder and accepts older modal inputs that used a literal `undefined` in the URL slot.
+- The dashboard hides the stored placeholder from legacy task labels while deriving verification IDs from the original label. PRX PlunderPort raffles 303 and 304 have stored examples. The FCFS label was already truncated at save time, so display cleanup cannot recover the missing text.

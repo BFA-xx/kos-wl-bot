@@ -1,3 +1,4 @@
+import { legacyTaskDisplayLabel } from "@/lib/legacy-raffle-tasks";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
@@ -517,13 +518,8 @@ function getSocialTasks(
     if (!task || typeof task !== "object") return [];
     const t = task as { label?: unknown; url?: unknown };
     if (typeof t.label !== "string" || !t.label.trim()) return [];
-    return [
-      {
-        label: t.label,
-        url:
-          typeof t.url === "string" && t.url.trim() ? t.url.trim() : undefined,
-      },
-    ];
+    const url = typeof t.url === "string" ? t.url.trim() || null : null;
+    return [{ label: legacyTaskDisplayLabel(t.label, url), url: url ?? undefined }];
   });
 }
 

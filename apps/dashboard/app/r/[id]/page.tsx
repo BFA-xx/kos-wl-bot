@@ -1,3 +1,4 @@
+import { legacyTaskDisplayLabel } from "@/lib/legacy-raffle-tasks";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
@@ -434,13 +435,14 @@ function getLegacyTasks(requirements: Record<string, unknown>) {
     const task = item as { label?: unknown; url?: unknown };
     const label = typeof task.label === "string" ? task.label.trim() : "";
     if (!label) return [];
+    const url = sanitizeHttpUrl(task.url);
     return [
       {
         key: `legacy-${index}-${label}`,
-        label,
+        label: legacyTaskDisplayLabel(label, url),
         description:
           "Open the link, complete the step, then verify when joining.",
-        url: sanitizeHttpUrl(task.url) || undefined,
+        url: url || undefined,
         required: true,
       },
     ];

@@ -249,7 +249,7 @@ async function showOptionsModal(
 ) {
   const req = (draft.requirements ?? {}) as EntryRequirements;
   const tasksText = (req.tasks ?? [])
-    .map((t) => `${t.label} | ${t.url}`)
+    .map(({ label, url }) => (url ? `${label} | ${url}` : label))
     .join("\n");
 
   const modal = new ModalBuilder()
@@ -436,12 +436,12 @@ function parseTasks(raw: string): { label: string; url?: string }[] {
     if (trimmed.includes("|")) {
       const [l, u] = trimmed.split("|").map((s) => s.trim());
       label = l || null;
-      value = u ?? "";
+      value = u === "undefined" ? "" : (u ?? "");
     }
 
     // Non-URL line → a text instruction (e.g. "Comment KUON under this post").
     if (!isHttpUrl(value)) {
-      addText(label ? `${label}: ${value}` : trimmed);
+      addText(label && value ? `${label}: ${value}` : (label ?? trimmed));
       continue;
     }
 

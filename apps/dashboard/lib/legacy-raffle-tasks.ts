@@ -12,6 +12,12 @@ export interface LegacyRaffleTask {
   url: string | null;
 }
 
+/** Hide the missing URL placeholder written by older Discord drafts. */
+export function legacyTaskDisplayLabel(label: string, url: string | null): string {
+  const trimmed = label.trim();
+  return url ? trimmed : trimmed.replace(/:\s+undefined(?=\s|$)/gu, "").trim() || trimmed;
+}
+
 /** Legacy raffle social/link tasks are stored in `raffle.requirements.tasks`. */
 export function getLegacyRaffleTasks(raffleId: number, requirements: unknown): LegacyRaffleTask[] {
   const req = (requirements ?? {}) as { tasks?: unknown };
@@ -30,7 +36,7 @@ export function getLegacyRaffleTasks(raffleId: number, requirements: unknown): L
         id: `social-${raffleId}-${index}-${hash}`,
         key: legacyTaskKey(raffleId, index, hash),
         sharedKey: url ? legacyTaskSharedKey(url) : null,
-        label,
+        label: legacyTaskDisplayLabel(label, url),
         url,
       },
     ];
