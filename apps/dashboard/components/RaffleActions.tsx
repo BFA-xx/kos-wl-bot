@@ -148,36 +148,43 @@ export function RaffleActions({
       return;
     }
     setSheetError(null);
-    const tab = window.open("", "_blank", "noopener");
+    const tab = window.open("", "_blank");
+    // Keep a handle for navigation, but isolate the new tab from this page.
+    if (tab) tab.opener = null;
     setBusy("sheet");
-    const res = await fetch(api("/sheet"), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rewrite }),
-    });
-    const body = await res.json().catch(() => ({}));
-    setBusy(null);
-    if (!res.ok) {
+    try {
+      const res = await fetch(api("/sheet"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rewrite }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || typeof body.url !== "string" || !body.url) {
+        tab?.close();
+        setSheetError(body.error ?? "Couldn't open the winners sheet.");
+        return;
+      }
+      setSheet({
+        url: body.url,
+        rowCount: body.rowCount,
+        syncedAt: body.syncedAt,
+        raffleIds: body.raffleIds ?? [],
+        missingRaffleIds: body.missingRaffleIds ?? [],
+        stale: Boolean(body.stale),
+      });
+      if (body.failedEditors?.length) {
+        setSheetError(
+          `Sheet ready, but Google would not grant edit access to ${body.failedEditors.join(", ")}. Check the addresses in Settings → Google Sheets.`,
+        );
+      }
+      if (tab && !tab.closed) tab.location.replace(body.url);
+      router.refresh();
+    } catch {
       tab?.close();
-      setSheetError(body.error ?? "Couldn't open the winners sheet.");
-      return;
+      setSheetError("Couldn't open the winners sheet. Try again.");
+    } finally {
+      setBusy(null);
     }
-    setSheet({
-      url: body.url,
-      rowCount: body.rowCount,
-      syncedAt: body.syncedAt,
-      raffleIds: body.raffleIds ?? [],
-      missingRaffleIds: body.missingRaffleIds ?? [],
-      stale: Boolean(body.stale),
-    });
-    if (body.failedEditors?.length) {
-      setSheetError(
-        `Sheet ready, but Google would not grant edit access to ${body.failedEditors.join(", ")}. Check the addresses in Settings → Google Sheets.`,
-      );
-    }
-    if (tab) tab.location.href = body.url;
-    else window.location.href = body.url;
-    router.refresh();
   }
 
   async function endNow() {
@@ -488,7 +495,15 @@ export function RaffleActions({
         <div className="mt-3 space-y-2 text-sm">
           {sheet ? (
             <p className="text-kos-muted">
-              Google Sheet · {sheet.rowCount} address
+              <a
+                href={sheet.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                Open Google Sheet
+              </a>{" "}
+              · {sheet.rowCount} address
               {sheet.rowCount === 1 ? "" : "es"}
               {sheet.raffleIds.length > 1
                 ? ` from raffles ${sheet.raffleIds.map((id) => `#${id}`).join(" + ")}, GTD first`

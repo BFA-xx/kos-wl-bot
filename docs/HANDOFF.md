@@ -3195,3 +3195,9 @@ Recommended next task:
 
 - The KOS Raffles privacy policy is available on the dashboard at `/privacy` and linked from `/login`. The public app homepage at `/about` describes the raffle service and Sheets integration and links to the policy. Both routes are accessible without a KOS session.
 - The `kosraffles` OAuth project was External and Testing. The rollout requires the public app homepage and privacy-policy URLs in Branding, followed by verification of a non-test community administrator connecting and exporting a sample raffle.
+
+## Winner spreadsheet links (2026-11-10)
+
+- The dashboard navigates the tab opened by the export click and keeps the raffle page in place. The sheet summary links to the spreadsheet if the browser blocks the popup, and failed requests close the empty tab.
+- Discord's private `/raffle export` reply includes an **Open in Google Sheets** button. When Sheets is unavailable, it explains why and attaches the winners CSV.
+- The `kosraffles` Google OAuth audience is External and In production. Confirm onboarding with a community administrator outside the former Google test list.

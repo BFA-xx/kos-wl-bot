@@ -6,6 +6,8 @@ import {
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   AttachmentBuilder,
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
@@ -33,10 +35,7 @@ import { stashBanner } from "../services/pendingRaffles.js";
 import { buildId, Actions } from "../utils/ids.js";
 import { participantsCsv, winnersCsv } from "../proof/csv.js";
 import { persistDiscordRaffleBanner } from "../services/raffleBannerService.js";
-import {
-  requestWinnerSheet,
-  winnerSheetsEnabled,
-} from "../services/winnerSheetService.js";
+import { requestWinnerSheet } from "../services/winnerSheetService.js";
 import { openTeamWalletFill } from "../interactions/teamWalletFill.js";
 
 export const raffleCommand: Command = {
@@ -229,7 +228,7 @@ export const raffleCommand: Command = {
     .addSubcommand((sub) =>
       sub
         .setName("export")
-        .setDescription("Export raffle data as CSV")
+        .setDescription("Export winners to Google Sheets or download a CSV")
         .addIntegerOption((o) =>
           o
             .setName("id")
@@ -679,7 +678,7 @@ async function handleExport(interaction: ChatInputCommandInteraction) {
   // the sheet was asked for and could not be built, so a manager is never
   // left without the list.
   let sheetProblem: string | null = null;
-  if (type === "winners" && format === "sheet" && winnerSheetsEnabled()) {
+  if (type === "winners" && format === "sheet") {
     const outcome = await requestWinnerSheet({
       raffleId: id,
       guildId: interaction.guildId!,
@@ -688,6 +687,14 @@ async function handleExport(interaction: ChatInputCommandInteraction) {
     if (outcome.ok) {
       return interaction.editReply({
         content: winnerSheetMessage(id, outcome.sheet),
+        components: [
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setLabel("Open in Google Sheets")
+              .setStyle(ButtonStyle.Link)
+              .setURL(outcome.sheet.url),
+          ),
+        ],
       });
     }
     sheetProblem = outcome.reason;
@@ -722,7 +729,6 @@ async function handleExport(interaction: ChatInputCommandInteraction) {
 function winnerSheetMessage(
   raffleId: number,
   sheet: {
-    url: string;
     rowCount: number;
     raffleIds: number[];
     blocks: { kind: string; rows: number }[];
@@ -740,7 +746,6 @@ function winnerSheetMessage(
     .join(" + ");
   return [
     `${KOS.emoji.check} Winners sheet for raffle #${raffleId}${combined}`,
-    sheet.url,
     "",
     `**${sheet.rowCount} address${sheet.rowCount === 1 ? "" : "es"}**${breakdown ? ` (${breakdown})` : ""}, GTD first.`,
     sheet.duplicatesRemoved > 0
