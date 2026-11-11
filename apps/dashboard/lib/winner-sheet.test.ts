@@ -220,7 +220,7 @@ describe("collectWinnerSheetRows", () => {
     ]);
   });
 
-  it("keeps an address that won both rounds once, under GTD", async () => {
+  it("keeps repeated addresses in both their GTD and FCFS sections", async () => {
     mocks.exportRows
       .mockResolvedValueOnce([exportRow("0xAAA")])
       .mockResolvedValueOnce([exportRow("0xAAA"), exportRow("0xCCC")]);
@@ -228,9 +228,10 @@ describe("collectWinnerSheetRows", () => {
     const data = await collectWinnerSheetRows(group);
     expect(data.rows.map((row) => [row.address, row.kind])).toEqual([
       ["0xAAA", "GTD"],
+      ["0xAAA", "FCFS"],
       ["0xCCC", "FCFS"],
     ]);
-    expect(data.duplicatesRemoved).toBe(1);
+    expect(data.duplicatesRemoved).toBe(0);
   });
 });
 
