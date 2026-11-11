@@ -302,20 +302,28 @@ export const raffleCommand: Command = {
       where: { guildId: interaction.guildId! },
       orderBy: { createdAt: "desc" },
       take: 25,
-      select: { id: true, title: true, status: true },
+      select: { id: true, title: true, status: true, projectName: true },
     });
     const q = String(focused.value).toLowerCase();
     await interaction.respond(
       raffles
         .filter(
           (r) =>
-            !q || String(r.id).includes(q) || r.title.toLowerCase().includes(q),
+            !q ||
+            String(r.id).includes(q) ||
+            r.title.toLowerCase().includes(q) ||
+            r.projectName.toLowerCase().includes(q),
         )
         .slice(0, 25)
-        .map((r) => ({
-          name: `#${r.id} · ${r.title} [${r.status}]`.slice(0, 100),
-          value: r.id,
-        })),
+        .map((r) => {
+          const prefix = `#${r.id} · `;
+          const suffix = ` [${r.status}] · ${r.projectName.trim().slice(0, 60)}`;
+          const title = r.title.slice(
+            0,
+            Math.max(0, 100 - prefix.length - suffix.length),
+          );
+          return { name: `${prefix}${title}${suffix}`, value: r.id };
+        }),
     );
   },
 };
