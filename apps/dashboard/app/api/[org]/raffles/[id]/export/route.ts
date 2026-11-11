@@ -8,6 +8,8 @@ import {
   resolveWinnerSheetGroup,
 } from "@/lib/winner-sheet";
 
+import { buildRaffleReportTab } from "@/lib/raffle-report";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -54,10 +56,8 @@ export async function GET(
       if (!group)
         return NextResponse.json({ error: "not found" }, { status: 404 });
       const { rows } = await collectWinnerSheetRows(group);
-      csv = toCsv(
-        ["discord_id", "username", "wallet_address"],
-        rows.map((r) => [r.userId, r.username, r.address]),
-      );
+      const tab = buildRaffleReportTab("winners", rows);
+      csv = toCsv(tab.rows[0].map(String), tab.rows.slice(1));
       filename = `winners-${id}.csv`;
     }
 

@@ -119,6 +119,7 @@ describe("raffle Google Sheets reports", () => {
     );
     expect(mocks.write.mock.calls[0][2][0].rows).toEqual([
       ["discord_id", "username", "wallet_address"],
+      ["WL Addresses", "", ""],
       ["123456789012345678", "winner", "0xabc"],
     ]);
     expect(mocks.share).toHaveBeenCalledWith(
@@ -150,7 +151,10 @@ describe("raffle Google Sheets reports", () => {
     expect(mocks.group).toHaveBeenCalledWith(301, ["guild"]);
     expect(mocks.write.mock.calls[0][2][0].rows).toEqual([
       ["discord_id", "username", "wallet_address"],
+      ["GTD Addresses", "", ""],
       ["gtd-id", "gtd-user", "0xgtd"],
+      ["", "", ""],
+      ["FCFS Addresses", "", ""],
       ["fcfs-id", "fcfs-user", "0xfcfs"],
     ]);
     const csv = await (

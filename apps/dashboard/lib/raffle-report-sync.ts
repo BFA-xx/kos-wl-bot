@@ -9,6 +9,7 @@ import {
 } from "@/lib/google";
 import {
   buildRaffleReportTab,
+  buildRaffleReportFormat,
   type RaffleReportType,
 } from "@/lib/raffle-report";
 import {
@@ -43,16 +44,19 @@ export async function syncRaffleReport({
   let tab;
   let projectName = raffle.projectName;
   let raffleIds = [id];
+  let rowCount = 0;
   if (type === "participants") {
     const participants = await prisma.participant.findMany({
       where: { raffleId: id },
       orderBy: { enteredAt: "asc" },
     });
     tab = buildRaffleReportTab(type, [], participants);
+    rowCount = participants.length;
   } else {
     const group = await resolveWinnerSheetGroup(id, guildIds);
     if (!group) throw new WinnerSheetError(404, "Raffle not found.");
     const data = await collectWinnerSheetRows(group);
+    rowCount = data.rows.length;
     projectName = group.raffles[0]?.projectName ?? group.projectName;
     raffleIds = group.raffles.map((raffle) => raffle.id);
     tab =
@@ -103,7 +107,10 @@ export async function syncRaffleReport({
       accessToken,
       spreadsheetId,
       [tab],
-      buildColumnWidthRequests(new Map([[tab.title, 0]]), [tab]),
+      [
+        ...buildColumnWidthRequests(new Map([[tab.title, 0]]), [tab]),
+        ...buildRaffleReportFormat(tab, 0),
+      ],
     );
     await logAudit(organizationId, userId, action, {
       targetType: "raffle",
@@ -123,6 +130,6 @@ export async function syncRaffleReport({
     spreadsheetId,
     raffleIds,
     failedEditors,
-    rowCount: Math.max(0, tab.rows.length - 1),
+    rowCount,
   };
 }
