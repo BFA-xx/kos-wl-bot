@@ -44,6 +44,8 @@ vi.mock("@/lib/raffle-wallet-export", () => ({
   raffleWalletExportRows: mocks.wallets,
 }));
 vi.mock("@/lib/winner-sheet", () => ({
+  WINNERS_TAB: "Winners",
+  ADDRESSES_TAB: "Addresses",
   buildColumnWidthRequests: () => [],
   resolveWinnerSheetGroup: vi.fn(),
   buildWinnerSheetTabs: vi.fn(),

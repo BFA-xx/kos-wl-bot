@@ -29,15 +29,8 @@ export interface WinnerCsvRow {
 
 export function winnersCsv(rows: WinnerCsvRow[]): string {
   return toCsv(
-    ["position", "discord_id", "username", "chain", "wallet_address", "submitted_at"],
-    rows.map((r) => [
-      r.position,
-      r.userId,
-      r.username,
-      r.chain ?? "",
-      r.address ?? "",
-      r.submittedAt ? r.submittedAt.toISOString() : "",
-    ]),
+    ["discord_id", "username", "wallet_address"],
+    rows.map((r) => [r.userId, r.username, r.address ?? ""]),
   );
 }
 

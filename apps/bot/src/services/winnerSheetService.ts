@@ -8,7 +8,7 @@ import { logger } from "../logger.js";
  * organization through an OAuth flow that needs a browser — so the bot asks
  * the dashboard to build the sheet rather than holding Google credentials of
  * its own. Disabled unless both the dashboard URL and the shared token are
- * configured, in which case `/raffle export` falls back to its CSV.
+ * configured. Failed requests return an error without a file download.
  */
 
 export interface WinnerSheetResponse {
@@ -35,6 +35,7 @@ export async function requestWinnerSheet(input: {
   guildId: string;
   actorId: string;
   rewrite?: boolean;
+  type?: "addresses" | "full" | "winners" | "participants";
 }): Promise<WinnerSheetOutcome> {
   if (!winnerSheetsEnabled()) {
     return { ok: false, reason: "Google Sheets is not configured." };

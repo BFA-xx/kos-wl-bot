@@ -5,6 +5,9 @@ import { logAudit } from "@/lib/access";
 import { GoogleError } from "@/lib/google";
 import { WinnerSheetError, syncWinnerSheet } from "@/lib/winner-sheet-sync";
 
+import { syncRaffleReport } from "@/lib/raffle-report-sync";
+import type { RaffleReportType } from "@/lib/raffle-report";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -31,6 +34,7 @@ export async function POST(req: Request) {
     guildId?: unknown;
     actorId?: unknown;
     rewrite?: unknown;
+    type?: unknown;
   };
   const raffleId = Number(body.raffleId);
   const guildId = typeof body.guildId === "string" ? body.guildId : "";
@@ -66,6 +70,26 @@ export async function POST(req: Request) {
   }
 
   try {
+    if (body.type !== undefined) {
+      if (
+        typeof body.type !== "string" ||
+        !["addresses", "full", "winners", "participants"].includes(body.type)
+      ) {
+        return NextResponse.json(
+          { error: "Invalid report type." },
+          { status: 400 },
+        );
+      }
+      return NextResponse.json(
+        await syncRaffleReport({
+          organizationId: organization.id,
+          userId: actorId,
+          guildIds: [guildId],
+          id: raffleId,
+          type: body.type as RaffleReportType,
+        }),
+      );
+    }
     const result = await syncWinnerSheet({
       organizationId: organization.id,
       // Scope to the calling guild alone: a manager in one connected server
