@@ -54,6 +54,7 @@ test("Discord exports return Sheets links for all report types and never attach 
             ? {
                 url: "https://docs.google.com/spreadsheets/d/test",
                 rowCount: 1,
+                raffleIds: [301, 302],
                 failedEditors: [],
               }
             : { error: "Google unavailable" },
@@ -79,6 +80,7 @@ test("Discord exports return Sheets links for all report types and never attach 
     } as unknown as ChatInputCommandInteraction;
     await raffleCommand.execute(interaction);
     assert.equal(reply.files, undefined);
+    assert.match(reply.content, /#301 \+ #302/);
     assert.equal(
       reply.components[0].toJSON().components[0].url,
       "https://docs.google.com/spreadsheets/d/test",

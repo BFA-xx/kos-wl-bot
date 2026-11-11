@@ -3,7 +3,10 @@ import { prisma } from "@/lib/db";
 import { toCsv } from "@/lib/csv";
 import { AccessError, requireOrgAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
-import { raffleWalletExportRows } from "@/lib/raffle-wallet-export";
+import {
+  collectWinnerSheetRows,
+  resolveWinnerSheetGroup,
+} from "@/lib/winner-sheet";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -47,7 +50,10 @@ export async function GET(
       );
       filename = `participants-${id}.csv`;
     } else {
-      const rows = await raffleWalletExportRows(id, raffle.walletChains);
+      const group = await resolveWinnerSheetGroup(id, guildIds);
+      if (!group)
+        return NextResponse.json({ error: "not found" }, { status: 404 });
+      const { rows } = await collectWinnerSheetRows(group);
       csv = toCsv(
         ["discord_id", "username", "wallet_address"],
         rows.map((r) => [r.userId, r.username, r.address]),

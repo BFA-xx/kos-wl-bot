@@ -234,18 +234,15 @@ export const raffleCommand: Command = {
             .setAutocomplete(true),
         )
         .addStringOption((o) =>
-          o
-            .setName("type")
-            .setDescription("What to export")
-            .addChoices(
-              {
-                name: "Winners (Discord ID, username, wallet)",
-                value: "winners",
-              },
-              { name: "Addresses", value: "addresses" },
-              { name: "Winners + Wallets", value: "full" },
-              { name: "Participants", value: "participants" },
-            ),
+          o.setName("type").setDescription("What to export").addChoices(
+            {
+              name: "Winners (Discord ID, username, wallet)",
+              value: "winners",
+            },
+            { name: "Addresses", value: "addresses" },
+            { name: "Winners + Wallets", value: "full" },
+            { name: "Participants", value: "participants" },
+          ),
         ),
     )
 
@@ -688,7 +685,7 @@ async function handleExport(interaction: ChatInputCommandInteraction) {
   };
   return interaction.editReply({
     content: [
-      `${KOS.emoji.check} ${labels[reportType]} sheet for raffle #${id}.`,
+      `${KOS.emoji.check} ${labels[reportType]} sheet for ${(outcome.sheet.raffleIds ?? [id]).map((raffleId) => `#${raffleId}`).join(" + ")}.`,
       reportType === "winners"
         ? "Columns: Discord ID, username, wallet address."
         : null,

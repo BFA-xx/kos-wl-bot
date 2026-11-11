@@ -7,7 +7,6 @@ import {
   shareSpreadsheet,
   writeSpreadsheet,
 } from "@/lib/google";
-import { raffleWalletExportRows } from "@/lib/raffle-wallet-export";
 import {
   buildRaffleReportTab,
   type RaffleReportType,
@@ -42,25 +41,29 @@ export async function syncRaffleReport({
   if (!raffle) throw new WinnerSheetError(404, "Raffle not found.");
 
   let tab;
-  if (type === "addresses") {
-    const group = await resolveWinnerSheetGroup(id, guildIds);
-    if (!group) throw new WinnerSheetError(404, "Raffle not found.");
-    const data = await collectWinnerSheetRows(group);
-    tab = buildWinnerSheetTabs(group.projectName, data).find(
-      (sheet) => sheet.title === ADDRESSES_TAB,
-    )!;
-  } else if (type === "participants") {
+  let projectName = raffle.projectName;
+  let raffleIds = [id];
+  if (type === "participants") {
     const participants = await prisma.participant.findMany({
       where: { raffleId: id },
       orderBy: { enteredAt: "asc" },
     });
     tab = buildRaffleReportTab(type, [], participants);
   } else {
-    tab = buildRaffleReportTab(
-      type,
-      await raffleWalletExportRows(id, raffle.walletChains),
-    );
+    const group = await resolveWinnerSheetGroup(id, guildIds);
+    if (!group) throw new WinnerSheetError(404, "Raffle not found.");
+    const data = await collectWinnerSheetRows(group);
+    projectName = group.raffles[0]?.projectName ?? group.projectName;
+    raffleIds = group.raffles.map((raffle) => raffle.id);
+    tab =
+      type === "addresses"
+        ? buildWinnerSheetTabs(group.projectName, data).find(
+            (sheet) => sheet.title === ADDRESSES_TAB,
+          )!
+        : buildRaffleReportTab(type, data.rows);
   }
+  // Both GTD and FCFS open the same snapshot for the combined group.
+  const reportId = raffleIds[0] ?? id;
 
   const { accessToken, connectionId } = await accessTokenForOrg(organizationId);
   const connection = await prisma.googleConnection.findUnique({
@@ -69,7 +72,7 @@ export async function syncRaffleReport({
   });
   // Reuse the snapshot when the source data is unchanged. Never overwrite team edits.
   const fingerprint = createHash("sha256")
-    .update(JSON.stringify([connection?.googleUserId, raffle.projectName, tab]))
+    .update(JSON.stringify([connection?.googleUserId, projectName, tab]))
     .digest("hex");
   const action = `raffle_report.${type}`;
   const previous = await prisma.auditLog.findFirst({
@@ -77,7 +80,7 @@ export async function syncRaffleReport({
       organizationId: organizationId,
       action,
       targetType: "raffle",
-      targetId: String(id),
+      targetId: String(reportId),
       metadata: { path: ["fingerprint"], equals: fingerprint },
     },
     orderBy: { createdAt: "desc" },
@@ -91,7 +94,7 @@ export async function syncRaffleReport({
   if (!spreadsheetId || !url) {
     const created = await createSpreadsheet(
       accessToken,
-      `KOS X ${raffle.projectName} — ${tab.title} #${id}`,
+      `KOS X ${projectName} — ${tab.title} ${raffleIds.map((id) => `#${id}`).join(" + ")}`,
       [tab],
     );
     spreadsheetId = created.spreadsheetId;
@@ -104,8 +107,8 @@ export async function syncRaffleReport({
     );
     await logAudit(organizationId, userId, action, {
       targetType: "raffle",
-      targetId: String(id),
-      metadata: { fingerprint, spreadsheetId, url },
+      targetId: String(reportId),
+      metadata: { fingerprint, spreadsheetId, url, raffleIds },
     });
   }
   // Reports include Discord identities and team details: named editors only.
@@ -118,6 +121,7 @@ export async function syncRaffleReport({
   return {
     url,
     spreadsheetId,
+    raffleIds,
     failedEditors,
     rowCount: Math.max(0, tab.rows.length - 1),
   };

@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   raffle: vi.fn(),
   participants: vi.fn(),
   wallets: vi.fn(),
+  group: vi.fn(),
+  collected: vi.fn(),
   previous: vi.fn(),
   audit: vi.fn(),
   token: vi.fn(),
@@ -47,9 +49,9 @@ vi.mock("@/lib/winner-sheet", () => ({
   WINNERS_TAB: "Winners",
   ADDRESSES_TAB: "Addresses",
   buildColumnWidthRequests: () => [],
-  resolveWinnerSheetGroup: vi.fn(),
+  resolveWinnerSheetGroup: mocks.group,
   buildWinnerSheetTabs: vi.fn(),
-  collectWinnerSheetRows: vi.fn(),
+  collectWinnerSheetRows: mocks.collected,
 }));
 import { POST } from "./route";
 import { GET as exportCsv } from "../export/route";
@@ -82,6 +84,16 @@ beforeEach(() => {
       teamMember: null,
     },
   ]);
+  mocks.group.mockResolvedValue({
+    projectName: "Example",
+    raffles: [
+      { id: 301, kind: "GTD" },
+      { id: 302, kind: "FCFS" },
+    ],
+  });
+  mocks.collected.mockImplementation(async () => ({
+    rows: await mocks.wallets(),
+  }));
   mocks.token.mockResolvedValue({
     accessToken: "token",
     connectionId: "connection",
@@ -114,6 +126,51 @@ describe("raffle Google Sheets reports", () => {
       "sheet",
       ["editor@example.com"],
       false,
+    );
+  });
+  it("combines GTD and FCFS in both the sheet and CSV with the same three columns", async () => {
+    mocks.collected.mockResolvedValue({
+      rows: [
+        {
+          userId: "gtd-id",
+          username: "gtd-user",
+          address: "0xgtd",
+          kind: "GTD",
+        },
+        {
+          userId: "fcfs-id",
+          username: "fcfs-user",
+          address: "0xfcfs",
+          kind: "FCFS",
+        },
+      ],
+    });
+    const response = await POST(request("winners"), params);
+    expect((await response.json()).raffleIds).toEqual([301, 302]);
+    expect(mocks.group).toHaveBeenCalledWith(301, ["guild"]);
+    expect(mocks.write.mock.calls[0][2][0].rows).toEqual([
+      ["discord_id", "username", "wallet_address"],
+      ["gtd-id", "gtd-user", "0xgtd"],
+      ["fcfs-id", "fcfs-user", "0xfcfs"],
+    ]);
+    const csv = await (
+      await exportCsv(
+        new NextRequest(
+          "https://example.com/api/kos/raffles/301/export?type=winners",
+        ),
+        params,
+      )
+    ).text();
+    expect(csv).toContain("gtd-id,gtd-user,0xgtd");
+    expect(csv).toContain("fcfs-id,fcfs-user,0xfcfs");
+    expect(csv.indexOf("0xgtd")).toBeLessThan(csv.indexOf("0xfcfs"));
+  });
+  it("uses the same report key when opened from the FCFS raffle", async () => {
+    await POST(request("winners"), { params: { org: "kos", id: "302" } });
+    expect(mocks.previous).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ targetId: "301" }),
+      }),
     );
   });
   it("uses report permission for participants and does not fetch wallets", async () => {
