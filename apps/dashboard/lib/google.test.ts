@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { DRIVE_FILE_SCOPE, grantsDriveAccess } from "./google";
+import { describe, expect, it, vi } from "vitest";
+import {
+  DRIVE_FILE_SCOPE,
+  grantsDriveAccess,
+  shareSpreadsheet,
+} from "./google";
 
 describe("grantsDriveAccess", () => {
   it("accepts a grant carrying the file scope", () => {
@@ -37,5 +41,40 @@ describe("grantsDriveAccess", () => {
 
   it("tolerates the irregular spacing Google sometimes returns", () => {
     expect(grantsDriveAccess(`openid  ${DRIVE_FILE_SCOPE}\n`)).toBe(true);
+  });
+});
+
+describe("private report sharing", () => {
+  it("grants named editors without enabling public access", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await shareSpreadsheet("token", "sheet", ["team@example.com"], false);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+        role: "writer",
+        type: "user",
+        emailAddress: "team@example.com",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it("keeps partner handover sheets publicly readable by default", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await shareSpreadsheet("token", "sheet", []);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+        role: "reader",
+        type: "anyone",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -49,26 +49,8 @@ export async function GET(
     } else {
       const rows = await raffleWalletExportRows(id, raffle.walletChains);
       csv = toCsv(
-        [
-          "position",
-          "discord_id",
-          "username",
-          "chain",
-          "wallet_address",
-          "submitted_at",
-          "Source",
-          "Team Member",
-        ],
-        rows.map((r) => [
-          r.position ?? "",
-          r.userId,
-          r.username,
-          r.chain,
-          r.address,
-          r.recordedAt?.toISOString() ?? "",
-          r.source,
-          r.teamMember ?? "",
-        ]),
+        ["discord_id", "username", "wallet_address"],
+        rows.map((r) => [r.userId, r.username, r.address]),
       );
       filename = `winners-${id}.csv`;
     }

@@ -400,28 +400,32 @@ export async function spreadsheetTabIds(
  * Share the sheet: read-only for anyone holding the link, edit rights for the
  * org's named Google accounts. Editor grants are best-effort — a typo'd or
  * non-Google address must not sink the whole handover — and the failures are
- * returned so the caller can surface them.
+ * returned so the caller can surface them. Set publicRead to false for internal
+ * reports that must be restricted to the connected account and named editors.
  */
 export async function shareSpreadsheet(
   accessToken: string,
   spreadsheetId: string,
   editorEmails: readonly string[],
+  publicRead = true,
 ): Promise<{ failedEditors: string[] }> {
-  try {
-    await googleFetch(
-      `${DRIVE_API}/${spreadsheetId}/permissions?sendNotificationEmail=false`,
-      accessToken,
-      {
-        method: "POST",
-        body: JSON.stringify({ role: "reader", type: "anyone" }),
-      },
-    );
-  } catch (err) {
-    // A rewrite re-grants a link that is already shared. Rather than guess at
-    // Drive's error shape for that case, confirm the grant is there and carry
-    // on; anything else is a real failure and the sheet must not be handed
-    // over believing it is readable.
-    if (!(await hasAnyoneReader(accessToken, spreadsheetId))) throw err;
+  if (publicRead) {
+    try {
+      await googleFetch(
+        `${DRIVE_API}/${spreadsheetId}/permissions?sendNotificationEmail=false`,
+        accessToken,
+        {
+          method: "POST",
+          body: JSON.stringify({ role: "reader", type: "anyone" }),
+        },
+      );
+    } catch (err) {
+      // A rewrite re-grants a link that is already shared. Rather than guess at
+      // Drive's error shape for that case, confirm the grant is there and carry
+      // on; anything else is a real failure and the sheet must not be handed
+      // over believing it is readable.
+      if (!(await hasAnyoneReader(accessToken, spreadsheetId))) throw err;
+    }
   }
 
   const failedEditors: string[] = [];

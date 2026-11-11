@@ -187,6 +187,42 @@ export function RaffleActions({
     }
   }
 
+  async function openReport(
+    type: "addresses" | "full" | "winners" | "participants",
+  ) {
+    setSheetError(null);
+    const tab = window.open("", "_blank");
+    if (tab) tab.opener = null;
+    setBusy(type);
+    try {
+      const res = await fetch(api("/export-sheet"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || typeof body.url !== "string" || !body.url) {
+        throw new Error(body.error ?? "Couldn't open the Google Sheet.");
+      }
+      if (body.failedEditors?.length) {
+        setSheetError(
+          `Sheet ready, but Google could not grant access to ${body.failedEditors.join(", ")}. Check Settings → Google Sheets.`,
+        );
+      }
+      if (tab && !tab.closed) tab.location.replace(body.url);
+      else setSheetError("Allow popups for this site, then try again.");
+    } catch (error) {
+      tab?.close();
+      setSheetError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't open the Google Sheet. Try again.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function endNow() {
     if (!confirm("End this raffle now and draw winners?")) return;
     setBusy("end");
@@ -388,8 +424,8 @@ export function RaffleActions({
     : 0;
   const teamWalletPreviewIsCurrent = Boolean(
     teamWalletPreview &&
-    teamWalletPreview.selectedCount === teamWalletCount &&
-    teamWalletPreview.selectionMode === teamWalletMode,
+      teamWalletPreview.selectedCount === teamWalletCount &&
+      teamWalletPreview.selectionMode === teamWalletMode,
   );
   const nothing =
     !canEnd &&
@@ -424,21 +460,34 @@ export function RaffleActions({
                   ? "Open winners sheet"
                   : "Open in Google Sheets"}
             </button>
-            <a className="kos-btn" href={api(`/export-xlsx?mode=addresses`)}>
-              Addresses (Excel)
-            </a>
-            <a className="kos-btn" href={api(`/export-xlsx?mode=full`)}>
-              Winners + Wallets (Excel)
-            </a>
-            <a className="kos-btn" href={api(`/export?type=winners`)}>
-              Winners CSV
-            </a>
+            {(
+              [
+                ["addresses", "Addresses (Google Sheets)"],
+                ["full", "Winners + Wallets (Google Sheets)"],
+                ["winners", "Winners (Google Sheets)"],
+              ] as const
+            ).map(([type, label]) => (
+              <button
+                key={type}
+                className="kos-btn"
+                disabled={busy !== null}
+                onClick={() => void openReport(type)}
+              >
+                {busy === type ? "Opening…" : label}
+              </button>
+            ))}
           </>
         ) : null}
         {canExportReports ? (
-          <a className="kos-btn" href={api(`/export?type=participants`)}>
-            Participants CSV
-          </a>
+          <button
+            className="kos-btn"
+            disabled={busy !== null}
+            onClick={() => void openReport("participants")}
+          >
+            {busy === "participants"
+              ? "Opening…"
+              : "Participants (Google Sheets)"}
+          </button>
         ) : null}
         {canEnd && status !== "ENDED" && status !== "CANCELLED" ? (
           <button className="kos-btn" onClick={endNow} disabled={busy !== null}>
