@@ -9,11 +9,12 @@ export interface AddressRow {
 }
 
 /**
- * Build an .xlsx workbook of addresses, headed by "KOS X {project}".
+ * Build an .xlsx workbook of addresses under a "{community} X {project}"
+ * heading (see exportHeading).
  * `mode` controls which columns appear.
  */
 export async function addressesWorkbook(
-  project: string,
+  heading: string,
   rows: AddressRow[],
   mode: "addresses" | "full" = "addresses",
 ): Promise<Buffer> {
@@ -30,7 +31,7 @@ export async function addressesWorkbook(
   const lastCol = String.fromCharCode(64 + columnCount);
   ws.mergeCells(`A1:${lastCol}1`);
   const title = ws.getCell("A1");
-  title.value = `KOS X ${project}`;
+  title.value = heading;
   title.font = { bold: true, size: 14, color: { argb: "FF000000" } };
   title.alignment = { horizontal: "center", vertical: "middle" };
   title.fill = {

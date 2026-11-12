@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { exportHeading, filenamePart } from "@/lib/export-heading";
 import { addressesWorkbook, type AddressRow } from "@/lib/xlsx";
 import { AccessError, requireOrgAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -13,7 +14,7 @@ export async function GET(
   { params }: { params: { org: string; id: string } },
 ) {
   try {
-    const { guildIds } = await requireOrgAccess(
+    const { org, guildIds } = await requireOrgAccess(
       params.org,
       PERMISSIONS.WALLET_EXPORT,
     );
@@ -37,13 +38,17 @@ export async function GET(
       teamMember: row.teamMember,
     }));
 
-    const buf = await addressesWorkbook(raffle.projectName, rows, mode);
-    const safe = raffle.projectName.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+    const buf = await addressesWorkbook(
+      exportHeading(org.name, raffle.projectName),
+      rows,
+      mode,
+    );
+    const safe = `${filenamePart(org.name) || "kos"}-x-${filenamePart(raffle.projectName)}`;
     return new Response(new Uint8Array(buf), {
       headers: {
         "content-type":
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "content-disposition": `attachment; filename="KOS-x-${safe}-${id}.xlsx"`,
+        "content-disposition": `attachment; filename="${safe}-${id}.xlsx"`,
       },
     });
   } catch (err) {

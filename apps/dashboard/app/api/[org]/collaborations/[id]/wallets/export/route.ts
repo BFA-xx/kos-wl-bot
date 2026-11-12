@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
 import { toCsv } from "@/lib/csv";
+import { exportHeading } from "@/lib/export-heading";
 import { addressesWorkbook, type AddressRow } from "@/lib/xlsx";
 import { logAudit, requireOrgAccess, withAccess } from "@/lib/access";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -111,7 +112,7 @@ export const GET = withAccess(async (request, { params }) => {
       address: row.address,
     }));
     const workbook = await addressesWorkbook(
-      collaboration.projectName,
+      exportHeading(org.name, collaboration.projectName),
       addressRows,
       "full",
     );

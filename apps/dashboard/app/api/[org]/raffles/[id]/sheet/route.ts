@@ -54,6 +54,7 @@ export async function POST(
 
     const result = await syncWinnerSheet({
       organizationId: org.id,
+      communityName: org.name,
       guildIds,
       raffleId: id,
       userId: user.id,

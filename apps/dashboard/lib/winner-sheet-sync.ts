@@ -19,6 +19,7 @@ import {
   winnerSheetTitle,
   type WinnerListKind,
 } from "@/lib/winner-sheet";
+import { exportHeading } from "@/lib/export-heading";
 
 /**
  * Create-or-open side of the winner handover sheet.
@@ -122,6 +123,8 @@ export class WinnerSheetError extends Error {
 
 export interface SyncWinnerSheetOptions {
   organizationId: string;
+  /** The organization's name, which heads the sheet ("{community} X {project}"). */
+  communityName: string;
   guildIds: string[];
   raffleId: number;
   userId: string;
@@ -131,6 +134,7 @@ export interface SyncWinnerSheetOptions {
 
 export async function syncWinnerSheet({
   organizationId,
+  communityName,
   guildIds,
   raffleId,
   userId,
@@ -158,7 +162,8 @@ export async function syncWinnerSheet({
   });
 
   const data = await collectWinnerSheetRows(group);
-  const tabs = buildWinnerSheetTabs(group.projectName, data);
+  const heading = exportHeading(communityName, group.projectName);
+  const tabs = buildWinnerSheetTabs(heading, data);
 
   let spreadsheetId = existing?.spreadsheetId;
   let url = existing?.url ?? "";
@@ -166,7 +171,7 @@ export async function syncWinnerSheet({
   if (!spreadsheetId) {
     const sheet = await createSpreadsheet(
       accessToken,
-      winnerSheetTitle(group.projectName),
+      winnerSheetTitle(heading),
       tabs,
     );
     spreadsheetId = sheet.spreadsheetId;

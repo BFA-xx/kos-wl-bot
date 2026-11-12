@@ -248,7 +248,7 @@ describe("buildWinnerSheetTabs", () => {
   };
 
   it("writes single-column sections with one blank row between kinds", () => {
-    const [winners, addresses] = buildWinnerSheetTabs("VOLTOADS", data);
+    const [winners, addresses] = buildWinnerSheetTabs("PRX X VOLTOADS", data);
     const sections = [
       ["GTD Addresses"],
       ["0xAAA"],
@@ -257,13 +257,13 @@ describe("buildWinnerSheetTabs", () => {
       ["0xCCC"],
     ];
     expect(winners!.title).toBe(WINNERS_TAB);
-    expect(winners!.rows).toEqual([["KOS X VOLTOADS"], ...sections]);
+    expect(winners!.rows).toEqual([["PRX X VOLTOADS"], ...sections]);
     expect(addresses!.title).toBe(ADDRESSES_TAB);
     expect(addresses!.rows).toEqual(sections);
   });
 
   it("omits empty sections and keeps consecutive addresses under one heading", () => {
-    const [, addresses] = buildWinnerSheetTabs("VOLTOADS", {
+    const [, addresses] = buildWinnerSheetTabs("PRX X VOLTOADS", {
       ...data,
       rows: [
         sheetRow("0xCCC", "carol", "FCFS", 11),
@@ -276,7 +276,7 @@ describe("buildWinnerSheetTabs", () => {
   it("leaks neither the winners' identities nor team-pool provenance", () => {
     // Anyone with the link can read this sheet — normally the partner
     // project — so it must not say which spots KOS filled itself.
-    const flat = buildWinnerSheetTabs("VOLTOADS", {
+    const flat = buildWinnerSheetTabs("PRX X VOLTOADS", {
       ...data,
       rows: [
         {

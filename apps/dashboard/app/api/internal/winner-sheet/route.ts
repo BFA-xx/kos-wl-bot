@@ -49,6 +49,7 @@ export async function POST(req: Request) {
       organization: {
         select: {
           id: true,
+          name: true,
           suspendedAt: true,
           guildConnections: { select: { guildId: true } },
         },
@@ -83,6 +84,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         await syncRaffleReport({
           organizationId: organization.id,
+          communityName: organization.name,
           userId: actorId,
           guildIds: [guildId],
           id: raffleId,
@@ -92,6 +94,7 @@ export async function POST(req: Request) {
     }
     const result = await syncWinnerSheet({
       organizationId: organization.id,
+      communityName: organization.name,
       // Scope to the calling guild alone: a manager in one connected server
       // must not pull a sheet for a raffle that ran in a different one.
       guildIds: [guildId],

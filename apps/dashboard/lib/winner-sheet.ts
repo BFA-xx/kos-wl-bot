@@ -251,8 +251,8 @@ export async function collectWinnerSheetRows(
   };
 }
 
-export function winnerSheetTitle(projectName: string): string {
-  return `KOS X ${projectName} — Winners`.slice(0, 120);
+export function winnerSheetTitle(heading: string): string {
+  return `${heading} — Winners`.slice(0, 120);
 }
 
 function addressLayout(data: WinnerSheetData) {
@@ -277,14 +277,14 @@ function addressLayout(data: WinnerSheetData) {
 
 /** Both tabs are link-shared, so include only addresses and section labels. */
 export function buildWinnerSheetTabs(
-  projectName: string,
+  heading: string,
   data: WinnerSheetData,
 ): SheetTab[] {
   const { rows } = addressLayout(data);
   return [
     {
       title: WINNERS_TAB,
-      rows: [[`KOS X ${projectName}`], ...rows],
+      rows: [[heading], ...rows],
       frozenRows: 1,
       columnWidths: [560],
     },

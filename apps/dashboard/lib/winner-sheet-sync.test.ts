@@ -139,6 +139,7 @@ beforeEach(() => {
 
 const options = {
   organizationId: "org-1",
+  communityName: "PRX",
   guildIds: ["guild-a"],
   raffleId: 10,
   userId: "user-1",

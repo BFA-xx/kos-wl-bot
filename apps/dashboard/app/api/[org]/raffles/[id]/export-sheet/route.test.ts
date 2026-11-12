@@ -66,7 +66,7 @@ function request(type: string) {
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.access.mockResolvedValue({
-    org: { id: "org" },
+    org: { id: "org", name: "PRX" },
     user: { id: "user" },
     guildIds: ["guild"],
   });
@@ -128,6 +128,7 @@ describe("raffle Google Sheets reports", () => {
       ["editor@example.com"],
       false,
     );
+    expect(mocks.create.mock.calls[0][1]).toMatch(/^PRX X /);
   });
   it("combines GTD and FCFS in both the sheet and CSV with the same three columns", async () => {
     mocks.collected.mockResolvedValue({

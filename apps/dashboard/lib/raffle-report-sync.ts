@@ -20,16 +20,19 @@ import {
   resolveWinnerSheetGroup,
 } from "@/lib/winner-sheet";
 
+import { exportHeading } from "@/lib/export-heading";
 import { WinnerSheetError } from "@/lib/winner-sheet-sync";
 
 export async function syncRaffleReport({
   organizationId,
+  communityName,
   userId,
   guildIds,
   id,
   type,
 }: {
   organizationId: string;
+  communityName: string;
   userId: string;
   guildIds: string[];
   id: number;
@@ -61,9 +64,10 @@ export async function syncRaffleReport({
     raffleIds = group.raffles.map((raffle) => raffle.id);
     tab =
       type === "addresses"
-        ? buildWinnerSheetTabs(group.projectName, data).find(
-            (sheet) => sheet.title === ADDRESSES_TAB,
-          )!
+        ? buildWinnerSheetTabs(
+            exportHeading(communityName, group.projectName),
+            data,
+          ).find((sheet) => sheet.title === ADDRESSES_TAB)!
         : buildRaffleReportTab(type, data.rows);
   }
   // Both GTD and FCFS open the same snapshot for the combined group.
@@ -76,7 +80,13 @@ export async function syncRaffleReport({
   });
   // Reuse the snapshot when the source data is unchanged. Never overwrite team edits.
   const fingerprint = createHash("sha256")
-    .update(JSON.stringify([connection?.googleUserId, projectName, tab]))
+    .update(
+      JSON.stringify([
+        connection?.googleUserId,
+        exportHeading(communityName, projectName),
+        tab,
+      ]),
+    )
     .digest("hex");
   const action = `raffle_report.${type}`;
   const previous = await prisma.auditLog.findFirst({
@@ -98,7 +108,7 @@ export async function syncRaffleReport({
   if (!spreadsheetId || !url) {
     const created = await createSpreadsheet(
       accessToken,
-      `KOS X ${projectName} — ${tab.title} ${raffleIds.map((id) => `#${id}`).join(" + ")}`,
+      `${exportHeading(communityName, projectName)} — ${tab.title} ${raffleIds.map((id) => `#${id}`).join(" + ")}`,
       [tab],
     );
     spreadsheetId = created.spreadsheetId;

@@ -35,6 +35,7 @@ export async function POST(
       return NextResponse.json({ error: "Bad raffle id." }, { status: 400 });
     const result = await syncRaffleReport({
       organizationId: org.id,
+      communityName: org.name,
       userId: user.id,
       guildIds,
       id,
