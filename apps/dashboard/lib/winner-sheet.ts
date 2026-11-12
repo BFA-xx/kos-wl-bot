@@ -199,7 +199,7 @@ export interface WinnerSheetRow extends RaffleWalletExportRow {
 
 export interface WinnerSheetData {
   rows: WinnerSheetRow[];
-  /** Retained for API compatibility; exports now preserve every duplicate. */
+  /** Addresses dropped because they already appeared higher in the list. */
   duplicatesRemoved: number;
   countsByKind: { kind: WinnerListKind; raffleIds: number[]; rows: number }[];
 }
@@ -207,17 +207,20 @@ export interface WinnerSheetData {
 /**
  * Collect every raffle's winning addresses into one ordered list.
  *
- * Preserve repeated addresses within and across rounds so the team can sort
- * them in the sheet. GTD, FCFS and WL remain separate sections.
+ * A wallet that won both rounds is kept once, in the GTD block: the partner
+ * grants one spot per address, so a duplicate across the two lists would cost
+ * the collaboration a slot.
  */
 export async function collectWinnerSheetRows(
   group: WinnerSheetGroup,
 ): Promise<WinnerSheetData> {
+  const seen = new Set<string>();
   const rows: WinnerSheetRow[] = [];
   const counts = new Map<
     WinnerListKind,
     { raffleIds: number[]; rows: number }
   >();
+  let duplicatesRemoved = 0;
 
   for (const raffle of group.raffles) {
     const exported = await raffleWalletExportRows(
@@ -227,6 +230,11 @@ export async function collectWinnerSheetRows(
     const bucket = counts.get(raffle.kind) ?? { raffleIds: [], rows: 0 };
     bucket.raffleIds.push(raffle.id);
     for (const row of exported) {
+      if (seen.has(row.addressHash)) {
+        duplicatesRemoved += 1;
+        continue;
+      }
+      seen.add(row.addressHash);
       rows.push({ ...row, kind: raffle.kind, raffleId: raffle.id });
       bucket.rows += 1;
     }
@@ -235,7 +243,7 @@ export async function collectWinnerSheetRows(
 
   return {
     rows,
-    duplicatesRemoved: 0,
+    duplicatesRemoved,
     countsByKind: KIND_ORDER.filter((kind) => counts.has(kind)).map((kind) => ({
       kind,
       ...counts.get(kind)!,

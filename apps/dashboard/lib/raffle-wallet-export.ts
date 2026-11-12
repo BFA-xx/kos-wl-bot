@@ -29,7 +29,6 @@ export async function communityRaffleWalletRows(
   raffleId: number,
   configuredChains: readonly WalletChain[],
   db: CommunityWalletDb = prisma,
-  options: { includeDuplicates?: boolean } = {},
 ): Promise<RaffleWalletExportRow[]> {
   const winners = await db.winner.findMany({
     where: { raffleId, replaced: false },
@@ -63,7 +62,7 @@ export async function communityRaffleWalletRows(
       source.chain,
       validation.normalized,
     );
-    if (!options.includeDuplicates && seen.has(addressHash)) continue;
+    if (seen.has(addressHash)) continue;
     seen.add(addressHash);
     rows.push({
       position: winner.position,
@@ -87,12 +86,8 @@ export async function raffleWalletExportRows(
   raffleId: number,
   configuredChains: readonly WalletChain[],
 ): Promise<RaffleWalletExportRow[]> {
-  const community = await communityRaffleWalletRows(
-    raffleId,
-    configuredChains,
-    prisma,
-    { includeDuplicates: true },
-  );
+  const community = await communityRaffleWalletRows(raffleId, configuredChains);
+  const seen = new Set(community.map((row) => row.addressHash));
   const usages = await prisma.teamWalletUsage.findMany({
     where: {
       raffleId,
@@ -116,7 +111,8 @@ export async function raffleWalletExportRows(
     );
     if (!chain) continue;
     const validation = validateWalletAddress(chain, plain);
-    if (!validation.ok) continue;
+    if (!validation.ok || seen.has(usage.wallet.addressHash)) continue;
+    seen.add(usage.wallet.addressHash);
     team.push({
       position: null,
       userId: usage.wallet.owner.id,
