@@ -3,6 +3,7 @@ import {
   type GuildTextBasedChannel,
   PermissionFlagsBits,
 } from "discord.js";
+import { startMentionContent } from "./startMention.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
@@ -315,22 +316,6 @@ export async function repostRaffleMessage(
     }
   }
   return result;
-}
-
-/**
- * The mention text shown ABOVE the raffle embed (in the message content) while
- * it's live — so the @everyone/@here ping is part of the raffle post itself,
- * not a separate message. Empty unless the raffle is live and pings are on.
- * Note: Discord only push-notifies on message *create*, so an instant ("now")
- * raffle pings on post; a scheduled one is re-posted when it flips live.
- */
-function startMentionContent(raffle: {
-  status: RaffleStatus;
-  startPing: string;
-}): string {
-  if (raffle.status !== RaffleStatus.LIVE || raffle.startPing === "none")
-    return "";
-  return raffle.startPing === "here" ? "@here" : "@everyone";
 }
 
 export async function editRaffle(
