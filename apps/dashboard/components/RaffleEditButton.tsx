@@ -89,6 +89,10 @@ function EditModal({
   const [title, setTitle] = useState(raffle.title);
   const [description, setDescription] = useState(raffle.description ?? "");
   const [spots, setSpots] = useState(raffle.spots);
+  // Only a raffle that has not opened yet can move its start; once it is
+  // LIVE the server ignores startAt, so the field is hidden rather than inert.
+  const canEditStart = raffle.status === "UPCOMING";
+  const [startAt, setStartAt] = useState(toLocal(raffle.startAt));
   const [endAt, setEndAt] = useState(toLocal(raffle.endAt));
   const [bannerUrl, setBannerUrl] = useState(raffle.bannerUrl ?? "");
   const [externalUrl, setExternalUrl] = useState(raffle.externalUrl ?? "");
@@ -153,6 +157,7 @@ function EditModal({
         title,
         description,
         spots: Number(spots),
+        ...(canEditStart ? { startAt: new Date(startAt).toISOString() } : {}),
         endAt: new Date(endAt).toISOString(),
         bannerUrl,
         externalUrl,
@@ -272,6 +277,16 @@ function EditModal({
                   onChange={(e) => setSpots(Number(e.target.value))}
                 />
               </F>
+              {canEditStart ? (
+                <F label="Start">
+                  <input
+                    type="datetime-local"
+                    className="kos-input"
+                    value={startAt}
+                    onChange={(e) => setStartAt(e.target.value)}
+                  />
+                </F>
+              ) : null}
               <F label="End">
                 <input
                   type="datetime-local"

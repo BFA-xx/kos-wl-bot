@@ -70,6 +70,7 @@ export async function PATCH(
         status: true,
         messageId: true,
         startAt: true,
+        endAt: true,
         requirements: true,
       },
     });
@@ -144,6 +145,14 @@ export async function PATCH(
         );
       }
       data.endAt = e;
+    }
+    const effectiveStart = (data.startAt as Date | undefined) ?? existing.startAt;
+    const effectiveEnd = (data.endAt as Date | undefined) ?? existing.endAt;
+    if (effectiveStart >= effectiveEnd) {
+      return NextResponse.json(
+        { error: "Start time must be before the end time." },
+        { status: 400 },
+      );
     }
 
     // Prepare relation replacements. They are applied in the same transaction
