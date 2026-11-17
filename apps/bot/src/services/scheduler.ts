@@ -5,6 +5,7 @@ import {
   CampaignStatus,
   LogCategory,
   RaffleStatus,
+  RaidStatus,
   enqueueTelegramRaffleEvent,
   parseRerollOptions,
 } from "@kos/db";
@@ -218,6 +219,8 @@ export class Scheduler {
       raffleClose,
       campaignOpen,
       campaignEnd,
+      raidOpen,
+      raidClose,
       delivery,
       missedPing,
     ] = await Promise.all([
@@ -238,6 +241,19 @@ export class Scheduler {
       }),
       prisma.campaign.findFirst({
         where: { status: CampaignStatus.LIVE, endAt: { not: null } },
+        orderBy: { endAt: "asc" },
+        select: { endAt: true },
+      }),
+      // Raids run on the same tick (processRaidLifecycle). Without these the
+      // scheduler slept its full idle cap past a raid's start or end, so a
+      // raid could sit SCHEDULED (or LIVE) up to 15 minutes after its time.
+      prisma.raid.findFirst({
+        where: { status: RaidStatus.SCHEDULED },
+        orderBy: { startAt: "asc" },
+        select: { startAt: true },
+      }),
+      prisma.raid.findFirst({
+        where: { status: RaidStatus.LIVE },
         orderBy: { endAt: "asc" },
         select: { endAt: true },
       }),
@@ -265,6 +281,8 @@ export class Scheduler {
       raffleClose?.endAt,
       campaignOpen?.startAt,
       campaignEnd?.endAt,
+      raidOpen?.startAt,
+      raidClose?.endAt,
       delivery?.notBefore,
       missedPing
         ? new Date(Date.now() + START_PING_RETRY_INTERVAL_MS)
